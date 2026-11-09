@@ -43,6 +43,8 @@ builder.Services.AddHostedService<BackupScanHostedService>();
 
 builder.Services.AddScoped<NotificationService>();
 builder.Services.AddHostedService<AlertCheckHostedService>();
+builder.Services.AddScoped<ComplianceReportService>();
+builder.Services.AddHostedService<ReportHostedService>();
 builder.Services.Configure<SmtpOptions>(builder.Configuration.GetSection("Email:Smtp"));
 builder.Services.Configure<ArxMailOptions>(builder.Configuration.GetSection("Email:ArxMail"));
 builder.Services.AddHttpClient<ArxMailEmailSender>();

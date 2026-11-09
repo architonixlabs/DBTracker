@@ -65,6 +65,23 @@ public class NotificationsAndUsersTests
         await _page.WaitForURLAsync(url => url.Contains("/Account/AccessDenied"));
     }
 
+    [Test]
+    public async Task SendReport_WithDistributionListConfigured_ShowsSuccessToast()
+    {
+        _page = await GlobalSetup.Server.Browser.NewPageAsync();
+        // Auditor is in Roles.ReportingPolicy and read-only otherwise — proves the button isn't DBA-gated.
+        await LoginAsync("angela.price@contoso.com");
+
+        await GotoAsync("/compliance");
+        await _page.WaitForSelectorAsync(".dbt-table table");
+        await WaitForCircuitAsync();
+
+        await _page.ClickAsync("button:has-text('Send report')");
+        await _page.WaitForTimeoutAsync(1000);
+
+        await Assertions.Expect(_page.Locator(".dbt-toast")).ToContainTextAsync("Report sent to 1 recipient");
+    }
+
     private async Task LoginAsync(string email)
     {
         await GotoAsync("/Account/Login");

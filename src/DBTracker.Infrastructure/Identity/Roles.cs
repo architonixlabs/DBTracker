@@ -16,4 +16,7 @@ public static class Roles
 
     /// <summary>Roles allowed to create/edit instances and log backup results.</summary>
     public const string CanEditPolicy = $"{Admin},{Dba}";
+
+    /// <summary>Roles allowed to trigger/view the management compliance report — leadership-facing, not DBA-only.</summary>
+    public const string ReportingPolicy = $"{Admin},{ItManager},{Auditor}";
 }

@@ -116,11 +116,12 @@ needs a record of DR drills and emergency restores, not just backups going out).
 ### Epic 10 — Management reporting
 *Serves Marcus (IT Manager — needs a leadership-ready roll-up, not raw grid access) and Angela
 (Auditor — needs a point-in-time report she can file as evidence).*
-- [ ] Scheduled report generation (e.g. weekly) summarizing backup health, overdue/failed counts,
-      and restore-test coverage, reusing the Compliance view's data
-- [ ] Send the report via a configurable SMTP sender (Gmail, ArxMail Gateway, or any other provider
-      — set in appsettings, not hard-coded to one vendor) to a configured distribution list
-- [ ] On-demand "send now" in addition to the schedule, for ad-hoc requests before a review
+- [x] Scheduled report generation (`Reports:IntervalDays`, default weekly) summarizing backup
+      health, overdue/failed counts, and restore-test coverage, reusing the Compliance view's data
+- [x] Sent via the same configurable email sender as alerts (Epic 8 — Gmail, ArxMail, etc.) to a
+      configured distribution list (`Reports:DistributionList`)
+- [x] On-demand "Send report" button on Compliance (Admin/IT Manager/Auditor — Marcus and Angela's
+      roles, not DBA-gated) for ad-hoc requests before a review
 
 ## Design
 - [x] Visual redesign: indigo/violet gradient accent system, Inter typeface, gradient sidebar,
@@ -194,6 +195,13 @@ needs a record of DR drills and emergency restores, not just backups going out).
   an app bug): a generated test email was truncated with `.Substring(0, 40)`, cutting it off before
   the `@`, so the create-user form's email validation silently blocked submission. 11 unit tests and
   all E2E tests added/fixed this round; full suite is 39/39 (28 unit + 11 E2E).
+- 2026-11-10 — Built Epic 10 (management reporting): a scheduled (default weekly) + on-demand
+  "Send report" compliance email, reusing Epic 8's email sender and the Compliance view's data.
+  Report body built by a pure, unit-tested `ComplianceReportBuilder` (at-risk instances listed
+  worst-first, restore-test coverage called out) kept separate from the I/O that fetches data and
+  sends it, so the content logic didn't need a database to test. 5 new unit tests, 1 new E2E test
+  (Auditor — not DBA — sends a report and sees the success toast, confirming the button is
+  leadership-role-gated rather than DBA-gated). Full suite: 44/44 (32 unit + 12 E2E).
 
 ## Out of scope (future)
 - Automated backup execution/orchestration (this tracks status, doesn't run backups)

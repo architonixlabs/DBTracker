@@ -1,5 +1,7 @@
 @page "/compliance"
 @inject InstanceOverviewService OverviewService
+@inject ComplianceReportService ReportService
+@inject ToastService Toasts
 @inject IJSRuntime JS
 
 <PageTitle>Compliance · DBTracker</PageTitle>
@@ -9,9 +11,16 @@
         <h1>Compliance snapshot</h1>
         <div class="subtitle">As of @_asOf.ToLocalTime().ToString("MMM d, yyyy h:mm tt") — last-backup age per instance</div>
     </div>
-    <button class="btn btn-outline-primary" @onclick="ExportCsv" disabled="@(_overviews is null)">
-        <i class="bi bi-download"></i> Export CSV
-    </button>
+    <div class="d-flex gap-2">
+        <AuthorizeView Roles="@Roles.ReportingPolicy">
+            <button class="btn btn-outline-secondary" @onclick="SendReport" disabled="@(_overviews is null || _sendingReport)">
+                <i class="bi bi-envelope"></i> @(_sendingReport ? "Sending…" : "Send report")
+            </button>
+        </AuthorizeView>
+        <button class="btn btn-outline-primary" @onclick="ExportCsv" disabled="@(_overviews is null)">
+            <i class="bi bi-download"></i> Export CSV
+        </button>
+    </div>
 </div>
 
 @if (_overviews is null)
@@ -85,6 +94,7 @@ else
     private DateTime _asOf;
     private string _role = "";
     private string _envTier = "";
+    private bool _sendingReport;
 
     protected override async Task OnInitializedAsync()
     {
@@ -142,4 +152,20 @@ else
         value.Contains(',') || value.Contains('"')
             ? $"\"{value.Replace("\"", "\"\"")}\""
             : value;
+
+    private async Task SendReport()
+    {
+        _sendingReport = true;
+        var count = await ReportService.SendNowAsync();
+        _sendingReport = false;
+
+        if (count > 0)
+        {
+            Toasts.Success(count == 1 ? "Report sent to 1 recipient." : $"Report sent to {count} recipients.");
+        }
+        else
+        {
+            Toasts.Error("No distribution list configured (Reports:DistributionList).");
+        }
+    }
 }
