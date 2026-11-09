@@ -60,19 +60,6 @@ Just wants to confirm their app's DB is backed up and update contact info when s
 - [x] Playwright E2E: create instance → log backup → verify health badge updates → filter → verify
       results
 
-## Progress log
-- 2026-11-09 — Repo initialized; solution scaffolded (Web/Core/Infrastructure/UnitTests/E2E); domain
-  model (DatabaseInstance, BackupRecord) + BackupHealthCalculator written; Bootstrap-based sidebar
-  UI shell in place; local SQL Server (Windows Auth, `localhost`) wired up; initial EF Core
-  migration generated.
-- 2026-11-09 — Dashboard, Instances list (filterable), instance create/edit form, instance detail +
-  backup history + log-backup form, and Compliance CSV export pages built. App builds, runs, seeds
-  demo data, and was visually verified (dashboard/instances/detail screenshots) via Playwright.
-- 2026-11-09 — Published to https://github.com/architonixlabs/DBTracker under the MIT license
-  (Architonix Labs LLP), free for public use with no restrictions.
-- 2026-11-09 — Next: unit tests for BackupHealthCalculator + filtering, Playwright E2E test suite
-  (create instance → log backup → health badge updates → filter), wire into CI-ready `dotnet test`.
-
 ### Epic 5 — RBAC (users & roles)
 - [x] ASP.NET Core Identity, roles: Admin, DBA, ITManager, Auditor, Viewer
 - [x] Login/logout; seed one user per persona (Priya=DBA, Marcus=ITManager, Angela=Auditor,
@@ -129,7 +116,26 @@ needs a record of DR drills and emergency restores, not just backups going out).
       — set in appsettings, not hard-coded to one vendor) to a configured distribution list
 - [ ] On-demand "send now" in addition to the schedule, for ad-hoc requests before a review
 
+## Design
+- [x] Visual redesign: indigo/violet gradient accent system, Inter typeface, gradient sidebar,
+      glowing branded login screen, refined health-badge/pill styling
+- [x] Motion: page fade-in, staggered card/row entrance, hover lift on cards/buttons, pulsing
+      indicator on Failed badges/stat card (draws the eye to what needs attention first),
+      toast slide-in, skeleton shimmer loading states in place of plain "Loading…" text
+- [x] Toast notifications on create/update/log-backup/archive actions
+- [ ] Further polish: empty/zero-state illustrations, dark mode, responsive mobile pass beyond the
+      basic sidebar collapse
+
 ## Progress log
+- 2026-11-09 — Repo initialized; solution scaffolded (Web/Core/Infrastructure/UnitTests/E2E); domain
+  model (DatabaseInstance, BackupRecord) + BackupHealthCalculator written; Bootstrap-based sidebar
+  UI shell in place; local SQL Server (Windows Auth, `localhost`) wired up; initial EF Core
+  migration generated.
+- 2026-11-09 — Dashboard, Instances list (filterable), instance create/edit form, instance detail +
+  backup history + log-backup form, and Compliance CSV export pages built. App builds, runs, seeds
+  demo data, and was visually verified (dashboard/instances/detail screenshots) via Playwright.
+- 2026-11-09 — Published to https://github.com/architonixlabs/DBTracker under the MIT license
+  (Architonix Labs LLP), free for public use with no restrictions.
 - 2026-11-09 — Scope expanded mid-build: RBAC, shared-drive backup discovery, richer environment
   detail, notifications, and QR phone login requested. Added as Epics 5-9. Sequencing: RBAC first
   (everything role-based depends on it), then notifications, then shared-drive scan, then QR login
@@ -148,6 +154,13 @@ needs a record of DR drills and emergency restores, not just backups going out).
   whenever the app ran unpublished outside the Development environment — fixed by scoping HSTS to
   Production, allowing anonymous static assets, and explicitly enabling static web assets outside
   Production. All 19 tests (12 unit + 7 E2E) pass.
+- 2026-11-09 — Visual redesign pass (user flagged the prior UI as not attractive/professional, and
+  asked for animations): new gradient/Inter design system, motion throughout, toast notifications,
+  skeleton loaders. Found and fixed a real bug while wiring toasts: pages each declared their own
+  `@rendermode InteractiveServer`, which made every full-page navigation start a fresh SignalR
+  circuit/DI scope instead of one persistent circuit for the app — scoped services like the toast
+  bus never saw the same instance twice. Fixed by setting the render mode once, globally, on
+  `<Routes>` in App.razor and removing the redundant per-page declarations. All 19 tests still pass.
 
 ## Out of scope (future)
 - Automated backup execution/orchestration (this tracks status, doesn't run backups)

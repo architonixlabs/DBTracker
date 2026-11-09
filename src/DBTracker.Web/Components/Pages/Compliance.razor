@@ -1,5 +1,4 @@
 @page "/compliance"
-@rendermode InteractiveServer
 @inject InstanceOverviewService OverviewService
 @inject IJSRuntime JS
 
@@ -17,7 +16,7 @@
 
 @if (_overviews is null)
 {
-    <p class="text-muted">Loading…</p>
+    <div class="spinner-ring"></div>
 }
 else
 {

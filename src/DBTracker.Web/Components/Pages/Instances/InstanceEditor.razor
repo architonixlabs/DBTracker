@@ -1,9 +1,9 @@
 @page "/instances/new"
 @page "/instances/{Id:int}/edit"
-@rendermode InteractiveServer
 @attribute [Authorize(Roles = Roles.CanEditPolicy)]
 @inject DBTrackerDbContext Db
 @inject NavigationManager Nav
+@inject ToastService Toasts
 
 <PageTitle>@(Id is null ? "Add instance" : "Edit instance") · DBTracker</PageTitle>
 
@@ -16,7 +16,7 @@
 
 @if (_loading)
 {
-    <p class="text-muted">Loading…</p>
+    <div class="spinner-ring"></div>
 }
 else
 {
@@ -165,6 +165,7 @@ else
         }
 
         await Db.SaveChangesAsync();
+        Toasts.Success(Id is null ? $"{_model.Name} created." : $"{_model.Name} updated.");
         Nav.NavigateTo($"/instances/{_model.Id}");
     }
 }

@@ -1,14 +1,14 @@
 @page "/instances/{Id:int}"
-@rendermode InteractiveServer
 @inject InstanceOverviewService OverviewService
 @inject DBTrackerDbContext Db
 @inject NavigationManager Nav
+@inject ToastService Toasts
 
 <PageTitle>@(_overview?.Instance.Name ?? "Instance") · DBTracker</PageTitle>
 
 @if (_overview is null)
 {
-    <p class="text-muted">Loading…</p>
+    <div class="spinner-ring"></div>
 }
 else
 {
@@ -163,6 +163,7 @@ else
         Db.BackupRecords.Add(_newRecord);
         await Db.SaveChangesAsync();
         Db.ChangeTracker.Clear();
+        Toasts.Success($"Backup result logged ({_newRecord.Status}).");
         await Load();
     }
 
@@ -174,6 +175,7 @@ else
             entity.IsArchived = true;
             entity.UpdatedAtUtc = DateTime.UtcNow;
             await Db.SaveChangesAsync();
+            Toasts.Success($"{entity.Name} archived.");
         }
         Nav.NavigateTo("/instances");
     }

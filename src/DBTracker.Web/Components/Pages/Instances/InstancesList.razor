@@ -1,5 +1,4 @@
 @page "/instances"
-@rendermode InteractiveServer
 @inject InstanceOverviewService OverviewService
 @inject NavigationManager Nav
 
@@ -19,7 +18,13 @@
 
 @if (_overviews is null)
 {
-    <p class="text-muted">Loading…</p>
+    <div class="skeleton" style="height: 54px; margin-bottom: 1.25rem;"></div>
+    <div class="dbt-table">
+        @for (var i = 0; i < 7; i++)
+        {
+            <div class="skeleton skeleton-row"></div>
+        }
+    </div>
 }
 else
 {

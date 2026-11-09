@@ -1,0 +1,43 @@
+@implements IDisposable
+@inject ToastService Toasts
+
+<div class="toast-stack">
+    @foreach (var (id, toast) in _active.ToList())
+    {
+        <div class="dbt-toast @(toast.IsError ? "error" : "")" @key="id">
+            <i class="bi @(toast.IsError ? "bi-exclamation-circle-fill" : "bi-check-circle-fill")"></i>
+            <span>@toast.Text</span>
+        </div>
+    }
+</div>
+
+@code {
+    private readonly Dictionary<int, ToastMessage> _active = new();
+    private int _nextId;
+
+    protected override void OnInitialized()
+    {
+        Toasts.OnShow += HandleShow;
+    }
+
+    private void HandleShow(ToastMessage toast)
+    {
+        var id = _nextId++;
+        _active[id] = toast;
+        InvokeAsync(StateHasChanged);
+
+        _ = RemoveAfterDelay(id);
+    }
+
+    private async Task RemoveAfterDelay(int id)
+    {
+        await Task.Delay(3500);
+        _active.Remove(id);
+        await InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        Toasts.OnShow -= HandleShow;
+    }
+}

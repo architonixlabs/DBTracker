@@ -26,6 +26,7 @@ builder.Services.AddDbContext<DBTrackerDbContext>(options =>
     options.UseSqlServer(connectionString));
 
 builder.Services.AddScoped<InstanceOverviewService>();
+builder.Services.AddScoped<DBTracker.Web.Services.ToastService>();
 
 builder.Services.AddCascadingAuthenticationState();
 builder.Services.AddScoped<IdentityRedirectManager>();
