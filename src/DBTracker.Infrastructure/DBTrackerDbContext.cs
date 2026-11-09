@@ -15,6 +15,7 @@ public class DBTrackerDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<BackupRecord> BackupRecords => Set<BackupRecord>();
     public DbSet<RestoreEvent> RestoreEvents => Set<RestoreEvent>();
     public DbSet<Notification> Notifications => Set<Notification>();
+    public DbSet<DeviceLinkToken> DeviceLinkTokens => Set<DeviceLinkToken>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -81,6 +82,15 @@ public class DBTrackerDbContext : IdentityDbContext<ApplicationUser>
 
             entity.HasIndex(e => e.CreatedAtUtc);
             entity.HasIndex(e => e.IsRead);
+        });
+
+        modelBuilder.Entity<DeviceLinkToken>(entity =>
+        {
+            entity.Property(e => e.Token).HasMaxLength(64).IsRequired();
+            entity.Property(e => e.ApprovedByUserId).HasMaxLength(450);
+
+            entity.HasIndex(e => e.Token).IsUnique();
+            entity.HasIndex(e => e.ExpiresAtUtc);
         });
     }
 }

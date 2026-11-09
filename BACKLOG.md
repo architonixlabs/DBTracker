@@ -108,10 +108,11 @@ needs a record of DR drills and emergency restores, not just backups going out).
       a new user with a role
 
 ### Epic 9 — Mobile QR login
-- [ ] Desktop shows a QR code tied to a one-time login token (device-linking flow, like WhatsApp Web)
-- [ ] Phone scan (already signed in on phone) confirms and logs the desktop session in as that
-      user/role, in real time via SignalR
-- [ ] Token expiry + single use for security
+- [x] Desktop shows a QR code tied to a one-time login token (device-linking flow, like WhatsApp Web)
+- [x] Phone scan (already signed in on phone — this never bypasses password login, an already-
+      trusted device just vouches for a new one) approves/denies; desktop polls and signs itself in
+      automatically within ~2s of approval
+- [x] Token expiry (5 min) + single use (marked Redeemed immediately, can't be replayed)
 
 ### Epic 10 — Management reporting
 *Serves Marcus (IT Manager — needs a leadership-ready roll-up, not raw grid access) and Angela
@@ -202,6 +203,19 @@ needs a record of DR drills and emergency restores, not just backups going out).
   sends it, so the content logic didn't need a database to test. 5 new unit tests, 1 new E2E test
   (Auditor — not DBA — sends a report and sees the success toast, confirming the button is
   leadership-role-gated rather than DBA-gated). Full suite: 44/44 (32 unit + 12 E2E).
+- 2026-11-10 — Built Epic 9 (QR phone login), the last of the originally requested epics: a desktop
+  (unauthenticated) shows a QR code; a phone that's already signed in scans it, sees "Sign in as
+  <email> (<role>)?", and approves or denies; the desktop polls and signs itself in automatically on
+  approval. Deliberately never bypasses password auth — only an already-trusted phone session can
+  vouch for a new device, same model as WhatsApp Web/Google's phone sign-in. Tokens are a
+  cryptographically random 48-char hex string, 5-minute expiry, single-use (marked Redeemed
+  immediately so a captured token can't be replayed). The desktop-facing endpoints (create/qr/
+  status/redeem) are anonymous by necessity and reached only via JS `fetch()`, not a form, so they
+  explicitly opt out of antiforgery rather than silently relying on it; the phone-facing approve/
+  deny endpoints go through real forms with antiforgery tokens, same pattern as the existing Logout
+  endpoint. Verified both by an automated two-browser-context E2E test (approve and deny paths) and
+  by hand with real Playwright screenshots of the whole flow before trusting the automated version.
+  Full suite: 46/46 (32 unit + 14 E2E). This closes out every epic from the original ask.
 
 ## Out of scope (future)
 - Automated backup execution/orchestration (this tracks status, doesn't run backups)

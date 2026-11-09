@@ -45,6 +45,7 @@ builder.Services.AddScoped<NotificationService>();
 builder.Services.AddHostedService<AlertCheckHostedService>();
 builder.Services.AddScoped<ComplianceReportService>();
 builder.Services.AddHostedService<ReportHostedService>();
+builder.Services.AddScoped<DeviceLinkService>();
 builder.Services.Configure<SmtpOptions>(builder.Configuration.GetSection("Email:Smtp"));
 builder.Services.Configure<ArxMailOptions>(builder.Configuration.GetSection("Email:ArxMail"));
 builder.Services.AddHttpClient<ArxMailEmailSender>();
@@ -143,6 +144,7 @@ app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 
 app.MapIdentityLogoutEndpoint();
+app.MapDeviceLinkEndpoints();
 
 app.Run();
 

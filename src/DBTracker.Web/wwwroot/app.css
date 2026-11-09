@@ -646,6 +646,63 @@ a {
     color: transparent;
 }
 
+/* ---------- QR phone login ---------- */
+.qr-login {
+    margin-top: 1.4rem;
+    padding-top: 1.2rem;
+    border-top: 1px solid var(--dbt-border);
+}
+
+.qr-toggle {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    background: none;
+    border: 1px dashed var(--dbt-border);
+    border-radius: 0.5rem;
+    padding: 0.7rem;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--dbt-muted);
+    cursor: pointer;
+    transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.qr-toggle:hover {
+    border-color: var(--dbt-accent);
+    color: var(--dbt-accent);
+}
+
+.qr-panel {
+    margin-top: 1rem;
+    text-align: center;
+    animation: popIn 0.25s var(--dbt-ease);
+}
+
+.qr-panel img {
+    width: 180px;
+    height: 180px;
+    border: 1px solid var(--dbt-border);
+    border-radius: 0.6rem;
+    padding: 0.5rem;
+    background: #fff;
+}
+
+.qr-hint {
+    font-size: 0.78rem;
+    color: var(--dbt-muted);
+    margin: 0.7rem 0 0.3rem;
+}
+
+.qr-status {
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--dbt-accent);
+    min-height: 1.2em;
+}
+
 .user-chip {
     display: flex;
     flex-direction: column;

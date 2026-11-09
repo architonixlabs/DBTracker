@@ -40,7 +40,20 @@
         </div>
         <button type="submit" class="w-100 btn btn-primary">Log in</button>
     </EditForm>
+
+    <div class="qr-login">
+        <button type="button" class="qr-toggle" id="qr-toggle">
+            <i class="bi bi-qr-code"></i> Or sign in with your phone
+        </button>
+        <div class="qr-panel" id="qr-panel" hidden>
+            <img id="qr-image" alt="QR code — scan with your phone to sign in" />
+            <p class="qr-hint">Scan with a phone that's already signed in to DBTracker. Approve the request there and this screen signs in automatically.</p>
+            <p class="qr-status" id="qr-status"></p>
+        </div>
+    </div>
 </div>
+
+<script src="js/device-link-login.js"></script>
 
 @code {
     private string? errorMessage;
