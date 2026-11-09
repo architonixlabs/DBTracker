@@ -10,9 +10,11 @@
         <h1>Database Instances</h1>
         <div class="subtitle">@(_overviews is null ? "" : $"{Filtered().Count()} of {_overviews.Count} instances")</div>
     </div>
-    <a class="btn btn-primary" href="/instances/new">
-        <i class="bi bi-plus-lg"></i> Add instance
-    </a>
+    <AuthorizeView Roles="@Roles.CanEditPolicy">
+        <a class="btn btn-primary" href="/instances/new">
+            <i class="bi bi-plus-lg"></i> Add instance
+        </a>
+    </AuthorizeView>
 </div>
 
 @if (_overviews is null)

@@ -1,7 +1,8 @@
 @page "/instances/new"
 @page "/instances/{Id:int}/edit"
 @rendermode InteractiveServer
-@inject IDbContextFactory<DBTrackerDbContext> DbFactory
+@attribute [Authorize(Roles = Roles.CanEditPolicy)]
+@inject DBTrackerDbContext Db
 @inject NavigationManager Nav
 
 <PageTitle>@(Id is null ? "Add instance" : "Edit instance") · DBTracker</PageTitle>
@@ -141,8 +142,7 @@ else
     {
         if (Id is not null)
         {
-            using var db = await DbFactory.CreateDbContextAsync();
-            var existing = await db.DatabaseInstances.FindAsync(Id.Value);
+            var existing = await Db.DatabaseInstances.AsNoTracking().FirstOrDefaultAsync(i => i.Id == Id.Value);
             if (existing is not null)
             {
                 _model = existing;
@@ -153,19 +153,18 @@ else
 
     private async Task Save()
     {
-        using var db = await DbFactory.CreateDbContextAsync();
         _model.UpdatedAtUtc = DateTime.UtcNow;
 
         if (Id is null)
         {
-            db.DatabaseInstances.Add(_model);
+            Db.DatabaseInstances.Add(_model);
         }
         else
         {
-            db.DatabaseInstances.Update(_model);
+            Db.DatabaseInstances.Update(_model);
         }
 
-        await db.SaveChangesAsync();
+        await Db.SaveChangesAsync();
         Nav.NavigateTo($"/instances/{_model.Id}");
     }
 }

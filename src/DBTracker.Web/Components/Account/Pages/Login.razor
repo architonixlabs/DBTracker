@@ -1,0 +1,102 @@
+@page "/Account/Login"
+@layout AuthLayout
+@using System.ComponentModel.DataAnnotations
+@using Microsoft.AspNetCore.Authentication
+@using Microsoft.AspNetCore.Identity
+@using DBTracker.Infrastructure.Identity
+@attribute [AllowAnonymous]
+
+@inject SignInManager<ApplicationUser> SignInManager
+@inject ILogger<Login> Logger
+@inject IdentityRedirectManager RedirectManager
+
+<PageTitle>Log in · DBTracker</PageTitle>
+
+<div class="login-card">
+    <div class="brand mb-4">
+        <i class="bi bi-hdd-network"></i>
+        <span>DBTracker</span>
+    </div>
+
+    <StatusMessage Message="@errorMessage" />
+
+    <EditForm EditContext="editContext" method="post" OnSubmit="LoginUser" FormName="login">
+        <DataAnnotationsValidator />
+        <ValidationSummary class="text-danger" role="alert" />
+
+        <div class="mb-3">
+            <label class="form-label">Email</label>
+            <InputText @bind-Value="Input.Email" class="form-control" autocomplete="username" aria-required="true" placeholder="name@architonixlabs.com" />
+            <ValidationMessage For="() => Input.Email" class="text-danger small" />
+        </div>
+        <div class="mb-3">
+            <label class="form-label">Password</label>
+            <InputText type="password" @bind-Value="Input.Password" class="form-control" autocomplete="current-password" aria-required="true" />
+            <ValidationMessage For="() => Input.Password" class="text-danger small" />
+        </div>
+        <div class="form-check mb-3">
+            <InputCheckbox @bind-Value="Input.RememberMe" class="form-check-input" id="rememberMe" />
+            <label class="form-check-label" for="rememberMe">Remember me</label>
+        </div>
+        <button type="submit" class="w-100 btn btn-primary">Log in</button>
+    </EditForm>
+</div>
+
+@code {
+    private string? errorMessage;
+    private EditContext editContext = default!;
+
+    [CascadingParameter]
+    private HttpContext HttpContext { get; set; } = default!;
+
+    [SupplyParameterFromForm]
+    private InputModel Input { get; set; } = default!;
+
+    [SupplyParameterFromQuery]
+    private string? ReturnUrl { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        Input ??= new();
+        editContext = new EditContext(Input);
+
+        if (HttpMethods.IsGet(HttpContext.Request.Method))
+        {
+            await HttpContext.SignOutAsync(IdentityConstants.ExternalScheme);
+        }
+    }
+
+    public async Task LoginUser()
+    {
+        if (!editContext.Validate())
+        {
+            return;
+        }
+
+        var result = await SignInManager.PasswordSignInAsync(Input.Email, Input.Password, Input.RememberMe, lockoutOnFailure: false);
+
+        if (result.Succeeded)
+        {
+            Logger.LogInformation("User logged in.");
+            RedirectManager.RedirectTo(ReturnUrl ?? "/");
+        }
+        else
+        {
+            errorMessage = "Error: invalid email or password.";
+        }
+    }
+
+    private sealed class InputModel
+    {
+        [Required]
+        [EmailAddress]
+        public string Email { get; set; } = "";
+
+        [Required]
+        [DataType(DataType.Password)]
+        public string Password { get; set; } = "";
+
+        [Display(Name = "Remember me?")]
+        public bool RememberMe { get; set; }
+    }
+}

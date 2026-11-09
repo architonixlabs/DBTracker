@@ -3,13 +3,12 @@ using Microsoft.EntityFrameworkCore;
 
 namespace DBTracker.Infrastructure.Queries;
 
-public class InstanceOverviewService(IDbContextFactory<DBTrackerDbContext> factory)
+public class InstanceOverviewService(DBTrackerDbContext db)
 {
     public async Task<List<InstanceOverview>> GetAllAsync(bool includeArchived = false)
     {
-        using var db = await factory.CreateDbContextAsync();
-
         var instances = await db.DatabaseInstances
+            .AsNoTracking()
             .Where(i => includeArchived || !i.IsArchived)
             .Include(i => i.BackupRecords)
             .AsSplitQuery()
@@ -35,9 +34,8 @@ public class InstanceOverviewService(IDbContextFactory<DBTrackerDbContext> facto
 
     public async Task<InstanceOverview?> GetByIdAsync(int id)
     {
-        using var db = await factory.CreateDbContextAsync();
-
         var instance = await db.DatabaseInstances
+            .AsNoTracking()
             .Include(i => i.BackupRecords)
             .AsSplitQuery()
             .FirstOrDefaultAsync(i => i.Id == id);

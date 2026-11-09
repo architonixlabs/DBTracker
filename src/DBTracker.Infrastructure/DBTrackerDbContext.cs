@@ -1,9 +1,11 @@
 using DBTracker.Core.Entities;
+using DBTracker.Infrastructure.Identity;
+using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 
 namespace DBTracker.Infrastructure;
 
-public class DBTrackerDbContext : DbContext
+public class DBTrackerDbContext : IdentityDbContext<ApplicationUser>
 {
     public DBTrackerDbContext(DbContextOptions<DBTrackerDbContext> options) : base(options)
     {
@@ -14,6 +16,8 @@ public class DBTrackerDbContext : DbContext
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        base.OnModelCreating(modelBuilder);
+
         modelBuilder.Entity<DatabaseInstance>(entity =>
         {
             entity.Property(e => e.Name).HasMaxLength(200).IsRequired();

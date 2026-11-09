@@ -225,7 +225,7 @@ a {
     background: var(--dbt-card-bg);
     border: 1px solid var(--dbt-border);
     border-radius: 0.6rem;
-    overflow: hidden;
+    overflow-x: auto;
 }
 
 .dbt-table table {
@@ -256,6 +256,10 @@ a {
     padding: 0.65rem 0.9rem;
     vertical-align: middle;
     font-size: 0.88rem;
+}
+
+.dbt-table td:last-child, .dbt-table th:last-child {
+    padding-right: 1.25rem;
 }
 
 .engine-pill {
@@ -324,6 +328,72 @@ a {
 
 .form-floating > .form-control-plaintext:focus::placeholder, .form-floating > .form-control:focus::placeholder {
     text-align: start;
+}
+
+/* ---------- Auth ---------- */
+.auth-shell {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--dbt-sidebar-bg);
+}
+
+.login-card {
+    background: var(--dbt-card-bg);
+    border-radius: 0.75rem;
+    padding: 2.25rem 2rem;
+    width: 100%;
+    max-width: 380px;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.25);
+}
+
+.login-card .brand {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    font-weight: 600;
+    font-size: 1.2rem;
+    color: var(--dbt-text);
+}
+
+.login-card .brand i {
+    font-size: 1.5rem;
+    color: var(--dbt-sidebar-accent);
+}
+
+.user-chip {
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+    padding: 0.75rem 1.25rem;
+    border-top: 1px solid rgba(255,255,255,0.08);
+    margin-top: auto;
+}
+
+.user-chip .name {
+    color: #fff;
+    font-size: 0.85rem;
+    font-weight: 600;
+}
+
+.user-chip .role {
+    color: var(--dbt-sidebar-fg);
+    font-size: 0.75rem;
+}
+
+.user-chip form button {
+    color: var(--dbt-sidebar-fg);
+    font-size: 0.78rem;
+    background: none;
+    border: none;
+    padding: 0;
+    margin-top: 0.3rem;
+}
+
+.user-chip form button:hover {
+    color: #fff;
+    text-decoration: underline;
 }
 
 @media (max-width: 900px) {

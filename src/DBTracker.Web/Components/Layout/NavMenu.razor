@@ -16,5 +16,25 @@
             <i class="bi bi-clipboard-check"></i>
             <span>Compliance</span>
         </NavLink>
+        <AuthorizeView Roles="@Roles.Admin">
+            <NavLink class="app-nav-link" href="users">
+                <i class="bi bi-people"></i>
+                <span>Users</span>
+            </NavLink>
+        </AuthorizeView>
     </nav>
+
+    <AuthorizeView>
+        <Authorized>
+            <div class="user-chip">
+                <span class="name">@context.User.Identity?.Name</span>
+                <span class="role">@string.Join(", ", context.User.Claims.Where(c => c.Type == System.Security.Claims.ClaimTypes.Role).Select(c => c.Value))</span>
+                <form action="Account/Logout" method="post">
+                    <AntiforgeryToken />
+                    <input type="hidden" name="returnUrl" value="@("/Account/Login")" />
+                    <button type="submit"><i class="bi bi-box-arrow-right"></i> Log out</button>
+                </form>
+            </div>
+        </Authorized>
+    </AuthorizeView>
 </div>
