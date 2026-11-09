@@ -14,6 +14,7 @@ public class DBTrackerDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<DatabaseInstance> DatabaseInstances => Set<DatabaseInstance>();
     public DbSet<BackupRecord> BackupRecords => Set<BackupRecord>();
     public DbSet<RestoreEvent> RestoreEvents => Set<RestoreEvent>();
+    public DbSet<Notification> Notifications => Set<Notification>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -66,6 +67,20 @@ public class DBTrackerDbContext : IdentityDbContext<ApplicationUser>
                 .OnDelete(DeleteBehavior.Cascade);
 
             entity.HasIndex(e => new { e.DatabaseInstanceId, e.TimestampUtc });
+        });
+
+        modelBuilder.Entity<Notification>(entity =>
+        {
+            entity.Property(e => e.InstanceName).HasMaxLength(200);
+            entity.Property(e => e.Message).HasMaxLength(500);
+
+            entity.HasOne(n => n.DatabaseInstance)
+                .WithMany()
+                .HasForeignKey(n => n.DatabaseInstanceId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasIndex(e => e.CreatedAtUtc);
+            entity.HasIndex(e => e.IsRead);
         });
     }
 }

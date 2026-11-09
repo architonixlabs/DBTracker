@@ -96,10 +96,16 @@ needs a record of DR drills and emergency restores, not just backups going out).
 - [ ] Audit trail of who changed what on an instance record
 
 ### Epic 8 — Notifications
-- [ ] Configurable email sender (SMTP — Gmail, ArxMail Gateway, or any other provider via
-      appsettings; not locked to one vendor) for alerts when an instance goes Overdue or Failed
-- [ ] In-app notification center / unread badge
-- [ ] Per-user notification preferences (which instances/companies they care about)
+- [x] Configurable email sender (SMTP — Gmail, Office365, any relay — or the ArxMail Gateway's HTTP
+      API; `Email:Provider` picks one, defaults to None which only logs) for alerts when an
+      instance goes Overdue or Failed
+- [x] In-app notification center: bell with unread badge in the sidebar, dropdown list, mark-all-read
+- [x] Alerts fire on a *state change* into Overdue/Failed (not every sweep) via a background check
+      (`Alerts:IntervalMinutes`, default 10) — re-alerts if it recovers and relapses later
+- [ ] Per-user notification preferences (which instances/companies they care about) — currently
+      broadcast to everyone, emailed to the instance's own contact
+- [x] (bonus, fixes a dangling nav link from Epic 5) Admin "Users" page: list users + roles, create
+      a new user with a role
 
 ### Epic 9 — Mobile QR login
 - [ ] Desktop shows a QR code tied to a one-time login token (device-linking flow, like WhatsApp Web)
@@ -173,6 +179,21 @@ needs a record of DR drills and emergency restores, not just backups going out).
   fixed along the way: a Windows path embedded in a CSS `:has-text()` selector had its backslashes
   parsed as CSS escapes — switched to Playwright's `HasText` locator option instead. All 26 tests
   (17 unit + 9 E2E) pass.
+- 2026-11-09/10 — Built Epic 8 (notifications): configurable email (SMTP or ArxMail HTTP gateway,
+  user asked it not be locked to one vendor), a background alert sweep that notifies on a health
+  state change (not every tick), an in-app bell with unread badge, and — since it was a dangling
+  nav link since the RBAC work — a minimal Admin Users page. Hit a real, fairly subtle bug building
+  this: the notification bell renders on every page via the sidebar, and its own DB query ran
+  concurrently with the page's own query against the one shared scoped DbContext — EF Core's "a
+  second operation was started on this context instance" — which cascaded into widespread E2E
+  timeouts (circuit effectively died on every page with the bell mounted). Fixed by giving
+  `NotificationService` its own short-lived DbContext per call via `IDbContextFactory`, registered
+  without re-triggering the earlier AddDbContext/AddDbContextFactory lifetime conflict (the scoped
+  `DBTrackerDbContext` everything else injects is now itself created from the factory, so there's
+  only one path configuring `DbContextOptions`). Also fixed an actual test bug along the way (not
+  an app bug): a generated test email was truncated with `.Substring(0, 40)`, cutting it off before
+  the `@`, so the create-user form's email validation silently blocked submission. 11 unit tests and
+  all E2E tests added/fixed this round; full suite is 39/39 (28 unit + 11 E2E).
 
 ## Out of scope (future)
 - Automated backup execution/orchestration (this tracks status, doesn't run backups)

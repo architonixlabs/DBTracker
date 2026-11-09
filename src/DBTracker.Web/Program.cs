@@ -1,5 +1,6 @@
 using DBTracker.Infrastructure;
 using DBTracker.Infrastructure.Identity;
+using DBTracker.Infrastructure.Notifications;
 using DBTracker.Infrastructure.Queries;
 using DBTracker.Infrastructure.Scanning;
 using DBTracker.Web.Components;
@@ -23,13 +24,40 @@ if (!builder.Environment.IsProduction())
 var connectionString = builder.Configuration.GetConnectionString("DBTracker")
     ?? throw new InvalidOperationException("Connection string 'DBTracker' not configured.");
 
-builder.Services.AddDbContext<DBTrackerDbContext>(options =>
+// A single registration path for DbContextOptions<DBTrackerDbContext>: the factory configures it
+// once, and the scoped context everything injects directly is created FROM that factory rather
+// than via a separate AddDbContext call (which would double-register the options and conflict).
+// NotificationBell renders on every page alongside that page's own ambient scoped context, so
+// NotificationService needs its own short-lived context via the factory to avoid "a second
+// operation was started on this context instance" — two components querying the same DbContext
+// concurrently, which is exactly the scenario the factory pattern exists for in Blazor Server.
+builder.Services.AddDbContextFactory<DBTrackerDbContext>(options =>
     options.UseSqlServer(connectionString));
+builder.Services.AddScoped<DBTrackerDbContext>(sp =>
+    sp.GetRequiredService<IDbContextFactory<DBTrackerDbContext>>().CreateDbContext());
 
 builder.Services.AddScoped<InstanceOverviewService>();
 builder.Services.AddScoped<DBTracker.Web.Services.ToastService>();
 builder.Services.AddScoped<BackupFileScanner>();
 builder.Services.AddHostedService<BackupScanHostedService>();
+
+builder.Services.AddScoped<NotificationService>();
+builder.Services.AddHostedService<AlertCheckHostedService>();
+builder.Services.Configure<SmtpOptions>(builder.Configuration.GetSection("Email:Smtp"));
+builder.Services.Configure<ArxMailOptions>(builder.Configuration.GetSection("Email:ArxMail"));
+builder.Services.AddHttpClient<ArxMailEmailSender>();
+switch (builder.Configuration["Email:Provider"])
+{
+    case "Smtp":
+        builder.Services.AddScoped<IEmailSender, SmtpEmailSender>();
+        break;
+    case "ArxMail":
+        builder.Services.AddScoped<IEmailSender>(sp => sp.GetRequiredService<ArxMailEmailSender>());
+        break;
+    default:
+        builder.Services.AddScoped<IEmailSender, NullEmailSender>();
+        break;
+}
 
 builder.Services.AddCascadingAuthenticationState();
 builder.Services.AddScoped<IdentityRedirectManager>();

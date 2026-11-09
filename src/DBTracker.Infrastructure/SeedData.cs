@@ -152,5 +152,54 @@ public static class SeedData
             new BackupRecord { TimestampUtc = now.AddHours(-30), Type = BackupType.Full, Status = BackupStatus.Success, SizeMb = 1180, DurationMinutes = 9 });
 
         await db.SaveChangesAsync();
+
+        // One instance has had a restore proven, so Compliance's "Restore tested" column isn't all No.
+        db.RestoreEvents.Add(new RestoreEvent
+        {
+            DatabaseInstanceId = instances[0].Id,
+            TimestampUtc = now.AddDays(-14),
+            PerformedBy = "Priya Nair",
+            Reason = RestoreReason.DrDrill,
+            Outcome = RestoreOutcome.Success,
+            Notes = "Quarterly DR drill — restored to staging, verified row counts."
+        });
+
+        // Seed notifications matching the Failed/Overdue instances above, so the bell has
+        // something to show without waiting for the first background alert sweep.
+        instances[3].LastNotifiedHealth = BackupHealth.Failed;
+        instances[3].LastNotifiedUtc = now.AddHours(-2);
+        instances[8].LastNotifiedHealth = BackupHealth.Failed;
+        instances[8].LastNotifiedUtc = now.AddHours(-26);
+        instances[2].LastNotifiedHealth = BackupHealth.Overdue;
+        instances[2].LastNotifiedUtc = now.AddDays(-1);
+
+        db.Notifications.AddRange(
+            new Notification
+            {
+                DatabaseInstanceId = instances[3].Id,
+                InstanceName = instances[3].Name,
+                Message = $"{instances[3].Name} is now failing backups.",
+                Severity = NotificationSeverity.Critical,
+                CreatedAtUtc = now.AddHours(-2)
+            },
+            new Notification
+            {
+                DatabaseInstanceId = instances[8].Id,
+                InstanceName = instances[8].Name,
+                Message = $"{instances[8].Name} is now failing backups.",
+                Severity = NotificationSeverity.Critical,
+                CreatedAtUtc = now.AddHours(-26)
+            },
+            new Notification
+            {
+                DatabaseInstanceId = instances[2].Id,
+                InstanceName = instances[2].Name,
+                Message = $"{instances[2].Name} is now overdue for backup.",
+                Severity = NotificationSeverity.Warning,
+                CreatedAtUtc = now.AddDays(-1),
+                IsRead = true
+            });
+
+        await db.SaveChangesAsync();
     }
 }

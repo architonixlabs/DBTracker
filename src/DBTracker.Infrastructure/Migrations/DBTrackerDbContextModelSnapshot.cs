@@ -134,6 +134,12 @@ namespace DBTracker.Infrastructure.Migrations
                     b.Property<bool>("IsArchived")
                         .HasColumnType("bit");
 
+                    b.Property<int?>("LastNotifiedHealth")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("LastNotifiedUtc")
+                        .HasColumnType("datetime2");
+
                     b.Property<string>("LastScanError")
                         .IsRequired()
                         .HasMaxLength(1000)
@@ -193,6 +199,47 @@ namespace DBTracker.Infrastructure.Migrations
                     b.HasIndex("Engine");
 
                     b.ToTable("DatabaseInstances");
+                });
+
+            modelBuilder.Entity("DBTracker.Core.Entities.Notification", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("DatabaseInstanceId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("InstanceName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<bool>("IsRead")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Message")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<int>("Severity")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedAtUtc");
+
+                    b.HasIndex("DatabaseInstanceId");
+
+                    b.HasIndex("IsRead");
+
+                    b.ToTable("Notifications");
                 });
 
             modelBuilder.Entity("DBTracker.Core.Entities.RestoreEvent", b =>
@@ -444,6 +491,16 @@ namespace DBTracker.Infrastructure.Migrations
                         .HasForeignKey("DatabaseInstanceId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.Navigation("DatabaseInstance");
+                });
+
+            modelBuilder.Entity("DBTracker.Core.Entities.Notification", b =>
+                {
+                    b.HasOne("DBTracker.Core.Entities.DatabaseInstance", "DatabaseInstance")
+                        .WithMany()
+                        .HasForeignKey("DatabaseInstanceId")
+                        .OnDelete(DeleteBehavior.SetNull);
 
                     b.Navigation("DatabaseInstance");
                 });

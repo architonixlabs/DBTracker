@@ -43,6 +43,10 @@ public class DatabaseInstance
     public string Tags { get; set; } = string.Empty;
     public string RunbookUrl { get; set; } = string.Empty;
 
+    /// <summary>The health this instance was last alerted on (Overdue/Failed), so alerts fire on a state change, not every sweep.</summary>
+    public BackupHealth? LastNotifiedHealth { get; set; }
+    public DateTime? LastNotifiedUtc { get; set; }
+
     public string Notes { get; set; } = string.Empty;
     public bool IsArchived { get; set; }
 

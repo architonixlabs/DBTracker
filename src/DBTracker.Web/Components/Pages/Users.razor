@@ -1,0 +1,134 @@
+@page "/users"
+@attribute [Authorize(Roles = Roles.Admin)]
+@using System.ComponentModel.DataAnnotations
+@using Microsoft.AspNetCore.Identity
+@inject UserManager<ApplicationUser> UserManager
+@inject ToastService Toasts
+
+<PageTitle>Users · DBTracker</PageTitle>
+
+<div class="app-topbar">
+    <div>
+        <h1>Users</h1>
+        <div class="subtitle">Accounts and role assignments — admin only</div>
+    </div>
+</div>
+
+<div class="row g-3">
+    <div class="col-md-5">
+        <div class="dbt-card">
+            <h2 class="h6 text-muted text-uppercase mb-3">Add a user</h2>
+            <EditForm Model="_newUser" OnValidSubmit="CreateUser">
+                <DataAnnotationsValidator />
+                <div class="mb-2">
+                    <label class="form-label small">Display name</label>
+                    <InputText class="form-control form-control-sm" @bind-Value="_newUser.DisplayName" />
+                </div>
+                <div class="mb-2">
+                    <label class="form-label small">Email</label>
+                    <InputText class="form-control form-control-sm" @bind-Value="_newUser.Email" />
+                    <ValidationMessage For="() => _newUser.Email" />
+                </div>
+                <div class="mb-2">
+                    <label class="form-label small">Temporary password</label>
+                    <InputText class="form-control form-control-sm" type="password" @bind-Value="_newUser.Password" />
+                    <ValidationMessage For="() => _newUser.Password" />
+                </div>
+                <div class="mb-3">
+                    <label class="form-label small">Role</label>
+                    <InputSelect class="form-select form-select-sm" @bind-Value="_newUser.Role">
+                        @foreach (var r in Roles.All)
+                        {
+                            <option value="@r">@r</option>
+                        }
+                    </InputSelect>
+                </div>
+                @if (!string.IsNullOrEmpty(_error))
+                {
+                    <div class="text-danger small mb-2">@_error</div>
+                }
+                <button type="submit" class="btn btn-primary btn-sm">Create user</button>
+            </EditForm>
+        </div>
+    </div>
+    <div class="col-md-7">
+        <div class="dbt-table">
+            <table class="table">
+                <thead>
+                    <tr><th>Name</th><th>Email</th><th>Role</th></tr>
+                </thead>
+                <tbody>
+                    @foreach (var u in _users)
+                    {
+                        <tr>
+                            <td>@u.DisplayName</td>
+                            <td>@u.Email</td>
+                            <td>@string.Join(", ", u.Roles)</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+@code {
+    private record UserRow(string DisplayName, string? Email, IList<string> Roles);
+
+    private List<UserRow> _users = new();
+    private NewUserModel _newUser = new();
+    private string? _error;
+
+    protected override async Task OnInitializedAsync() => await Load();
+
+    private async Task Load()
+    {
+        var all = UserManager.Users.ToList();
+        var rows = new List<UserRow>();
+        foreach (var u in all)
+        {
+            var roles = await UserManager.GetRolesAsync(u);
+            rows.Add(new UserRow(u.DisplayName, u.Email, roles));
+        }
+        _users = rows.OrderBy(r => r.DisplayName).ToList();
+    }
+
+    private async Task CreateUser()
+    {
+        _error = null;
+
+        var user = new ApplicationUser
+        {
+            UserName = _newUser.Email,
+            Email = _newUser.Email,
+            DisplayName = _newUser.DisplayName,
+            EmailConfirmed = true
+        };
+
+        var result = await UserManager.CreateAsync(user, _newUser.Password);
+        if (!result.Succeeded)
+        {
+            _error = string.Join(" ", result.Errors.Select(e => e.Description));
+            return;
+        }
+
+        await UserManager.AddToRoleAsync(user, _newUser.Role);
+        Toasts.Success($"{_newUser.DisplayName} added as {_newUser.Role}.");
+        _newUser = new NewUserModel();
+        await Load();
+    }
+
+    private class NewUserModel
+    {
+        [Required]
+        public string DisplayName { get; set; } = "";
+
+        [Required, EmailAddress]
+        public string Email { get; set; } = "";
+
+        [Required, MinLength(8, ErrorMessage = "At least 8 characters.")]
+        public string Password { get; set; } = "";
+
+        public string Role { get; set; } = Roles.Viewer;
+    }
+}
