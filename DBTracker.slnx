@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/DBTracker.Core/DBTracker.Core.csproj" />
+    <Project Path="src/DBTracker.Infrastructure/DBTracker.Infrastructure.csproj" />
+    <Project Path="src/DBTracker.Web/DBTracker.Web.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/DBTracker.E2E/DBTracker.E2E.csproj" />
+    <Project Path="tests/DBTracker.UnitTests/DBTracker.UnitTests.csproj" />
+  </Folder>
+</Solution>

@@ -1,0 +1,17 @@
+@if (Health is not null)
+{
+    <span class="badge-health dot @Health">@Label</span>
+}
+
+@code {
+    [Parameter] public BackupHealth? Health { get; set; }
+
+    private string Label => Health switch
+    {
+        BackupHealth.OnTrack => "On track",
+        BackupHealth.Overdue => "Overdue",
+        BackupHealth.Failed => "Failed",
+        BackupHealth.NeverBackedUp => "Never backed up",
+        _ => ""
+    };
+}

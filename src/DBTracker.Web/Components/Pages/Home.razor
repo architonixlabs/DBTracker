@@ -1,0 +1,157 @@
+﻿@page "/"
+@rendermode InteractiveServer
+@inject InstanceOverviewService OverviewService
+@inject NavigationManager Nav
+
+<PageTitle>Dashboard · DBTracker</PageTitle>
+
+<div class="app-topbar">
+    <div>
+        <h1>Dashboard</h1>
+        <div class="subtitle">Backup health across every tracked database instance</div>
+    </div>
+</div>
+
+@if (_overviews is null)
+{
+    <p class="text-muted">Loading…</p>
+}
+else
+{
+    <div class="row g-3 mb-4">
+        <div class="col-6 col-md-3">
+            <div class="stat-card Total @(_filterHealth is null ? "is-active" : "")" @onclick="() => SetFilter(null)">
+                <div class="icon"><i class="bi bi-hdd-stack"></i></div>
+                <div>
+                    <div class="value">@_overviews.Count</div>
+                    <div class="label">Total instances</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="stat-card OnTrack @(_filterHealth == BackupHealth.OnTrack ? "is-active" : "")" @onclick="() => SetFilter(BackupHealth.OnTrack)">
+                <div class="icon"><i class="bi bi-check-circle"></i></div>
+                <div>
+                    <div class="value">@Count(BackupHealth.OnTrack)</div>
+                    <div class="label">On track</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="stat-card Overdue @(_filterHealth == BackupHealth.Overdue ? "is-active" : "")" @onclick="() => SetFilter(BackupHealth.Overdue)">
+                <div class="icon"><i class="bi bi-clock-history"></i></div>
+                <div>
+                    <div class="value">@Count(BackupHealth.Overdue)</div>
+                    <div class="label">Overdue</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="stat-card Failed @(_filterHealth == BackupHealth.Failed ? "is-active" : "")" @onclick="() => SetFilter(BackupHealth.Failed)">
+                <div class="icon"><i class="bi bi-x-circle"></i></div>
+                <div>
+                    <div class="value">@Count(BackupHealth.Failed)</div>
+                    <div class="label">Failed</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @if (Count(BackupHealth.NeverBackedUp) > 0)
+    {
+        <div class="col-md-3 mb-4" style="max-width: 260px;">
+            <div class="stat-card NeverBackedUp @(_filterHealth == BackupHealth.NeverBackedUp ? "is-active" : "")" @onclick="() => SetFilter(BackupHealth.NeverBackedUp)">
+                <div class="icon"><i class="bi bi-question-circle"></i></div>
+                <div>
+                    <div class="value">@Count(BackupHealth.NeverBackedUp)</div>
+                    <div class="label">Never backed up</div>
+                </div>
+            </div>
+        </div>
+    }
+
+    <h2 class="h5 mb-3">@(_filterHealth is null ? "All instances, most at risk first" : $"Instances: {FilterLabel(_filterHealth)}")</h2>
+
+    <div class="dbt-table">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Instance</th>
+                    <th>Engine</th>
+                    <th>Application / Owner</th>
+                    <th>Role</th>
+                    <th>Health</th>
+                    <th>Last backup</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var o in Sorted())
+                {
+                    <tr @onclick='() => Nav.NavigateTo($"/instances/{o.Instance.Id}")'>
+                        <td>
+                            <div class="fw-semibold">@o.Instance.Name</div>
+                            <div class="text-muted small">@o.Instance.Environment</div>
+                        </td>
+                        <td><span class="engine-pill">@o.Instance.Engine</span></td>
+                        <td>
+                            <div>@o.Instance.Application</div>
+                            <div class="text-muted small">@o.Instance.Company · @o.Instance.Department</div>
+                        </td>
+                        <td><span class="role-pill @o.Instance.Role">@o.Instance.Role</span></td>
+                        <td><HealthBadge Health="o.Health" /></td>
+                        <td>@(o.LastBackupUtc is null ? "—" : o.LastBackupUtc.Value.ToLocalTime().ToString("MMM d, h:mm tt"))</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+
+    @if (!Sorted().Any())
+    {
+        <div class="empty-state">
+            <i class="bi bi-inbox"></i>
+            No instances match this filter.
+        </div>
+    }
+}
+
+@code {
+    private List<InstanceOverview>? _overviews;
+    private BackupHealth? _filterHealth;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _overviews = await OverviewService.GetAllAsync();
+    }
+
+    private int Count(BackupHealth health) => _overviews?.Count(o => o.Health == health) ?? 0;
+
+    private void SetFilter(BackupHealth? health) => _filterHealth = health;
+
+    private static readonly Dictionary<BackupHealth, int> RiskRank = new()
+    {
+        [BackupHealth.Failed] = 0,
+        [BackupHealth.NeverBackedUp] = 1,
+        [BackupHealth.Overdue] = 2,
+        [BackupHealth.OnTrack] = 3,
+    };
+
+    private IEnumerable<InstanceOverview> Sorted()
+    {
+        var items = _overviews ?? Enumerable.Empty<InstanceOverview>();
+        if (_filterHealth is not null)
+        {
+            items = items.Where(o => o.Health == _filterHealth);
+        }
+        return items.OrderBy(o => RiskRank[o.Health]).ThenBy(o => o.Instance.Name);
+    }
+
+    private static string FilterLabel(BackupHealth? health) => health switch
+    {
+        BackupHealth.OnTrack => "On track",
+        BackupHealth.Overdue => "Overdue",
+        BackupHealth.Failed => "Failed",
+        BackupHealth.NeverBackedUp => "Never backed up",
+        _ => "All"
+    };
+}

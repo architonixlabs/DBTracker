@@ -1,0 +1,133 @@
+@page "/compliance"
+@rendermode InteractiveServer
+@inject InstanceOverviewService OverviewService
+@inject IJSRuntime JS
+
+<PageTitle>Compliance · DBTracker</PageTitle>
+
+<div class="app-topbar">
+    <div>
+        <h1>Compliance snapshot</h1>
+        <div class="subtitle">As of @_asOf.ToLocalTime().ToString("MMM d, yyyy h:mm tt") — last-backup age per instance</div>
+    </div>
+    <button class="btn btn-outline-primary" @onclick="ExportCsv" disabled="@(_overviews is null)">
+        <i class="bi bi-download"></i> Export CSV
+    </button>
+</div>
+
+@if (_overviews is null)
+{
+    <p class="text-muted">Loading…</p>
+}
+else
+{
+    <div class="filter-bar">
+        <select class="form-select" style="max-width:150px;" @bind="_role">
+            <option value="">Active + passive</option>
+            @foreach (var r in Enum.GetValues<InstanceRole>())
+            {
+                <option value="@r">@r</option>
+            }
+        </select>
+        <select class="form-select" style="max-width:170px;" @bind="_envTier">
+            <option value="">All environments</option>
+            @foreach (var e in Enum.GetValues<EnvironmentTier>())
+            {
+                <option value="@e">@e</option>
+            }
+        </select>
+    </div>
+
+    <div class="dbt-table">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Instance</th>
+                    <th>Owner</th>
+                    <th>Role</th>
+                    <th>Env</th>
+                    <th>Last successful backup</th>
+                    <th>Age</th>
+                    <th>Health</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var o in Filtered())
+                {
+                    <tr>
+                        <td class="fw-semibold">@o.Instance.Name</td>
+                        <td>@o.Instance.Company / @o.Instance.Department</td>
+                        <td><span class="role-pill @o.Instance.Role">@o.Instance.Role</span></td>
+                        <td>@o.Instance.Environment</td>
+                        <td>@(o.LastBackupUtc is null ? "Never" : o.LastBackupUtc.Value.ToLocalTime().ToString("MMM d, yyyy h:mm tt"))</td>
+                        <td>@Age(o.LastBackupUtc)</td>
+                        <td><HealthBadge Health="o.Health" /></td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+@code {
+    private List<InstanceOverview>? _overviews;
+    private DateTime _asOf;
+    private string _role = "";
+    private string _envTier = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        _asOf = DateTime.UtcNow;
+        _overviews = await OverviewService.GetAllAsync();
+    }
+
+    private IEnumerable<InstanceOverview> Filtered()
+    {
+        var items = _overviews ?? Enumerable.Empty<InstanceOverview>();
+
+        if (_role.Length > 0 && Enum.TryParse<InstanceRole>(_role, out var role))
+        {
+            items = items.Where(o => o.Instance.Role == role);
+        }
+        if (_envTier.Length > 0 && Enum.TryParse<EnvironmentTier>(_envTier, out var env))
+        {
+            items = items.Where(o => o.Instance.Environment == env);
+        }
+
+        return items.OrderBy(o => o.Instance.Name);
+    }
+
+    private string Age(DateTime? lastBackupUtc)
+    {
+        if (lastBackupUtc is null)
+        {
+            return "—";
+        }
+        var span = _asOf - lastBackupUtc.Value;
+        return span.TotalHours < 48 ? $"{span.TotalHours:N0} h" : $"{span.TotalDays:N0} d";
+    }
+
+    private async Task ExportCsv()
+    {
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("Instance,Engine,Company,Department,Owner,ContactEmail,Role,Environment,LastSuccessfulBackupUtc,AgeHours,Health");
+        foreach (var o in Filtered())
+        {
+            var ageHours = o.LastBackupUtc is null ? "" : ((_asOf - o.LastBackupUtc.Value).TotalHours).ToString("N1");
+            sb.AppendLine(string.Join(",", new[]
+            {
+                Csv(o.Instance.Name), Csv(o.Instance.Engine.ToString()), Csv(o.Instance.Company), Csv(o.Instance.Department),
+                Csv(o.Instance.ContactName), Csv(o.Instance.ContactEmail), Csv(o.Instance.Role.ToString()), Csv(o.Instance.Environment.ToString()),
+                Csv(o.LastBackupUtc?.ToString("O") ?? ""), Csv(ageHours), Csv(o.Health.ToString())
+            }));
+        }
+
+        var fileName = $"dbtracker-compliance-{_asOf:yyyyMMdd-HHmm}.csv";
+        await JS.InvokeVoidAsync("dbtracker.downloadCsv", fileName, sb.ToString());
+    }
+
+    private static string Csv(string value) =>
+        value.Contains(',') || value.Contains('"')
+            ? $"\"{value.Replace("\"", "\"\"")}\""
+            : value;
+}

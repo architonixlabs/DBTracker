@@ -1,0 +1,171 @@
+@page "/instances/new"
+@page "/instances/{Id:int}/edit"
+@rendermode InteractiveServer
+@inject IDbContextFactory<DBTrackerDbContext> DbFactory
+@inject NavigationManager Nav
+
+<PageTitle>@(Id is null ? "Add instance" : "Edit instance") · DBTracker</PageTitle>
+
+<div class="app-topbar">
+    <div>
+        <h1>@(Id is null ? "Add database instance" : $"Edit {_model.Name}")</h1>
+        <div class="subtitle">Inventory, ownership and contact details</div>
+    </div>
+</div>
+
+@if (_loading)
+{
+    <p class="text-muted">Loading…</p>
+}
+else
+{
+    <div class="dbt-card" style="max-width: 760px;">
+        <EditForm Model="_model" OnValidSubmit="Save">
+            <DataAnnotationsValidator />
+
+            <h2 class="h6 text-muted text-uppercase mb-3">Identity</h2>
+            <div class="row g-3 mb-4">
+                <div class="col-md-6">
+                    <label class="form-label">Instance name</label>
+                    <InputText class="form-control" @bind-Value="_model.Name" />
+                    <ValidationMessage For="() => _model.Name" />
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Engine</label>
+                    <InputSelect class="form-select" @bind-Value="_model.Engine">
+                        @foreach (var e in Enum.GetValues<DatabaseEngine>())
+                        {
+                            <option value="@e">@e</option>
+                        }
+                    </InputSelect>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Version</label>
+                    <InputText class="form-control" @bind-Value="_model.Version" />
+                </div>
+            </div>
+
+            <h2 class="h6 text-muted text-uppercase mb-3">Ownership</h2>
+            <div class="row g-3 mb-4">
+                <div class="col-md-4">
+                    <label class="form-label">Application</label>
+                    <InputText class="form-control" @bind-Value="_model.Application" />
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Company</label>
+                    <InputText class="form-control" @bind-Value="_model.Company" />
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Department</label>
+                    <InputText class="form-control" @bind-Value="_model.Department" />
+                </div>
+            </div>
+
+            <h2 class="h6 text-muted text-uppercase mb-3">Contact</h2>
+            <div class="row g-3 mb-4">
+                <div class="col-md-4">
+                    <label class="form-label">Contact name</label>
+                    <InputText class="form-control" @bind-Value="_model.ContactName" />
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Contact email</label>
+                    <InputText class="form-control" @bind-Value="_model.ContactEmail" />
+                    <ValidationMessage For="() => _model.ContactEmail" />
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Contact phone</label>
+                    <InputText class="form-control" @bind-Value="_model.ContactPhone" />
+                </div>
+            </div>
+
+            <h2 class="h6 text-muted text-uppercase mb-3">Topology</h2>
+            <div class="row g-3 mb-4">
+                <div class="col-md-3">
+                    <label class="form-label">Role</label>
+                    <InputSelect class="form-select" @bind-Value="_model.Role">
+                        @foreach (var r in Enum.GetValues<InstanceRole>())
+                        {
+                            <option value="@r">@r</option>
+                        }
+                    </InputSelect>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Environment</label>
+                    <InputSelect class="form-select" @bind-Value="_model.Environment">
+                        @foreach (var e in Enum.GetValues<EnvironmentTier>())
+                        {
+                            <option value="@e">@e</option>
+                        }
+                    </InputSelect>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Database IP</label>
+                    <InputText class="form-control" @bind-Value="_model.DatabaseIp" />
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Server IP</label>
+                    <InputText class="form-control" @bind-Value="_model.ServerIp" />
+                </div>
+            </div>
+
+            <h2 class="h6 text-muted text-uppercase mb-3">Backup expectations</h2>
+            <div class="row g-3 mb-4">
+                <div class="col-md-4">
+                    <label class="form-label">Expected backup interval (hours)</label>
+                    <InputNumber class="form-control" @bind-Value="_model.ExpectedBackupIntervalHours" />
+                    <div class="form-text">Flagged as overdue if no successful backup within this window.</div>
+                </div>
+                <div class="col-md-8">
+                    <label class="form-label">Notes</label>
+                    <InputTextArea class="form-control" rows="2" @bind-Value="_model.Notes" />
+                </div>
+            </div>
+
+            <div class="d-flex gap-2">
+                <button type="submit" class="btn btn-primary">Save</button>
+                <a class="btn btn-outline-secondary" href="@CancelUrl">Cancel</a>
+            </div>
+        </EditForm>
+    </div>
+}
+
+@code {
+    [Parameter] public int? Id { get; set; }
+
+    private DatabaseInstance _model = new();
+    private bool _loading = true;
+
+    private string CancelUrl => Id is null ? "/instances" : $"/instances/{Id}";
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (Id is not null)
+        {
+            using var db = await DbFactory.CreateDbContextAsync();
+            var existing = await db.DatabaseInstances.FindAsync(Id.Value);
+            if (existing is not null)
+            {
+                _model = existing;
+            }
+        }
+        _loading = false;
+    }
+
+    private async Task Save()
+    {
+        using var db = await DbFactory.CreateDbContextAsync();
+        _model.UpdatedAtUtc = DateTime.UtcNow;
+
+        if (Id is null)
+        {
+            db.DatabaseInstances.Add(_model);
+        }
+        else
+        {
+            db.DatabaseInstances.Update(_model);
+        }
+
+        await db.SaveChangesAsync();
+        Nav.NavigateTo($"/instances/{_model.Id}");
+    }
+}

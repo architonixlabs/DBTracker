@@ -1,0 +1,210 @@
+@page "/instances"
+@rendermode InteractiveServer
+@inject InstanceOverviewService OverviewService
+@inject NavigationManager Nav
+
+<PageTitle>Instances · DBTracker</PageTitle>
+
+<div class="app-topbar">
+    <div>
+        <h1>Database Instances</h1>
+        <div class="subtitle">@(_overviews is null ? "" : $"{Filtered().Count()} of {_overviews.Count} instances")</div>
+    </div>
+    <a class="btn btn-primary" href="/instances/new">
+        <i class="bi bi-plus-lg"></i> Add instance
+    </a>
+</div>
+
+@if (_overviews is null)
+{
+    <p class="text-muted">Loading…</p>
+}
+else
+{
+    <div class="filter-bar">
+        <input class="form-control" style="max-width:220px;" placeholder="Search name, app, owner, IP…"
+               value="@_search" @oninput="OnSearchChanged" />
+
+        <select class="form-select" style="max-width:150px;" @bind="_engine">
+            <option value="">All engines</option>
+            @foreach (var e in Enum.GetValues<DatabaseEngine>())
+            {
+                <option value="@e">@e</option>
+            }
+        </select>
+
+        <select class="form-select" style="max-width:150px;" @bind="_health">
+            <option value="">All health</option>
+            @foreach (var h in Enum.GetValues<BackupHealth>())
+            {
+                <option value="@h">@FilterLabel(h)</option>
+            }
+        </select>
+
+        <select class="form-select" style="max-width:130px;" @bind="_role">
+            <option value="">Active + passive</option>
+            @foreach (var r in Enum.GetValues<InstanceRole>())
+            {
+                <option value="@r">@r</option>
+            }
+        </select>
+
+        <select class="form-select" style="max-width:160px;" @bind="_envTier">
+            <option value="">All environments</option>
+            @foreach (var e in Enum.GetValues<EnvironmentTier>())
+            {
+                <option value="@e">@e</option>
+            }
+        </select>
+
+        <select class="form-select" style="max-width:170px;" @bind="_company">
+            <option value="">All companies</option>
+            @foreach (var c in Companies)
+            {
+                <option value="@c">@c</option>
+            }
+        </select>
+
+        @if (HasFilters)
+        {
+            <button class="btn btn-link btn-sm" @onclick="ClearFilters">Clear filters</button>
+        }
+    </div>
+
+    <div class="dbt-table">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Instance</th>
+                    <th>Engine</th>
+                    <th>Application</th>
+                    <th>Company / Dept</th>
+                    <th>Owner</th>
+                    <th>Role</th>
+                    <th>Env</th>
+                    <th>Health</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var o in Filtered())
+                {
+                    <tr @onclick='() => Nav.NavigateTo($"/instances/{o.Instance.Id}")'>
+                        <td>
+                            <div class="fw-semibold">@o.Instance.Name</div>
+                            <div class="text-muted small">@o.Instance.DatabaseIp</div>
+                        </td>
+                        <td><span class="engine-pill">@o.Instance.Engine</span> <span class="text-muted small">@o.Instance.Version</span></td>
+                        <td>@o.Instance.Application</td>
+                        <td>
+                            <div>@o.Instance.Company</div>
+                            <div class="text-muted small">@o.Instance.Department</div>
+                        </td>
+                        <td>
+                            <div>@o.Instance.ContactName</div>
+                            <div class="text-muted small">@o.Instance.ContactEmail</div>
+                        </td>
+                        <td><span class="role-pill @o.Instance.Role">@o.Instance.Role</span></td>
+                        <td>@o.Instance.Environment</td>
+                        <td><HealthBadge Health="o.Health" /></td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+
+    @if (!Filtered().Any())
+    {
+        <div class="empty-state">
+            <i class="bi bi-inbox"></i>
+            No instances match these filters.
+        </div>
+    }
+}
+
+@code {
+    private List<InstanceOverview>? _overviews;
+
+    private string _search = "";
+    private string _engine = "";
+    private string _health = "";
+    private string _role = "";
+    private string _envTier = "";
+    private string _company = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        _overviews = await OverviewService.GetAllAsync();
+    }
+
+    private IEnumerable<string> Companies =>
+        _overviews?.Select(o => o.Instance.Company).Where(c => !string.IsNullOrWhiteSpace(c)).Distinct().OrderBy(c => c)
+        ?? Enumerable.Empty<string>();
+
+    private bool HasFilters =>
+        _search.Length > 0 || _engine.Length > 0 || _health.Length > 0 || _role.Length > 0 || _envTier.Length > 0 || _company.Length > 0;
+
+    private void ClearFilters()
+    {
+        _search = ""; _engine = ""; _health = ""; _role = ""; _envTier = ""; _company = "";
+    }
+
+    private void OnSearchChanged(ChangeEventArgs e) => _search = e.Value?.ToString() ?? "";
+
+    private IEnumerable<InstanceOverview> Filtered()
+    {
+        var items = _overviews ?? Enumerable.Empty<InstanceOverview>();
+
+        if (!string.IsNullOrWhiteSpace(_search))
+        {
+            var term = _search.Trim();
+            items = items.Where(o =>
+                Contains(o.Instance.Name, term) ||
+                Contains(o.Instance.Application, term) ||
+                Contains(o.Instance.Company, term) ||
+                Contains(o.Instance.Department, term) ||
+                Contains(o.Instance.ContactName, term) ||
+                Contains(o.Instance.ContactEmail, term) ||
+                Contains(o.Instance.DatabaseIp, term) ||
+                Contains(o.Instance.ServerIp, term));
+        }
+
+        if (_engine.Length > 0 && Enum.TryParse<DatabaseEngine>(_engine, out var engine))
+        {
+            items = items.Where(o => o.Instance.Engine == engine);
+        }
+
+        if (_health.Length > 0 && Enum.TryParse<BackupHealth>(_health, out var health))
+        {
+            items = items.Where(o => o.Health == health);
+        }
+
+        if (_role.Length > 0 && Enum.TryParse<InstanceRole>(_role, out var role))
+        {
+            items = items.Where(o => o.Instance.Role == role);
+        }
+
+        if (_envTier.Length > 0 && Enum.TryParse<EnvironmentTier>(_envTier, out var env))
+        {
+            items = items.Where(o => o.Instance.Environment == env);
+        }
+
+        if (_company.Length > 0)
+        {
+            items = items.Where(o => o.Instance.Company == _company);
+        }
+
+        return items.OrderBy(o => o.Instance.Name);
+    }
+
+    private static bool Contains(string haystack, string term) =>
+        haystack.Contains(term, StringComparison.OrdinalIgnoreCase);
+
+    private static string FilterLabel(BackupHealth health) => health switch
+    {
+        BackupHealth.OnTrack => "On track",
+        BackupHealth.Overdue => "Overdue",
+        BackupHealth.Failed => "Failed",
+        BackupHealth.NeverBackedUp => "Never backed up",
+        _ => health.ToString()
+    };
+}

@@ -1,0 +1,37 @@
+# DBTracker
+
+A .NET Core Blazor app for tracking database backups across a heterogeneous
+environment — SQL Server, MySQL, PostgreSQL, MongoDB, Oracle and more. Tracks
+which application/company/department owns each instance, contact info,
+active/passive role, server and database IPs, and whether backups are
+actually happening on schedule.
+
+## Stack
+- .NET 10, Blazor Web App (interactive server)
+- EF Core 10 + SQL Server
+- Bootstrap 5 UI
+- xUnit (unit tests), Playwright + NUnit (end-to-end tests)
+
+## Running locally
+Requires a local SQL Server instance reachable with Windows Authentication.
+
+```bash
+dotnet ef database update --project src/DBTracker.Infrastructure --startup-project src/DBTracker.Web
+dotnet run --project src/DBTracker.Web
+```
+
+The connection string lives in `src/DBTracker.Web/appsettings.json`
+(`ConnectionStrings:DBTracker`) and defaults to `Server=localhost` with
+integrated security — no secrets required.
+
+## Project layout
+- `src/DBTracker.Core` — domain entities and backup-health logic
+- `src/DBTracker.Infrastructure` — EF Core DbContext, migrations, queries
+- `src/DBTracker.Web` — Blazor UI
+- `tests/DBTracker.UnitTests` — unit tests
+- `tests/DBTracker.E2E` — Playwright end-to-end tests
+
+See [BACKLOG.md](BACKLOG.md) for the persona-driven product backlog.
+
+## License
+[MIT](LICENSE) — free to use, modify and distribute.

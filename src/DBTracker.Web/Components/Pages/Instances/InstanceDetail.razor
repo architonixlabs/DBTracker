@@ -1,0 +1,183 @@
+@page "/instances/{Id:int}"
+@rendermode InteractiveServer
+@inject InstanceOverviewService OverviewService
+@inject IDbContextFactory<DBTrackerDbContext> DbFactory
+@inject NavigationManager Nav
+
+<PageTitle>@(_overview?.Instance.Name ?? "Instance") · DBTracker</PageTitle>
+
+@if (_overview is null)
+{
+    <p class="text-muted">Loading…</p>
+}
+else
+{
+    var instance = _overview.Instance;
+
+    <div class="app-topbar">
+        <div>
+            <h1>@instance.Name <HealthBadge Health="_overview.Health" /></h1>
+            <div class="subtitle">@instance.Engine @instance.Version · @instance.Environment · <span class="role-pill @instance.Role">@instance.Role</span></div>
+        </div>
+        <div class="d-flex gap-2">
+            <a class="btn btn-outline-secondary" href="/instances/@Id/edit"><i class="bi bi-pencil"></i> Edit</a>
+            @if (!instance.IsArchived)
+            {
+                <button class="btn btn-outline-danger" @onclick="Archive"><i class="bi bi-archive"></i> Archive</button>
+            }
+        </div>
+    </div>
+
+    <div class="row g-3 mb-4">
+        <div class="col-md-6">
+            <div class="dbt-card h-100">
+                <h2 class="h6 text-muted text-uppercase mb-3">Ownership &amp; contact</h2>
+                <dl class="row mb-0 small">
+                    <dt class="col-5">Application</dt><dd class="col-7">@instance.Application</dd>
+                    <dt class="col-5">Company</dt><dd class="col-7">@instance.Company</dd>
+                    <dt class="col-5">Department</dt><dd class="col-7">@instance.Department</dd>
+                    <dt class="col-5">Contact</dt><dd class="col-7">@instance.ContactName</dd>
+                    <dt class="col-5">Email</dt><dd class="col-7">@instance.ContactEmail</dd>
+                    <dt class="col-5">Phone</dt><dd class="col-7">@instance.ContactPhone</dd>
+                </dl>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="dbt-card h-100">
+                <h2 class="h6 text-muted text-uppercase mb-3">Topology</h2>
+                <dl class="row mb-0 small">
+                    <dt class="col-5">Database IP</dt><dd class="col-7">@instance.DatabaseIp</dd>
+                    <dt class="col-5">Server IP</dt><dd class="col-7">@instance.ServerIp</dd>
+                    <dt class="col-5">Expected cadence</dt><dd class="col-7">every @instance.ExpectedBackupIntervalHours h</dd>
+                    <dt class="col-5">Last successful backup</dt>
+                    <dd class="col-7">@(_overview.LastBackupUtc is null ? "Never" : _overview.LastBackupUtc.Value.ToLocalTime().ToString("MMM d, yyyy h:mm tt"))</dd>
+                </dl>
+                @if (!string.IsNullOrWhiteSpace(instance.Notes))
+                {
+                    <div class="text-muted small mt-2">@instance.Notes</div>
+                }
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-3">
+        <div class="col-md-5">
+            <div class="dbt-card">
+                <h2 class="h6 text-muted text-uppercase mb-3">Log a backup result</h2>
+                <EditForm Model="_newRecord" OnValidSubmit="LogBackup">
+                    <div class="mb-2">
+                        <label class="form-label small">Type</label>
+                        <InputSelect class="form-select form-select-sm" @bind-Value="_newRecord.Type">
+                            @foreach (var t in Enum.GetValues<BackupType>())
+                            {
+                                <option value="@t">@t</option>
+                            }
+                        </InputSelect>
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label small">Status</label>
+                        <InputSelect class="form-select form-select-sm" @bind-Value="_newRecord.Status">
+                            @foreach (var s in Enum.GetValues<BackupStatus>())
+                            {
+                                <option value="@s">@s</option>
+                            }
+                        </InputSelect>
+                    </div>
+                    <div class="row g-2 mb-2">
+                        <div class="col-6">
+                            <label class="form-label small">Size (MB)</label>
+                            <InputNumber class="form-control form-control-sm" @bind-Value="_newRecord.SizeMb" />
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label small">Duration (min)</label>
+                            <InputNumber class="form-control form-control-sm" @bind-Value="_newRecord.DurationMinutes" />
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small">Notes</label>
+                        <InputTextArea class="form-control form-control-sm" rows="2" @bind-Value="_newRecord.Notes" />
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-sm">Log backup</button>
+                </EditForm>
+            </div>
+        </div>
+        <div class="col-md-7">
+            <div class="dbt-card">
+                <h2 class="h6 text-muted text-uppercase mb-3">Backup history</h2>
+                @if (!instance.BackupRecords.Any())
+                {
+                    <div class="empty-state py-3">
+                        <i class="bi bi-clock-history"></i>
+                        No backup history recorded yet.
+                    </div>
+                }
+                else
+                {
+                    <table class="table table-sm mb-0">
+                        <thead>
+                            <tr><th>When</th><th>Type</th><th>Status</th><th>Size</th><th>Duration</th></tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var r in instance.BackupRecords.OrderByDescending(r => r.TimestampUtc))
+                            {
+                                <tr>
+                                    <td class="small">@r.TimestampUtc.ToLocalTime().ToString("MMM d, h:mm tt")</td>
+                                    <td class="small">@r.Type</td>
+                                    <td><span class="badge-health dot @StatusClass(r.Status)">@r.Status</span></td>
+                                    <td class="small">@(r.SizeMb is null ? "—" : $"{r.SizeMb:N0} MB")</td>
+                                    <td class="small">@(r.DurationMinutes is null ? "—" : $"{r.DurationMinutes:N0} min")</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                }
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    private InstanceOverview? _overview;
+    private BackupRecord _newRecord = new();
+
+    protected override async Task OnInitializedAsync() => await Load();
+
+    private async Task Load()
+    {
+        _overview = await OverviewService.GetByIdAsync(Id);
+        _newRecord = new BackupRecord { TimestampUtc = DateTime.UtcNow };
+    }
+
+    private async Task LogBackup()
+    {
+        using var db = await DbFactory.CreateDbContextAsync();
+        _newRecord.DatabaseInstanceId = Id;
+        _newRecord.TimestampUtc = DateTime.UtcNow;
+        db.BackupRecords.Add(_newRecord);
+        await db.SaveChangesAsync();
+        await Load();
+    }
+
+    private async Task Archive()
+    {
+        using var db = await DbFactory.CreateDbContextAsync();
+        var entity = await db.DatabaseInstances.FindAsync(Id);
+        if (entity is not null)
+        {
+            entity.IsArchived = true;
+            entity.UpdatedAtUtc = DateTime.UtcNow;
+            await db.SaveChangesAsync();
+        }
+        Nav.NavigateTo("/instances");
+    }
+
+    private static string StatusClass(BackupStatus status) => status switch
+    {
+        BackupStatus.Success => "OnTrack",
+        BackupStatus.Failed => "Failed",
+        BackupStatus.Missed => "Failed",
+        _ => "NeverBackedUp"
+    };
+}
