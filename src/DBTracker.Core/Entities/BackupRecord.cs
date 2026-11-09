@@ -18,5 +18,10 @@ public class BackupRecord
 
     public string Notes { get; set; } = string.Empty;
 
+    public BackupSource Source { get; set; } = BackupSource.Manual;
+
+    /// <summary>File name matched on the shared drive, for Discovered records — used to avoid re-importing the same file.</summary>
+    public string SourceFile { get; set; } = string.Empty;
+
     public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
 }

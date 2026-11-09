@@ -32,6 +32,17 @@ public class DatabaseInstance
     /// <summary>Expected hours between successful backups before this instance is considered overdue.</summary>
     public int ExpectedBackupIntervalHours { get; set; } = 24;
 
+    /// <summary>UNC path or local folder the scanner checks for backup files. Empty = scanning disabled.</summary>
+    public string BackupFileLocation { get; set; } = string.Empty;
+    public DateTime? LastScanUtc { get; set; }
+    public ScanStatus LastScanStatus { get; set; } = ScanStatus.NeverScanned;
+    public string LastScanError { get; set; } = string.Empty;
+
+    /// <summary>Expected days/copies backups for this instance should be retained — informational, not enforced.</summary>
+    public int? RetentionPolicyDays { get; set; }
+    public string Tags { get; set; } = string.Empty;
+    public string RunbookUrl { get; set; } = string.Empty;
+
     public string Notes { get; set; } = string.Empty;
     public bool IsArchived { get; set; }
 
@@ -39,4 +50,5 @@ public class DatabaseInstance
     public DateTime UpdatedAtUtc { get; set; } = DateTime.UtcNow;
 
     public ICollection<BackupRecord> BackupRecords { get; set; } = new List<BackupRecord>();
+    public ICollection<RestoreEvent> RestoreEvents { get; set; } = new List<RestoreEvent>();
 }

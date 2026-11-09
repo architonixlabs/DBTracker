@@ -13,6 +13,7 @@ public class DBTrackerDbContext : IdentityDbContext<ApplicationUser>
 
     public DbSet<DatabaseInstance> DatabaseInstances => Set<DatabaseInstance>();
     public DbSet<BackupRecord> BackupRecords => Set<BackupRecord>();
+    public DbSet<RestoreEvent> RestoreEvents => Set<RestoreEvent>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -31,6 +32,10 @@ public class DBTrackerDbContext : IdentityDbContext<ApplicationUser>
             entity.Property(e => e.DatabaseIp).HasMaxLength(100);
             entity.Property(e => e.ServerIp).HasMaxLength(100);
             entity.Property(e => e.Notes).HasMaxLength(2000);
+            entity.Property(e => e.BackupFileLocation).HasMaxLength(500);
+            entity.Property(e => e.LastScanError).HasMaxLength(1000);
+            entity.Property(e => e.Tags).HasMaxLength(300);
+            entity.Property(e => e.RunbookUrl).HasMaxLength(500);
 
             entity.HasIndex(e => e.Application);
             entity.HasIndex(e => e.Company);
@@ -40,9 +45,23 @@ public class DBTrackerDbContext : IdentityDbContext<ApplicationUser>
         modelBuilder.Entity<BackupRecord>(entity =>
         {
             entity.Property(e => e.Notes).HasMaxLength(2000);
+            entity.Property(e => e.SourceFile).HasMaxLength(260);
 
             entity.HasOne(r => r.DatabaseInstance)
                 .WithMany(i => i.BackupRecords)
+                .HasForeignKey(r => r.DatabaseInstanceId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(e => new { e.DatabaseInstanceId, e.TimestampUtc });
+        });
+
+        modelBuilder.Entity<RestoreEvent>(entity =>
+        {
+            entity.Property(e => e.PerformedBy).HasMaxLength(200);
+            entity.Property(e => e.Notes).HasMaxLength(2000);
+
+            entity.HasOne(r => r.DatabaseInstance)
+                .WithMany(i => i.RestoreEvents)
                 .HasForeignKey(r => r.DatabaseInstanceId)
                 .OnDelete(DeleteBehavior.Cascade);
 

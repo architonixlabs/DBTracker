@@ -116,7 +116,29 @@ else
                     <InputNumber class="form-control" @bind-Value="_model.ExpectedBackupIntervalHours" />
                     <div class="form-text">Flagged as overdue if no successful backup within this window.</div>
                 </div>
-                <div class="col-md-8">
+                <div class="col-md-4">
+                    <label class="form-label">Retention policy (days)</label>
+                    <InputNumber class="form-control" @bind-Value="_model.RetentionPolicyDays" />
+                    <div class="form-text">Informational — how long backups should be kept.</div>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Backup file location</label>
+                    <InputText class="form-control" @bind-Value="_model.BackupFileLocation" placeholder="\\server\backups\instance" />
+                    <div class="form-text">UNC path scanned for backup files. Leave blank to disable.</div>
+                </div>
+            </div>
+
+            <h2 class="h6 text-muted text-uppercase mb-3">Reference</h2>
+            <div class="row g-3 mb-4">
+                <div class="col-md-5">
+                    <label class="form-label">Tags</label>
+                    <InputText class="form-control" @bind-Value="_model.Tags" placeholder="comma, separated, tags" />
+                </div>
+                <div class="col-md-7">
+                    <label class="form-label">Runbook / monitoring link</label>
+                    <InputText class="form-control" @bind-Value="_model.RunbookUrl" placeholder="https://…" />
+                </div>
+                <div class="col-12">
                     <label class="form-label">Notes</label>
                     <InputTextArea class="form-control" rows="2" @bind-Value="_model.Notes" />
                 </div>

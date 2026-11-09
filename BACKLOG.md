@@ -72,27 +72,27 @@ Just wants to confirm their app's DB is backed up and update contact info when s
 ### Epic 6 — Backup evidence from shared drive
 *Serves Priya (DBA, who shouldn't have to hand-log every backup) and Angela (Auditor, who needs
 proof it's real file evidence, not a self-reported checkbox).*
-- [ ] Per-instance configurable backup file location (UNC path / folder pattern)
-- [ ] Background scanner that reads file name/timestamp/size at that location and auto-creates
-      BackupRecord entries (source = "Discovered" vs "Logged manually")
-- [ ] Scheduled recurring scan (configurable interval, not just on-demand) so data stays current
-      without manual re-triggering
-- [ ] Surface last-scanned time and scan errors (path unreachable, permission denied) per instance —
-      visible on the instance detail page and the dashboard, so staleness itself is visible
+- [x] Per-instance configurable backup file location (UNC path / folder pattern)
+- [x] Scanner that reads file name/timestamp/size at that location and auto-creates BackupRecord
+      entries (`Source`: Discovered vs Manual), matched by file name so re-scans never duplicate
+- [x] Scheduled recurring scan (`BackupScan:IntervalMinutes`, default 15; 0 disables it) plus a
+      manual "Scan now" button on the instance page for an on-demand check
+- [x] Last-scanned time and scan errors (path unreachable etc.) surfaced on the instance detail page
+- [ ] Surface staleness on the dashboard too (currently detail-page only)
 
 ### Epic 6b — Restore tracking
 *Serves Angela (Auditor — "has this backup ever actually been proven restorable?") and Priya (DBA —
 needs a record of DR drills and emergency restores, not just backups going out).*
-- [ ] Log a restore event per instance: when, who performed it, why (DR drill / incident / data
+- [x] Log a restore event per instance: when, who performed it, why (DR drill / incident / data
       request / test), and outcome (success/failure)
-- [ ] Restore history visible alongside backup history on the instance detail page
-- [ ] Compliance view flags instances with backups but zero restore history (untested backups are a
-      known audit red flag — "we've never proven we can recover this")
+- [x] Restore history visible alongside backup history on the instance detail page
+- [x] Compliance view flags instances with zero successful restore history ("Restore tested" column,
+      also in the CSV export) — untested backups are a known audit red flag
 
 ### Epic 7 — Richer environment & instance detail
-- [ ] Custom/extensible environment tags (beyond the fixed tier) — e.g. region, cluster, replica set
-- [ ] Retention policy field (days/copies expected to be retained)
-- [ ] Tags/labels for ad-hoc grouping; free-form links (runbook, monitoring dashboard)
+- [x] Retention policy field (days backups should be retained — informational)
+- [x] Tags field and a runbook/monitoring link field
+- [ ] Custom/extensible environment tags beyond the fixed tier (region, cluster, replica set)
 - [ ] Audit trail of who changed what on an instance record
 
 ### Epic 8 — Notifications
@@ -161,6 +161,18 @@ needs a record of DR drills and emergency restores, not just backups going out).
   circuit/DI scope instead of one persistent circuit for the app — scoped services like the toast
   bus never saw the same instance twice. Fixed by setting the render mode once, globally, on
   `<Routes>` in App.razor and removing the redundant per-page declarations. All 19 tests still pass.
+- 2026-11-10 — Published a visual design exploration (separate Artifact, not app code): an editorial
+  ledger system — warm ink/paper palette, Fraunces/Inter type pairing, hairline-divided tables and
+  underline form fields instead of boxed cards — across sign-in, dashboard, inventory, detail and
+  compliance screens, per the user's ask for a "non-box", professional, multi-view design direction.
+- 2026-11-10 — Built Epics 6, 6b, and most of 7: shared-drive backup scanning (manual "Scan now" +
+  a configurable background sweep, file-name matched so re-scans never duplicate), restore-event
+  logging with a Compliance "Restore tested" flag, and retention/tags/runbook fields on an instance.
+  Added 5 unit tests (scanner matching logic) and 2 new E2E tests (configure a real temp folder as
+  the "shared drive" and scan it; log a restore and verify it flags on Compliance). One E2E flake
+  fixed along the way: a Windows path embedded in a CSS `:has-text()` selector had its backslashes
+  parsed as CSS escapes — switched to Playwright's `HasText` locator option instead. All 26 tests
+  (17 unit + 9 E2E) pass.
 
 ## Out of scope (future)
 - Automated backup execution/orchestration (this tracks status, doesn't run backups)

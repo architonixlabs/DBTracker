@@ -48,11 +48,13 @@ else
                     <th>Last successful backup</th>
                     <th>Age</th>
                     <th>Health</th>
+                    <th>Restore tested</th>
                 </tr>
             </thead>
             <tbody>
                 @foreach (var o in Filtered())
                 {
+                    var restoreTested = o.Instance.RestoreEvents.Any(r => r.Outcome == RestoreOutcome.Success);
                     <tr>
                         <td class="fw-semibold">@o.Instance.Name</td>
                         <td>@o.Instance.Company / @o.Instance.Department</td>
@@ -61,6 +63,16 @@ else
                         <td>@(o.LastBackupUtc is null ? "Never" : o.LastBackupUtc.Value.ToLocalTime().ToString("MMM d, yyyy h:mm tt"))</td>
                         <td>@Age(o.LastBackupUtc)</td>
                         <td><HealthBadge Health="o.Health" /></td>
+                        <td>
+                            @if (restoreTested)
+                            {
+                                <span class="badge-health dot OnTrack">Yes</span>
+                            }
+                            else
+                            {
+                                <span class="badge-health dot Overdue">No</span>
+                            }
+                        </td>
                     </tr>
                 }
             </tbody>
@@ -109,15 +121,16 @@ else
     private async Task ExportCsv()
     {
         var sb = new System.Text.StringBuilder();
-        sb.AppendLine("Instance,Engine,Company,Department,Owner,ContactEmail,Role,Environment,LastSuccessfulBackupUtc,AgeHours,Health");
+        sb.AppendLine("Instance,Engine,Company,Department,Owner,ContactEmail,Role,Environment,LastSuccessfulBackupUtc,AgeHours,Health,RestoreTested");
         foreach (var o in Filtered())
         {
             var ageHours = o.LastBackupUtc is null ? "" : ((_asOf - o.LastBackupUtc.Value).TotalHours).ToString("N1");
+            var restoreTested = o.Instance.RestoreEvents.Any(r => r.Outcome == RestoreOutcome.Success);
             sb.AppendLine(string.Join(",", new[]
             {
                 Csv(o.Instance.Name), Csv(o.Instance.Engine.ToString()), Csv(o.Instance.Company), Csv(o.Instance.Department),
                 Csv(o.Instance.ContactName), Csv(o.Instance.ContactEmail), Csv(o.Instance.Role.ToString()), Csv(o.Instance.Environment.ToString()),
-                Csv(o.LastBackupUtc?.ToString("O") ?? ""), Csv(ageHours), Csv(o.Health.ToString())
+                Csv(o.LastBackupUtc?.ToString("O") ?? ""), Csv(ageHours), Csv(o.Health.ToString()), Csv(restoreTested ? "Yes" : "No")
             }));
         }
 

@@ -1,6 +1,7 @@
 using DBTracker.Infrastructure;
 using DBTracker.Infrastructure.Identity;
 using DBTracker.Infrastructure.Queries;
+using DBTracker.Infrastructure.Scanning;
 using DBTracker.Web.Components;
 using DBTracker.Web.Components.Account;
 using Microsoft.AspNetCore.Components.Authorization;
@@ -27,6 +28,8 @@ builder.Services.AddDbContext<DBTrackerDbContext>(options =>
 
 builder.Services.AddScoped<InstanceOverviewService>();
 builder.Services.AddScoped<DBTracker.Web.Services.ToastService>();
+builder.Services.AddScoped<BackupFileScanner>();
+builder.Services.AddHostedService<BackupScanHostedService>();
 
 builder.Services.AddCascadingAuthenticationState();
 builder.Services.AddScoped<IdentityRedirectManager>();

@@ -132,6 +132,9 @@ ipch/
 # TFS 2012 Local Workspace
 $tf/
 
+# Claude Code session state
+.claude/
+
 # *.e2e above (Visual Studio Trace Files) matches our tests/DBTracker.E2E/ folder name
 # case-insensitively on Windows — un-ignore it.
 !tests/DBTracker.E2E/

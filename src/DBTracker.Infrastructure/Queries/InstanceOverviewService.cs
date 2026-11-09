@@ -11,6 +11,7 @@ public class InstanceOverviewService(DBTrackerDbContext db)
             .AsNoTracking()
             .Where(i => includeArchived || !i.IsArchived)
             .Include(i => i.BackupRecords)
+            .Include(i => i.RestoreEvents)
             .AsSplitQuery()
             .ToListAsync();
 
@@ -37,6 +38,7 @@ public class InstanceOverviewService(DBTrackerDbContext db)
         var instance = await db.DatabaseInstances
             .AsNoTracking()
             .Include(i => i.BackupRecords)
+            .Include(i => i.RestoreEvents)
             .AsSplitQuery()
             .FirstOrDefaultAsync(i => i.Id == id);
 
