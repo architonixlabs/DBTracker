@@ -1,0 +1,219 @@
+@page "/instances/{Id:int}/certificates"
+@attribute [Authorize]
+@using DBTracker.Core.Entities
+@using DBTracker.Core.Enums
+@using DBTracker.Core.Services
+@using DBTracker.Infrastructure.Identity
+@using DBTracker.Infrastructure.Queries
+@using DBTracker.Infrastructure.Recovery
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.JSInterop
+@inject InstanceOverviewService OverviewService
+@inject CertificateDependencyService Certificates
+@inject AuthenticationStateProvider AuthProvider
+@inject DBTracker.Web.Services.ToastService Toasts
+@inject IJSRuntime JS
+
+<PageTitle>@(_instance?.Name ?? "Instance") certificates · DBTracker</PageTitle>
+
+@if (!_loaded)
+{
+    <div class="spinner-ring"></div>
+}
+else if (_instance is null)
+{
+    <div class="dbt-card" style="max-width:600px;">
+        <div class="empty-state py-4"><i class="bi bi-question-diamond"></i> Instance #@Id doesn't exist.</div>
+        <a class="btn btn-outline-secondary" href="/instances">Back to instances</a>
+    </div>
+}
+else
+{
+    <div class="app-topbar">
+        <div>
+            <div class="eyebrow">Certificate and recovery-key dependency reminders</div>
+            <h1>@_instance.Name</h1>
+            <div class="subtitle">
+                @_instance.Engine · <a href="/instances/@Id">Back to instance detail</a> ·
+                Secret-store references only — never a password or private-key value, here or in the CSV export below.
+            </div>
+        </div>
+        <div class="d-flex gap-2">
+            <button class="btn btn-outline-secondary" @onclick="ExportCsv" data-testid="export-certificates-csv">
+                <i class="bi bi-download"></i> Export CSV
+            </button>
+        </div>
+    </div>
+
+    @if (_rows.Count > 0)
+    {
+        <div class="table-responsive mb-3" role="region" aria-label="Certificate dependencies">
+            <table class="table table-sm dbt-table mb-0" data-testid="certificate-table">
+                <thead><tr><th>Kind</th><th>Label</th><th>Expires</th><th>Expiry status</th><th>Rotation status</th><th>Verified access</th><th></th></tr></thead>
+                <tbody>
+                    @foreach (var row in _rows)
+                    {
+                        <tr data-testid="certificate-row">
+                            <td class="small">@row.Certificate.Kind</td>
+                            <td class="small">@row.Certificate.Label</td>
+                            <td class="small">@(row.Certificate.ExpiresAtUtc?.ToString("MMM d, yyyy") ?? "unknown")</td>
+                            <td class="small" data-testid="certificate-expiry-status">
+                                <span class="badge-health dot @ExpiryCssClass(row.ExpiryStatus)">@row.ExpiryStatus</span>
+                            </td>
+                            <td class="small" data-testid="certificate-rotation-status">
+                                <span class="badge-health dot @RotationCssClass(row.RotationStatus)">@row.RotationStatus</span>
+                            </td>
+                            <td class="small">
+                                @(row.Certificate.VerifiedBackupRestoreAccess ? "Yes" : "No")
+                                @(row.Certificate.LastAccessCheckAtUtc is { } checked_ ? $"({checked_:MMM d})" : "")
+                            </td>
+                            <td class="small">
+                                <AuthorizeView Roles="@Roles.CanEditPolicy">
+                                    <button class="btn btn-link btn-sm p-0" @onclick="() => ToggleVerifiedAccess(row.Certificate)">
+                                        @(row.Certificate.VerifiedBackupRestoreAccess ? "Clear verified access" : "Mark verified access")
+                                    </button>
+                                </AuthorizeView>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+    else
+    {
+        <div class="empty-state py-3"><i class="bi bi-shield-lock"></i> No certificate/recovery-key dependencies recorded yet.</div>
+    }
+
+    <AuthorizeView Roles="@Roles.CanEditPolicy">
+        <div class="dbt-card">
+            <h2 class="h6 text-muted text-uppercase mb-3">Record a certificate/recovery-key dependency</h2>
+            <div class="row g-2 mb-2">
+                <div class="col-md-3">
+                    <select class="form-select form-select-sm" @bind="_kind">
+                        @foreach (var k in Enum.GetValues<CertificateKind>())
+                        {
+                            <option value="@k">@k</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-md-3"><input class="form-control form-control-sm" placeholder="Label" @bind="_label" @bind:event="oninput" /></div>
+                <div class="col-md-3">
+                    <input type="date" class="form-control form-control-sm" @bind="_expiresAt" title="Expires" />
+                </div>
+                <div class="col-md-3"><input class="form-control form-control-sm" placeholder="Secret-store reference (never the secret itself)" @bind="_secretStoreReference" @bind:event="oninput" /></div>
+            </div>
+            <div class="row g-2 mb-2">
+                <div class="col-md-3"><input type="number" class="form-control form-control-sm" placeholder="Rotation interval (days)" @bind="_rotationIntervalDays" /></div>
+                <div class="col-md-5"><input class="form-control form-control-sm" placeholder="Affected replicas/clients" @bind="_affectedReplicas" @bind:event="oninput" /></div>
+                <div class="col-md-4"><input class="form-control form-control-sm" placeholder="Owner name" @bind="_ownerName" @bind:event="oninput" /></div>
+            </div>
+            <button class="btn btn-primary btn-sm" @onclick="AddCertificate" disabled="@string.IsNullOrWhiteSpace(_label)" data-testid="add-certificate">Record dependency</button>
+        </div>
+    </AuthorizeView>
+}
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    private DatabaseInstance? _instance;
+    private bool _loaded;
+    private string? _userName;
+    private List<CertificateRow> _rows = new();
+
+    private CertificateKind _kind = CertificateKind.Tls;
+    private string _label = "", _secretStoreReference = "", _affectedReplicas = "", _ownerName = "";
+    private DateTime? _expiresAt;
+    private int? _rotationIntervalDays;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var state = await AuthProvider.GetAuthenticationStateAsync();
+        _userName = state.User.Identity?.Name ?? "unknown";
+        await Load();
+        _loaded = true;
+    }
+
+    private async Task Load()
+    {
+        var overview = await OverviewService.GetByIdAsync(Id);
+        _instance = overview?.Instance;
+        if (_instance is null)
+        {
+            return;
+        }
+
+        _rows = await Certificates.ListForInstanceAsync(Id);
+    }
+
+    private async Task AddCertificate()
+    {
+        await Certificates.AddAsync(new CertificateDependency
+        {
+            DatabaseInstanceId = Id,
+            Kind = _kind,
+            Label = _label,
+            ExpiresAtUtc = _expiresAt,
+            SecretStoreReference = _secretStoreReference,
+            RotationIntervalDays = _rotationIntervalDays,
+            AffectedReplicasOrClientsText = _affectedReplicas,
+            OwnerName = _ownerName
+        }, _userName ?? "unknown");
+
+        Toasts.Success($"Certificate dependency \"{_label}\" recorded.");
+        _label = _secretStoreReference = _affectedReplicas = _ownerName = "";
+        _expiresAt = null;
+        _rotationIntervalDays = null;
+        await Load();
+    }
+
+    private async Task ToggleVerifiedAccess(CertificateDependency cert)
+    {
+        await Certificates.SetVerifiedAccessAsync(cert.Id, !cert.VerifiedBackupRestoreAccess, _userName ?? "unknown");
+        Toasts.Success("Verified-access flag updated.");
+        await Load();
+    }
+
+    private static string Csv(string value) =>
+        value.Contains(',') || value.Contains('"') || value.Contains('\n')
+            ? "\"" + value.Replace("\"", "\"\"") + "\""
+            : value;
+
+    private async Task ExportCsv()
+    {
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("Kind,Label,ExpiresAtUtc,ExpiryStatus,RotationStatus,SecretStoreReference,VerifiedBackupRestoreAccess,Owner");
+        foreach (var row in _rows)
+        {
+            // SecretLeakGuard screens every free-text field a second time at export — belt and
+            // suspenders, since AddAsync already redacts on the way into the database.
+            var reference = SecretLeakGuard.Redact(row.Certificate.SecretStoreReference);
+            sb.AppendLine(string.Join(",",
+                Csv(row.Certificate.Kind.ToString()),
+                Csv(row.Certificate.Label),
+                Csv(row.Certificate.ExpiresAtUtc?.ToString("O") ?? ""),
+                Csv(row.ExpiryStatus.ToString()),
+                Csv(row.RotationStatus.ToString()),
+                Csv(reference),
+                Csv(row.Certificate.VerifiedBackupRestoreAccess ? "Yes" : "No"),
+                Csv(row.Certificate.OwnerName)));
+        }
+
+        await JS.InvokeVoidAsync("dbtracker.downloadCsv", $"dbtracker-certificates-{_instance!.Name}-{DateTime.UtcNow:yyyyMMdd-HHmm}.csv", sb.ToString());
+    }
+
+    private static string ExpiryCssClass(CertificateExpiryStatus status) => status switch
+    {
+        CertificateExpiryStatus.Ok => "OnTrack",
+        CertificateExpiryStatus.Expired => "Failed",
+        CertificateExpiryStatus.ExpiringSoon => "Overdue",
+        _ => "Overdue"
+    };
+
+    private static string RotationCssClass(KeyRotationStatus status) => status switch
+    {
+        KeyRotationStatus.Current => "OnTrack",
+        KeyRotationStatus.Overdue => "Overdue",
+        _ => "Overdue"
+    };
+}

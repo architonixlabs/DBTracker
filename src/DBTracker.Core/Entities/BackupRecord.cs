@@ -35,5 +35,14 @@ public class BackupRecord
 
     public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
 
+    /// <summary>
+    /// Which backup-chain member (D16) this record actually satisfies, when it's something
+    /// BackupType alone can't express (WAL archive, binlog, a separate archival copy). Null means
+    /// "map from Type" (Full→Base, Differential→Differential, TransactionLog→TransactionLog) —
+    /// BackupChainCoverageCalculator applies that fallback itself, so existing/legacy records never
+    /// need backfilling for chain coverage to work.
+    /// </summary>
+    public ChainMemberType? ChainRole { get; set; }
+
     public ICollection<BackupRecordCorrection> Corrections { get; set; } = new List<BackupRecordCorrection>();
 }

@@ -746,6 +746,64 @@ authenticated role already, same as the rest of the app, so no separate "my apps
   accrues, creating then revoking/renewing a readiness exception, and the lifecycle workspace's
   filtered/denominator-labelled/exported view. Full suite: 537/537 (457 unit + 80 E2E). This completes
   Epic 20 (D11-D15) in full; Epics 21-22 (D16-D22) remain proposed and unimplemented.
+- 2026-11-10 — Built Epic 21 (D16-D20), the fourth epic of the DBA lifecycle roadmap. **D16** — a new
+  `RecoveryObjective` (business RPO/RTO targets, plus lightweight encryption-key/offsite-copy
+  reference notes — full tracking stays in D20/D17) and `BackupChainRequirement` rows (only the chain
+  members an engine's topology actually requires — Base/Differential/TransactionLog/WalArchive/
+  Binlog/Archival; recording none at all is what keeps coverage honestly Unknown instead of forcing a
+  chain concept onto an engine that doesn't use one) feed pure `BackupChainCoverageCalculator`, which
+  computes a recoverable point only up to a satisfied Base — a fresh log/WAL/binlog record is never,
+  by itself, treated as proof of a valid base or end-to-end recoverability, however recent it is;
+  measured restore duration is read straight from the existing U11/U12 `RestoreEvent` rather than
+  re-entered. **D17** — `BackupCopyLocation` tracks primary/offsite/immutable-flagged storage
+  locations with `FirstDiscoveredAtUtc` (historical, U01-style) kept explicitly separate from
+  `VerificationStatus`/`LastVerifiedAtUtc` (current-state); pure `BackupCopyAvailabilityEvaluator`
+  treats a merely-discovered-once, never-or-stale-verified copy as not currently available, and pure
+  `RetentionCoverageComparer` only counts currently-accessible copies toward a `RetentionPolicyDays`
+  policy (reusing U21's policy pattern). Raw storage paths are masked by role
+  (`BackupCopyLocationMasker`) at the one read path every view and export shares, so a non-Admin/DBA
+  role never sees the real path either way. **D18** — generically-named `MaintenanceEvidenceRecord`
+  (never "DBCC result" — covers every engine) records integrity checks, replication/failover drills
+  and required maintenance jobs with node/deployment (optionally reusing D07's `InstanceDependency`),
+  tool/version, schedule, source (manual or a reviewed external monitoring/ticket link, which requires
+  a reference), and outcome; pure `MaintenanceEvidenceStalenessClassifier` flags Missing/Failed/Stale
+  distinctly from `BackupHealth` — nothing in this table is ever read by backup-health computation or
+  vice versa, and a Passed result with no recorded schedule stays Unknown rather than being assumed
+  current. **D19** — `CapacityMeasurement` (growth/free-space/workload/performance-baseline, each
+  with source/unit/measurement-period) backs `MigrationCapacityEstimate` (assumptions required) and
+  `WorkloadComparison` (optional links to a D10 campaign); pure `CapacityForecastBuilder` always
+  returns its stated assumptions and missing-data gaps and projects an earliest/latest *plausible
+  range* from the fastest/slowest observed growth intervals rather than ever asserting one precise
+  exhaustion date. **D20** — `CertificateDependency` records TLS/recovery-key certificate expiry,
+  ownership, a secret-store *reference* (Vault path, key name — never the secret), and a
+  verified-backup/restore-access flag with its own last-check time; pure `CertificateExpiryEvaluator`
+  and `KeyRotationEvaluator` are two entirely separate classifications — a certificate can be Ok on
+  expiry while Overdue on rotation, or vice versa, by design. `CertificateDependencyService` screens
+  every free-text field through a new `SecretLeakGuard` (PEM/private-key markers and
+  `password=`/`secret=`-style assignments) before it's ever saved, and the Certificates page's CSV
+  export re-screens the same way at export time — belt and suspenders, since no field on the entity
+  is meant to hold a secret in the first place. A new disabled-in-Testing
+  `CertificateExpiryCheckHostedService` reuses D03's `SupportRunwayNoticeEvaluator` threshold/dedupe
+  logic (rather than a parallel implementation) to raise one deduplicated notice per crossed
+  365/180/90/30-day threshold through the existing U07 subscription/notification plumbing. Three new
+  per-instance pages — Recovery (D16-D17), Assurance (D18-D19) and Certificates (D20) — are linked
+  from the instance detail page alongside the existing Lifecycle/Migration links. One new EF migration
+  (`AddDbaRecoveryEpic21`) for the eight new tables plus `BackupRecord.ChainRole`; continuing the
+  `NoAction`-on-shared-parent-table pattern from Epics 18-20, `MaintenanceEvidenceRecord.
+  RelatedDependencyId`, `MigrationCapacityEstimate`'s `DatabaseInstanceId`/`PathAssessmentId`, and
+  `WorkloadComparison`'s `DatabaseInstanceId`/`PreMeasurementId`/`PostMeasurementId` all use `NoAction`
+  since `DatabaseInstance` already cascades to `InstanceDependency`/`PathAssessment`/
+  `CapacityMeasurement` directly. 56 new unit tests (`BackupChainCoverageCalculatorTests`,
+  `BackupCopyAvailabilityEvaluatorTests`, `RetentionCoverageComparerTests`,
+  `BackupCopyLocationMaskerTests`, `MaintenanceEvidenceStalenessClassifierTests`,
+  `CapacityForecastBuilderTests`, `CertificateExpiryEvaluatorTests`, `KeyRotationEvaluatorTests`,
+  `SecretLeakGuardTests`) and 5 new E2E tests (`Epic21RecoveryAssuranceTests`) covering a missing
+  chain member keeping coverage Incomplete rather than falsely green, a copy location moving between
+  Accessible/CannotVerify, an integrity-check failure shown distinct from an unchanged backup-health
+  badge, a capacity measurement whose forecast still states its assumptions/gaps with only one data
+  point, and a certificate-expiry reminder plus a CSV export proving a planted secret-looking value
+  never survives past redaction. Full suite: 598/598 (513 unit + 85 E2E). This completes Epic 21
+  (D16-D20) in full; Epic 22 (D21-D22) remains proposed and unimplemented.
 
 ## Out of scope (future)
 - Automated backup execution/orchestration (this tracks status, doesn't run backups)
@@ -1150,7 +1208,7 @@ A newer release alone does not make migration required. No automatic upgrade exe
 
 ### Epic 21 - DBA recovery and operational assurance
 
-- [ ] **2026-11-10 | D16 | NEW | P1 | L - Recovery objectives and backup-chain coverage.**
+- [x] **2026-11-10 | D16 | NEW | P1 | L - Recovery objectives and backup-chain coverage.**
   DBA/SRE/service-owner personas need to know achievable data loss and recovery time.
   **Acceptance:** record business RPO/RTO, engine-specific backup-type cadence and required base/log/
   WAL/binlog/archival dependencies where applicable. Track recoverable point/window from sufficient
@@ -1159,7 +1217,7 @@ A newer release alone does not make migration required. No automatic upgrade exe
   offsite-copy dependencies. Extends U01/U04/U11/U12/U21 with chain-level semantics; no automatic restore
   execution or RPO compliance claim from timestamps alone.
 
-- [ ] **2026-11-10 | D17 | NEW | P2 | M - Backup-copy availability and retention evidence.**
+- [x] **2026-11-10 | D17 | NEW | P2 | M - Backup-copy availability and retention evidence.**
   DBA/security/auditor personas need evidence that required recovery copies still exist.
   **Acceptance:** track storage/copy locations, offsite/immutable/encryption expectations, observed
   presence and last verification with accessible/cannot verify/missing distinctions. Compare retained
@@ -1167,7 +1225,7 @@ A newer release alone does not make migration required. No automatic upgrade exe
   availability or proof of immutability. Surface gaps and stale checks; mask sensitive paths by role.
   Reuse U01 evidence/U21 policies. No automatic backup deletion or storage-provider reconfiguration.
 
-- [ ] **2026-11-10 | D18 | NEW | P2 | M - Integrity, HA and maintenance-job evidence.**
+- [x] **2026-11-10 | D18 | NEW | P2 | M - Integrity, HA and maintenance-job evidence.**
   DBA/SRE personas need to track assurance beyond whether a port accepts a connection.
   **Acceptance:** record/import integrity-check, replication/failover-drill and required maintenance-job
   results with node/deployment, tool/version, schedule, run time, source and outcomes. Flag missing,
@@ -1175,7 +1233,7 @@ A newer release alone does not make migration required. No automatic upgrade exe
   links first; distinguish a recorded result from continuously measured HA health. Depends on D07
   and U19; does not run repairs, index rebuilds, failovers or arbitrary SQL jobs.
 
-- [ ] **2026-11-10 | D19 | NEW | P3 | M - Capacity and performance planning evidence.**
+- [x] **2026-11-10 | D19 | NEW | P3 | M - Capacity and performance planning evidence.**
   DBA/platform/service-owner personas need migration headroom and regression awareness.
   **Acceptance:** import/reference timestamped database/storage growth, free space, workload and
   performance baselines with source, units, measurement period and freshness. Record migration space
@@ -1183,7 +1241,7 @@ A newer release alone does not make migration required. No automatic upgrade exe
   data rather than promising a precise exhaustion date. Link actions to a campaign. Integrate existing
   monitoring instead of adding a continuous query profiler or automatic tuning. Supports D09/D11/D13.
 
-- [ ] **2026-11-10 | D20 | NEW | P2 | M - Certificate and recovery-key dependency reminders.**
+- [x] **2026-11-10 | D20 | NEW | P2 | M - Certificate and recovery-key dependency reminders.**
   DBA/security/platform personas need to avoid outages and unusable encrypted backups.
   **Acceptance:** record certificate expiry, ownership and secret-store references for TLS and
   recovery-key/certificate dependencies as applicable; show verified backup/restore access and last

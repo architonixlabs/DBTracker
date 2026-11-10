@@ -96,6 +96,17 @@ builder.Services.AddScoped<ReadinessExceptionService>();
 builder.Services.AddHostedService<ReadinessExceptionExpiryCheckHostedService>();
 builder.Services.AddScoped<DBTracker.Infrastructure.Lifecycle.LifecycleWorkspaceService>();
 
+// Epic 21 (D16-D20): recovery objectives/backup-chain coverage, backup-copy availability and
+// retention evidence, integrity/HA/maintenance-job evidence, capacity/performance planning
+// evidence, and certificate/recovery-key dependency reminders. Record-keeping/evidence only — no
+// automatic restore execution, backup deletion, repairs, failovers or SQL jobs anywhere in here.
+builder.Services.AddScoped<DBTracker.Infrastructure.Recovery.RecoveryObjectiveService>();
+builder.Services.AddScoped<DBTracker.Infrastructure.Recovery.BackupCopyLocationService>();
+builder.Services.AddScoped<DBTracker.Infrastructure.Recovery.MaintenanceEvidenceService>();
+builder.Services.AddScoped<DBTracker.Infrastructure.Recovery.CapacityPlanningService>();
+builder.Services.AddScoped<DBTracker.Infrastructure.Recovery.CertificateDependencyService>();
+builder.Services.AddHostedService<DBTracker.Infrastructure.Recovery.CertificateExpiryCheckHostedService>();
+
 // Process-lifetime record of each background worker's last/next run (U15 setup/diagnostics page).
 builder.Services.AddSingleton<WorkerHeartbeatStore>();
 builder.Services.AddScoped<SetupDiagnosticsService>();

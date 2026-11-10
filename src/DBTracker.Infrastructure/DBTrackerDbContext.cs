@@ -66,6 +66,18 @@ public class DBTrackerDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<ChangeValidationSignoff> ChangeValidationSignoffs => Set<ChangeValidationSignoff>();
     public DbSet<ReadinessException> ReadinessExceptions => Set<ReadinessException>();
 
+    // Epic 21 (D16-D20): recovery objectives/backup-chain coverage, backup-copy availability and
+    // retention evidence, integrity/HA/maintenance-job evidence, capacity and performance planning
+    // evidence, and certificate/recovery-key dependency reminders.
+    public DbSet<RecoveryObjective> RecoveryObjectives => Set<RecoveryObjective>();
+    public DbSet<BackupChainRequirement> BackupChainRequirements => Set<BackupChainRequirement>();
+    public DbSet<BackupCopyLocation> BackupCopyLocations => Set<BackupCopyLocation>();
+    public DbSet<MaintenanceEvidenceRecord> MaintenanceEvidenceRecords => Set<MaintenanceEvidenceRecord>();
+    public DbSet<CapacityMeasurement> CapacityMeasurements => Set<CapacityMeasurement>();
+    public DbSet<MigrationCapacityEstimate> MigrationCapacityEstimates => Set<MigrationCapacityEstimate>();
+    public DbSet<WorkloadComparison> WorkloadComparisons => Set<WorkloadComparison>();
+    public DbSet<CertificateDependency> CertificateDependencies => Set<CertificateDependency>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -1005,6 +1017,182 @@ public class DBTrackerDbContext : IdentityDbContext<ApplicationUser>
 
             entity.HasIndex(e => new { e.TargetType, e.TargetId });
             entity.HasIndex(e => e.Status);
+            entity.HasIndex(e => e.ExpiresAtUtc);
+        });
+
+        // Epic 21 (D16-D20). BackupRecord.ChainRole (D16) needs no special mapping — a plain
+        // nullable enum column, same as every other nullable enum elsewhere in this schema.
+        modelBuilder.Entity<RecoveryObjective>(entity =>
+        {
+            entity.Property(e => e.EncryptionKeyReferenceNote).HasMaxLength(500);
+            entity.Property(e => e.OffsiteCopyReferenceNote).HasMaxLength(500);
+            entity.Property(e => e.Notes).HasMaxLength(2000);
+            entity.Property(e => e.UpdatedBy).HasMaxLength(320);
+
+            entity.HasOne(e => e.DatabaseInstance)
+                .WithMany()
+                .HasForeignKey(e => e.DatabaseInstanceId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(e => e.DatabaseInstanceId).IsUnique();
+        });
+
+        modelBuilder.Entity<BackupChainRequirement>(entity =>
+        {
+            entity.Property(e => e.Notes).HasMaxLength(1000);
+            entity.Property(e => e.CreatedBy).HasMaxLength(320);
+
+            entity.HasOne(e => e.DatabaseInstance)
+                .WithMany()
+                .HasForeignKey(e => e.DatabaseInstanceId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(e => new { e.DatabaseInstanceId, e.MemberType }).IsUnique();
+        });
+
+        modelBuilder.Entity<BackupCopyLocation>(entity =>
+        {
+            entity.Property(e => e.Label).HasMaxLength(200);
+            entity.Property(e => e.StoragePathOrReference).HasMaxLength(1000);
+            entity.Property(e => e.LastVerifiedBy).HasMaxLength(320);
+            entity.Property(e => e.VerificationNotes).HasMaxLength(1000);
+            entity.Property(e => e.LegalHoldReference).HasMaxLength(300);
+            entity.Property(e => e.Notes).HasMaxLength(2000);
+            entity.Property(e => e.UpdatedBy).HasMaxLength(320);
+
+            entity.HasOne(e => e.DatabaseInstance)
+                .WithMany()
+                .HasForeignKey(e => e.DatabaseInstanceId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(e => new { e.DatabaseInstanceId, e.VerificationStatus });
+        });
+
+        modelBuilder.Entity<MaintenanceEvidenceRecord>(entity =>
+        {
+            entity.Property(e => e.NodeOrDeploymentLabel).HasMaxLength(200);
+            entity.Property(e => e.ToolName).HasMaxLength(200);
+            entity.Property(e => e.ToolVersion).HasMaxLength(100);
+            entity.Property(e => e.ScheduleDescription).HasMaxLength(300);
+            entity.Property(e => e.SourceReference).HasMaxLength(500);
+            entity.Property(e => e.Notes).HasMaxLength(2000);
+            entity.Property(e => e.RecordedBy).HasMaxLength(320);
+
+            // NoAction on both: DatabaseInstance already cascades to this table directly and, via
+            // RelatedDependencyId, this FK also reaches InstanceDependency — which DatabaseInstance
+            // already cascades to directly too. Same "second cascade path" shape already resolved
+            // this way for RehearsalRecord/ChangeValidation's DatabaseInstanceId + PathAssessmentId.
+            entity.HasOne(e => e.DatabaseInstance)
+                .WithMany()
+                .HasForeignKey(e => e.DatabaseInstanceId)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            entity.HasOne(e => e.RelatedDependency)
+                .WithMany()
+                .HasForeignKey(e => e.RelatedDependencyId)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            entity.HasIndex(e => new { e.DatabaseInstanceId, e.CheckType, e.RanAtUtc });
+        });
+
+        modelBuilder.Entity<CapacityMeasurement>(entity =>
+        {
+            entity.Property(e => e.Unit).HasMaxLength(50);
+            entity.Property(e => e.MeasurementPeriodDescription).HasMaxLength(300);
+            entity.Property(e => e.Source).HasMaxLength(300);
+            entity.Property(e => e.Notes).HasMaxLength(1000);
+            entity.Property(e => e.RecordedBy).HasMaxLength(320);
+
+            entity.HasOne(e => e.DatabaseInstance)
+                .WithMany()
+                .HasForeignKey(e => e.DatabaseInstanceId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(e => new { e.DatabaseInstanceId, e.MeasurementType, e.MeasuredAtUtc });
+        });
+
+        modelBuilder.Entity<MigrationCapacityEstimate>(entity =>
+        {
+            entity.Property(e => e.AssumptionsText).HasMaxLength(2000);
+            entity.Property(e => e.MissingDataNotes).HasMaxLength(1000);
+            entity.Property(e => e.EstimatedBy).HasMaxLength(320);
+
+            // NoAction on both: same "second cascade path via PathAssessment" shape as
+            // RehearsalRecord/ChangeValidation/ReadinessChecklist above.
+            entity.HasOne(e => e.DatabaseInstance)
+                .WithMany()
+                .HasForeignKey(e => e.DatabaseInstanceId)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            entity.HasOne(e => e.PathAssessment)
+                .WithMany()
+                .HasForeignKey(e => e.PathAssessmentId)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            entity.HasOne(e => e.MigrationCampaign)
+                .WithMany()
+                .HasForeignKey(e => e.MigrationCampaignId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(e => e.DatabaseInstanceId);
+            entity.HasIndex(e => e.MigrationCampaignId);
+        });
+
+        modelBuilder.Entity<WorkloadComparison>(entity =>
+        {
+            entity.Property(e => e.ComparisonNotes).HasMaxLength(2000);
+            entity.Property(e => e.RecordedBy).HasMaxLength(320);
+
+            // NoAction on all three: DatabaseInstance already cascades to CapacityMeasurement
+            // directly, so Pre/PostMeasurementId reaching the same table via WorkloadComparison is a
+            // second cascade path — same shape as RestoreEvent.LinkedBackupRecordId. DatabaseInstanceId
+            // is also NoAction for the same belt-and-suspenders reason used for RehearsalRecord/
+            // ChangeValidation above.
+            entity.HasOne(e => e.DatabaseInstance)
+                .WithMany()
+                .HasForeignKey(e => e.DatabaseInstanceId)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            entity.HasOne(e => e.PreMeasurement)
+                .WithMany()
+                .HasForeignKey(e => e.PreMeasurementId)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            entity.HasOne(e => e.PostMeasurement)
+                .WithMany()
+                .HasForeignKey(e => e.PostMeasurementId)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            entity.HasOne(e => e.MigrationCampaign)
+                .WithMany()
+                .HasForeignKey(e => e.MigrationCampaignId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(e => e.DatabaseInstanceId);
+        });
+
+        modelBuilder.Entity<CertificateDependency>(entity =>
+        {
+            entity.Property(e => e.Label).HasMaxLength(200);
+            entity.Property(e => e.OwnerName).HasMaxLength(320);
+            entity.Property(e => e.SecretStoreReference).HasMaxLength(500);
+            entity.Property(e => e.LastAccessCheckBy).HasMaxLength(320);
+            entity.Property(e => e.AffectedReplicasOrClientsText).HasMaxLength(2000);
+            entity.Property(e => e.RenewalEvidenceText).HasMaxLength(2000);
+            entity.Property(e => e.Notes).HasMaxLength(2000);
+            entity.Property(e => e.UpdatedBy).HasMaxLength(320);
+
+            entity.HasOne(e => e.DatabaseInstance)
+                .WithMany()
+                .HasForeignKey(e => e.DatabaseInstanceId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(e => e.OwnerTeam)
+                .WithMany()
+                .HasForeignKey(e => e.OwnerTeamId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasIndex(e => new { e.DatabaseInstanceId, e.Kind });
             entity.HasIndex(e => e.ExpiresAtUtc);
         });
     }

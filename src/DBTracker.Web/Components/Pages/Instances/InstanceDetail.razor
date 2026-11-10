@@ -64,6 +64,15 @@ else
             <a class="btn btn-outline-secondary" href="/instances/@Id/migration" title="Technical dependencies, source-to-target path assessment and upgrade-readiness checklist (D07-D09)">
                 <i class="bi bi-diagram-2"></i> Migration
             </a>
+            <a class="btn btn-outline-secondary" href="/instances/@Id/recovery" title="Recovery objectives, backup-chain coverage and backup-copy availability/retention evidence (D16-D17)">
+                <i class="bi bi-shield-check"></i> Recovery
+            </a>
+            <a class="btn btn-outline-secondary" href="/instances/@Id/assurance" title="Integrity/HA/maintenance-job evidence and capacity/performance planning evidence (D18-D19)">
+                <i class="bi bi-clipboard2-pulse"></i> Assurance
+            </a>
+            <a class="btn btn-outline-secondary" href="/instances/@Id/certificates" title="Certificate and recovery-key dependency reminders (D20)">
+                <i class="bi bi-key"></i> Certificates
+            </a>
             <button class="btn btn-outline-secondary" @onclick="TestConnection" disabled="@(_testingConnection || !CanCheckConnectivity(instance))" title="@(CanCheckConnectivity(instance) ? "" : "No host/IP or override configured")">
                 <i class="bi bi-ethernet"></i> @(_testingConnection ? "Testing…" : "Test connection")
             </button>

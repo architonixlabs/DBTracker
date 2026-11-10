@@ -1,0 +1,349 @@
+@page "/instances/{Id:int}/recovery"
+@attribute [Authorize]
+@using DBTracker.Core.Entities
+@using DBTracker.Core.Enums
+@using DBTracker.Core.Services
+@using DBTracker.Infrastructure.Identity
+@using DBTracker.Infrastructure.Queries
+@using DBTracker.Infrastructure.Recovery
+@using Microsoft.AspNetCore.Components.Authorization
+@inject InstanceOverviewService OverviewService
+@inject RecoveryObjectiveService Recovery
+@inject BackupCopyLocationService Copies
+@inject AuthenticationStateProvider AuthProvider
+@inject DBTracker.Web.Services.ToastService Toasts
+
+<PageTitle>@(_instance?.Name ?? "Instance") recovery evidence · DBTracker</PageTitle>
+
+@if (!_loaded)
+{
+    <div class="spinner-ring"></div>
+}
+else if (_instance is null)
+{
+    <div class="dbt-card" style="max-width:600px;">
+        <div class="empty-state py-4"><i class="bi bi-question-diamond"></i> Instance #@Id doesn't exist.</div>
+        <a class="btn btn-outline-secondary" href="/instances">Back to instances</a>
+    </div>
+}
+else
+{
+    <div class="app-topbar">
+        <div>
+            <div class="eyebrow">Recovery objectives and backup-copy evidence</div>
+            <h1>@_instance.Name</h1>
+            <div class="subtitle">
+                @_instance.Engine · <a href="/instances/@Id">Back to instance detail</a> ·
+                Unknown chain coverage stays Unknown — a fresh log/WAL/binlog backup never by itself proves a valid base or full recoverability.
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-3">
+        <div class="col-lg-6">
+            <div class="dbt-card h-100">
+                <h2 class="h6 text-muted text-uppercase mb-3">Recovery objectives (D16)</h2>
+                <div class="row g-2 mb-2">
+                    <div class="col-6">
+                        <label class="small text-muted">RPO target (minutes)</label>
+                        <input type="number" class="form-control form-control-sm" @bind="_rpoMinutes" disabled="@(!_canEdit)" />
+                    </div>
+                    <div class="col-6">
+                        <label class="small text-muted">RTO target (minutes)</label>
+                        <input type="number" class="form-control form-control-sm" @bind="_rtoMinutes" disabled="@(!_canEdit)" />
+                    </div>
+                </div>
+                <div class="mb-2">
+                    <label class="small text-muted">Encryption-key dependency reference (D20 has full tracking)</label>
+                    <input class="form-control form-control-sm" @bind="_encryptionNote" @bind:event="oninput" disabled="@(!_canEdit)" />
+                </div>
+                <div class="mb-2">
+                    <label class="small text-muted">Offsite-copy dependency reference (D17 has full tracking)</label>
+                    <input class="form-control form-control-sm" @bind="_offsiteNote" @bind:event="oninput" disabled="@(!_canEdit)" />
+                </div>
+                <div class="mb-2">
+                    <label class="small text-muted">Notes</label>
+                    <textarea class="form-control form-control-sm" rows="2" @bind="_objectiveNotes" @bind:event="oninput" disabled="@(!_canEdit)"></textarea>
+                </div>
+                <AuthorizeView Roles="@Roles.CanEditPolicy">
+                    <button class="btn btn-primary btn-sm" @onclick="SaveObjective" data-testid="save-recovery-objective">Save objectives</button>
+                </AuthorizeView>
+
+                @if (_recentRestores.Count > 0)
+                {
+                    <hr />
+                    <p class="small text-muted mb-1">Measured restore duration (reusing U11/U12 restore evidence, not re-entered here):</p>
+                    <ul class="small mb-0">
+                        @foreach (var r in _recentRestores.Take(3))
+                        {
+                            <li>@r.TimestampUtc.ToString("MMM d, yyyy") — @r.Outcome @(r.DurationMinutes is { } d ? $"({d:N0} min)" : "(duration not recorded)")</li>
+                        }
+                    </ul>
+                }
+            </div>
+        </div>
+
+        <div class="col-lg-6">
+            <div class="dbt-card h-100">
+                <h2 class="h6 text-muted text-uppercase mb-3">Backup-chain coverage (D16)</h2>
+
+                <div class="mb-3" data-testid="chain-coverage-status">
+                    <span class="badge-health dot @CoverageCssClass(_coverage!.Status)">@_coverage.Status</span>
+                    @if (_coverage.RecoverablePointUtc is { } point)
+                    {
+                        <span class="small text-muted ms-2">Recoverable to @point.ToString("MMM d, yyyy h:mm tt") UTC</span>
+                    }
+                    else
+                    {
+                        <span class="small text-muted ms-2">No recoverable point established from recorded evidence.</span>
+                    }
+                </div>
+
+                @if (_coverage.MissingReasons.Count > 0)
+                {
+                    <ul class="small mb-2" style="color:var(--dbt-overdue);" data-testid="chain-missing-reasons">
+                        @foreach (var reason in _coverage.MissingReasons)
+                        {
+                            <li>@reason</li>
+                        }
+                    </ul>
+                }
+
+                @if (_chainRequirements.Count > 0)
+                {
+                    <div class="table-responsive mb-3" role="region" aria-label="Chain requirements">
+                        <table class="table table-sm dbt-table mb-0" data-testid="chain-requirement-table">
+                            <thead><tr><th>Member</th><th>Required</th><th>Max age (h)</th><th></th></tr></thead>
+                            <tbody>
+                                @foreach (var req in _chainRequirements)
+                                {
+                                    <tr data-testid="chain-requirement-row">
+                                        <td class="small">@req.MemberType</td>
+                                        <td class="small">@(req.IsRequired ? "Yes" : "No")</td>
+                                        <td class="small">@(req.MaxAgeHoursOverride?.ToString() ?? "default")</td>
+                                        <td class="small">
+                                            <AuthorizeView Roles="@Roles.CanEditPolicy">
+                                                <button class="btn btn-link btn-sm p-0" @onclick="() => RemoveRequirement(req.Id)">Remove</button>
+                                            </AuthorizeView>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+                else
+                {
+                    <div class="empty-state py-2"><i class="bi bi-link"></i> No chain members recorded — coverage stays Unknown until at least one is.</div>
+                }
+
+                <AuthorizeView Roles="@Roles.CanEditPolicy">
+                    <div class="row g-2 mb-2">
+                        <div class="col-5">
+                            <select class="form-select form-select-sm" @bind="_newMemberType">
+                                @foreach (var m in Enum.GetValues<ChainMemberType>())
+                                {
+                                    <option value="@m">@m</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-4">
+                            <input type="number" class="form-control form-control-sm" placeholder="Max age (h), optional" @bind="_newMaxAgeHours" />
+                        </div>
+                        <div class="col-3">
+                            <button class="btn btn-outline-secondary btn-sm w-100" @onclick="AddRequirement" data-testid="add-chain-requirement">Add</button>
+                        </div>
+                    </div>
+                </AuthorizeView>
+            </div>
+        </div>
+
+        <div class="col-12">
+            <div class="dbt-card">
+                <h2 class="h6 text-muted text-uppercase mb-3">Backup-copy availability and retention (D17)</h2>
+                <p class="small text-muted">Historical discovery of a copy is not the same claim as current availability — only a currently accessible, non-stale verification counts toward retention coverage.</p>
+
+                <div class="mb-3" data-testid="retention-coverage-status">
+                    <span class="badge-health dot @RetentionCssClass(_retention!.Coverage.Status)">@_retention.Coverage.Status</span>
+                    <span class="small text-muted ms-2">@_retention.Coverage.Reasoning</span>
+                </div>
+
+                @if (_copies.Count > 0)
+                {
+                    <div class="table-responsive mb-3" role="region" aria-label="Backup copy locations">
+                        <table class="table table-sm dbt-table mb-0" data-testid="copy-location-table">
+                            <thead><tr><th>Label</th><th>Path/reference</th><th>Offsite</th><th>Immutable-flagged</th><th>Verification</th><th></th></tr></thead>
+                            <tbody>
+                                @foreach (var copy in _copies)
+                                {
+                                    <tr data-testid="copy-location-row">
+                                        <td class="small">@copy.Label</td>
+                                        <td class="small" data-testid="copy-path">@copy.StoragePathOrReference</td>
+                                        <td class="small">@(copy.IsOffsite ? "Yes" : "No")</td>
+                                        <td class="small">@(copy.IsImmutableFlagged ? "Yes" : "No")</td>
+                                        <td class="small" data-testid="copy-verification-status">
+                                            <span class="badge-health dot @VerificationCssClass(copy.VerificationStatus)">@copy.VerificationStatus</span>
+                                        </td>
+                                        <td class="small">
+                                            <AuthorizeView Roles="@Roles.CanEditPolicy">
+                                                <button class="btn btn-link btn-sm p-0" @onclick="() => MarkVerification(copy.Id, CopyVerificationStatus.Accessible)">Mark accessible</button>
+                                                <button class="btn btn-link btn-sm p-0" @onclick="() => MarkVerification(copy.Id, CopyVerificationStatus.CannotVerify)">Mark cannot verify</button>
+                                                <button class="btn btn-link btn-sm p-0" @onclick="() => MarkVerification(copy.Id, CopyVerificationStatus.Missing)">Mark missing</button>
+                                            </AuthorizeView>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+                else
+                {
+                    <div class="empty-state py-2"><i class="bi bi-hdd-network"></i> No copy locations recorded yet.</div>
+                }
+
+                <AuthorizeView Roles="@Roles.CanEditPolicy">
+                    <div class="row g-2 mb-2">
+                        <div class="col-md-3"><input class="form-control form-control-sm" placeholder="Label" @bind="_newCopyLabel" @bind:event="oninput" /></div>
+                        <div class="col-md-5"><input class="form-control form-control-sm" placeholder="Storage path/URL/bucket reference" @bind="_newCopyPath" @bind:event="oninput" /></div>
+                        <div class="col-md-2 form-check mt-2">
+                            <input type="checkbox" class="form-check-input" id="newCopyOffsite" @bind="_newCopyOffsite" />
+                            <label class="form-check-label small" for="newCopyOffsite">Offsite</label>
+                        </div>
+                        <div class="col-md-2 form-check mt-2">
+                            <input type="checkbox" class="form-check-input" id="newCopyImmutable" @bind="_newCopyImmutable" />
+                            <label class="form-check-label small" for="newCopyImmutable">Immutable-flagged</label>
+                        </div>
+                    </div>
+                    <button class="btn btn-outline-secondary btn-sm" @onclick="AddCopy" disabled="@string.IsNullOrWhiteSpace(_newCopyLabel)" data-testid="add-copy-location">Record copy location</button>
+                </AuthorizeView>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    private DatabaseInstance? _instance;
+    private bool _loaded;
+    private bool _canEdit;
+    private string? _userName;
+
+    private int? _rpoMinutes;
+    private int? _rtoMinutes;
+    private string _encryptionNote = "", _offsiteNote = "", _objectiveNotes = "";
+    private List<RestoreEvent> _recentRestores = new();
+
+    private List<BackupChainRequirement> _chainRequirements = new();
+    private BackupChainCoverageResult? _coverage;
+    private ChainMemberType _newMemberType = ChainMemberType.Base;
+    private int? _newMaxAgeHours;
+
+    private List<BackupCopyLocation> _copies = new();
+    private RetentionEvidenceView? _retention;
+    private string _newCopyLabel = "", _newCopyPath = "";
+    private bool _newCopyOffsite, _newCopyImmutable;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var state = await AuthProvider.GetAuthenticationStateAsync();
+        _userName = state.User.Identity?.Name ?? "unknown";
+        _canEdit = state.User.IsInRole(Roles.Admin) || state.User.IsInRole(Roles.Dba);
+        await Load();
+        _loaded = true;
+    }
+
+    private async Task Load()
+    {
+        var overview = await OverviewService.GetByIdAsync(Id);
+        _instance = overview?.Instance;
+        if (_instance is null)
+        {
+            return;
+        }
+
+        var evidence = await Recovery.GetForInstanceAsync(Id);
+        if (evidence is not null)
+        {
+            _rpoMinutes = evidence.Objective?.RpoTargetMinutes;
+            _rtoMinutes = evidence.Objective?.RtoTargetMinutes;
+            _encryptionNote = evidence.Objective?.EncryptionKeyReferenceNote ?? "";
+            _offsiteNote = evidence.Objective?.OffsiteCopyReferenceNote ?? "";
+            _objectiveNotes = evidence.Objective?.Notes ?? "";
+            _chainRequirements = evidence.ChainRequirements.ToList();
+            _coverage = evidence.Coverage;
+            _recentRestores = evidence.RecentRestores.ToList();
+        }
+
+        _retention = await Copies.GetRetentionEvidenceAsync(Id, _canEdit);
+        _copies = _retention?.Copies.ToList() ?? new();
+    }
+
+    private async Task SaveObjective()
+    {
+        await Recovery.SetObjectiveAsync(Id, _rpoMinutes, _rtoMinutes, _encryptionNote, _offsiteNote, _objectiveNotes, _userName ?? "unknown");
+        Toasts.Success("Recovery objectives saved.");
+        await Load();
+    }
+
+    private async Task AddRequirement()
+    {
+        await Recovery.AddChainRequirementAsync(Id, _newMemberType, true, _newMaxAgeHours, "", _userName ?? "unknown");
+        Toasts.Success($"{_newMemberType} added to the required backup chain.");
+        _newMaxAgeHours = null;
+        await Load();
+    }
+
+    private async Task RemoveRequirement(int requirementId)
+    {
+        await Recovery.RemoveChainRequirementAsync(requirementId, _userName ?? "unknown");
+        Toasts.Success("Chain requirement removed.");
+        await Load();
+    }
+
+    private async Task AddCopy()
+    {
+        await Copies.AddAsync(new BackupCopyLocation
+        {
+            DatabaseInstanceId = Id,
+            Label = _newCopyLabel,
+            StoragePathOrReference = _newCopyPath,
+            IsOffsite = _newCopyOffsite,
+            IsImmutableFlagged = _newCopyImmutable
+        }, _userName ?? "unknown");
+        Toasts.Success($"Copy location \"{_newCopyLabel}\" recorded.");
+        _newCopyLabel = _newCopyPath = "";
+        _newCopyOffsite = _newCopyImmutable = false;
+        await Load();
+    }
+
+    private async Task MarkVerification(int copyId, CopyVerificationStatus status)
+    {
+        await Copies.SetVerificationAsync(copyId, status, "", _userName ?? "unknown");
+        Toasts.Success($"Verification recorded: {status}.");
+        await Load();
+    }
+
+    private static string CoverageCssClass(ChainCoverageStatus status) => status switch
+    {
+        ChainCoverageStatus.Complete => "OnTrack",
+        ChainCoverageStatus.Incomplete => "Failed",
+        _ => "Overdue"
+    };
+
+    private static string RetentionCssClass(RetentionCoverageStatus status) => status switch
+    {
+        RetentionCoverageStatus.Compliant => "OnTrack",
+        RetentionCoverageStatus.Gap => "Failed",
+        _ => "Overdue"
+    };
+
+    private static string VerificationCssClass(CopyVerificationStatus status) => status switch
+    {
+        CopyVerificationStatus.Accessible => "OnTrack",
+        CopyVerificationStatus.Missing => "Failed",
+        CopyVerificationStatus.CannotVerify => "Overdue",
+        _ => "Overdue"
+    };
+}

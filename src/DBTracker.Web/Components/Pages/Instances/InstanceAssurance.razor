@@ -1,0 +1,371 @@
+@page "/instances/{Id:int}/assurance"
+@attribute [Authorize]
+@using DBTracker.Core.Entities
+@using DBTracker.Core.Enums
+@using DBTracker.Core.Services
+@using DBTracker.Infrastructure.Identity
+@using DBTracker.Infrastructure.MigrationPlanning
+@using DBTracker.Infrastructure.Queries
+@using DBTracker.Infrastructure.Recovery
+@using Microsoft.AspNetCore.Components.Authorization
+@inject InstanceOverviewService OverviewService
+@inject MaintenanceEvidenceService Maintenance
+@inject CapacityPlanningService Capacity
+@inject DependencyService Dependencies
+@inject AuthenticationStateProvider AuthProvider
+@inject DBTracker.Web.Services.ToastService Toasts
+
+<PageTitle>@(_instance?.Name ?? "Instance") operational assurance · DBTracker</PageTitle>
+
+@if (!_loaded)
+{
+    <div class="spinner-ring"></div>
+}
+else if (_instance is null)
+{
+    <div class="dbt-card" style="max-width:600px;">
+        <div class="empty-state py-4"><i class="bi bi-question-diamond"></i> Instance #@Id doesn't exist.</div>
+        <a class="btn btn-outline-secondary" href="/instances">Back to instances</a>
+    </div>
+}
+else
+{
+    <div class="app-topbar">
+        <div>
+            <div class="eyebrow">Integrity, HA, maintenance and capacity evidence</div>
+            <h1>@_instance.Name</h1>
+            <div class="subtitle">
+                @_instance.Engine · <a href="/instances/@Id">Back to instance detail</a> ·
+                Recorded results, not continuously measured HA health or an automatic repair/tuning engine — kept separate from backup health throughout.
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-3">
+        <div class="col-12">
+            <div class="dbt-card">
+                <h2 class="h6 text-muted text-uppercase mb-3">Integrity, replication/failover and maintenance-job evidence (D18)</h2>
+
+                @if (_maintenanceRows.Count > 0)
+                {
+                    <div class="table-responsive mb-3" role="region" aria-label="Maintenance evidence">
+                        <table class="table table-sm dbt-table mb-0" data-testid="maintenance-evidence-table">
+                            <thead><tr><th>Type</th><th>Node/deployment</th><th>Ran at</th><th>Outcome</th><th>Status</th><th>Source</th></tr></thead>
+                            <tbody>
+                                @foreach (var row in _maintenanceRows)
+                                {
+                                    <tr data-testid="maintenance-evidence-row">
+                                        <td class="small">@row.Record.CheckType</td>
+                                        <td class="small">@(row.Record.RelatedDependency?.Name ?? row.Record.NodeOrDeploymentLabel)</td>
+                                        <td class="small">@(row.Record.RanAtUtc?.ToString("MMM d, yyyy h:mm tt") ?? "never")</td>
+                                        <td class="small">@row.Record.Outcome</td>
+                                        <td class="small" data-testid="maintenance-evidence-status">
+                                            <span class="badge-health dot @MaintenanceCssClass(row.Status)">@row.Status</span>
+                                        </td>
+                                        <td class="small">@row.Record.Source</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+                else
+                {
+                    <div class="empty-state py-2"><i class="bi bi-shield-check"></i> No integrity/HA/maintenance evidence recorded yet — distinct from, and never inferred from, backup health.</div>
+                }
+
+                <AuthorizeView Roles="@Roles.CanEditPolicy">
+                    <div class="row g-2 mb-2">
+                        <div class="col-md-2">
+                            <select class="form-select form-select-sm" @bind="_checkType">
+                                @foreach (var t in Enum.GetValues<MaintenanceCheckType>())
+                                {
+                                    <option value="@t">@t</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <input class="form-control form-control-sm" placeholder="Node/deployment label" @bind="_nodeLabel" @bind:event="oninput" />
+                        </div>
+                        <div class="col-md-2">
+                            <input class="form-control form-control-sm" placeholder="Tool (+ version)" @bind="_toolName" @bind:event="oninput" />
+                        </div>
+                        <div class="col-md-2">
+                            <input type="number" class="form-control form-control-sm" placeholder="Expected interval (h)" @bind="_expectedIntervalHours" />
+                        </div>
+                        <div class="col-md-2">
+                            <select class="form-select form-select-sm" @bind="_outcome">
+                                @foreach (var o in Enum.GetValues<MaintenanceOutcome>())
+                                {
+                                    <option value="@o">@o</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <select class="form-select form-select-sm" @bind="_source">
+                                @foreach (var s in Enum.GetValues<MaintenanceEvidenceSource>())
+                                {
+                                    <option value="@s">@s</option>
+                                }
+                            </select>
+                        </div>
+                    </div>
+                    @if (_source != MaintenanceEvidenceSource.ManuallyEntered)
+                    {
+                        <div class="mb-2">
+                            <input class="form-control form-control-sm" placeholder="Monitoring/ticket link (required for this source)" @bind="_sourceReference" @bind:event="oninput" />
+                        </div>
+                    }
+                    <button class="btn btn-outline-secondary btn-sm" @onclick="RecordMaintenanceEvidence" data-testid="record-maintenance-evidence">Record result (now)</button>
+                    @if (!string.IsNullOrWhiteSpace(_maintenanceError))
+                    {
+                        <p class="small mt-1" style="color:var(--dbt-failed);">@_maintenanceError</p>
+                    }
+                </AuthorizeView>
+            </div>
+        </div>
+
+        <div class="col-12">
+            <div class="dbt-card">
+                <h2 class="h6 text-muted text-uppercase mb-3">Capacity and performance planning evidence (D19)</h2>
+                <p class="small text-muted">Imported/referenced timestamped measurements — not a continuous query profiler built into this app.</p>
+
+                @if (_measurements.Count > 0)
+                {
+                    <div class="table-responsive mb-3" role="region" aria-label="Capacity measurements">
+                        <table class="table table-sm dbt-table mb-0" data-testid="capacity-measurement-table">
+                            <thead><tr><th>Type</th><th>Measured at</th><th>Value</th><th>Period</th><th>Source</th></tr></thead>
+                            <tbody>
+                                @foreach (var m in _measurements)
+                                {
+                                    <tr data-testid="capacity-measurement-row">
+                                        <td class="small">@m.MeasurementType</td>
+                                        <td class="small">@m.MeasuredAtUtc.ToString("MMM d, yyyy")</td>
+                                        <td class="small">@m.Value.ToString("N1") @m.Unit</td>
+                                        <td class="small">@m.MeasurementPeriodDescription</td>
+                                        <td class="small">@m.Source</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+
+                <AuthorizeView Roles="@Roles.CanEditPolicy">
+                    <div class="row g-2 mb-2">
+                        <div class="col-md-2">
+                            <select class="form-select form-select-sm" @bind="_measurementType">
+                                @foreach (var t in Enum.GetValues<CapacityMeasurementType>())
+                                {
+                                    <option value="@t">@t</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-md-2"><input type="number" class="form-control form-control-sm" placeholder="Value" @bind="_measurementValue" /></div>
+                        <div class="col-md-2"><input class="form-control form-control-sm" placeholder="Unit (GB, IOPS, ms…)" @bind="_measurementUnit" @bind:event="oninput" /></div>
+                        <div class="col-md-3"><input class="form-control form-control-sm" placeholder="Measurement period" @bind="_measurementPeriod" @bind:event="oninput" /></div>
+                        <div class="col-md-3"><input class="form-control form-control-sm" placeholder="Source" @bind="_measurementSource" @bind:event="oninput" /></div>
+                    </div>
+                    <button class="btn btn-outline-secondary btn-sm" @onclick="AddMeasurement" data-testid="add-capacity-measurement">Record measurement</button>
+                </AuthorizeView>
+
+                <hr />
+                <p class="small mb-1"><strong>Growth forecast</strong> — a range, not a precise exhaustion date:</p>
+                <div class="row g-2 mb-2">
+                    <div class="col-md-4">
+                        <label class="small text-muted">Storage capacity limit (GB), optional</label>
+                        <input type="number" class="form-control form-control-sm" placeholder="e.g. 2000" @bind="_capacityLimitGb" data-testid="capacity-limit-input" />
+                    </div>
+                    <div class="col-md-2 d-flex align-items-end">
+                        <button class="btn btn-outline-secondary btn-sm" @onclick="Load" data-testid="recompute-forecast">Recompute forecast</button>
+                    </div>
+                </div>
+                @if (_forecast is null || !_forecast.HasSufficientData)
+                {
+                    <div class="empty-state py-2" data-testid="forecast-missing-data"><i class="bi bi-graph-up"></i> Not enough data for a projection yet.</div>
+                }
+                else
+                {
+                    <p class="small mb-1" data-testid="forecast-range">
+                        Plausible exhaustion: @(_forecast.EarliestPlausibleExhaustionUtc?.ToString("MMM d, yyyy") ?? "n/a") – @(_forecast.LatestPlausibleExhaustionUtc?.ToString("MMM d, yyyy") ?? "n/a")
+                        (@(_forecast.ProjectedGrowthPerDayGb?.ToString("N2") ?? "?") units/day observed)
+                    </p>
+                }
+                <ul class="small text-muted mb-1" data-testid="forecast-assumptions">
+                    @foreach (var a in _forecast?.Assumptions ?? [])
+                    {
+                        <li>@a</li>
+                    }
+                </ul>
+                @if (_forecast?.MissingDataGaps.Count > 0)
+                {
+                    <ul class="small mb-0" style="color:var(--dbt-overdue);" data-testid="forecast-gaps">
+                        @foreach (var g in _forecast.MissingDataGaps)
+                        {
+                            <li>@g</li>
+                        }
+                    </ul>
+                }
+
+                @if (_estimates.Count > 0)
+                {
+                    <hr />
+                    <p class="small mb-1"><strong>Migration space estimates</strong></p>
+                    @foreach (var e in _estimates)
+                    {
+                        <p class="small mb-1">@(e.EstimatedSpaceGb?.ToString("N0") ?? "?") GB — @e.AssumptionsText</p>
+                    }
+                }
+
+                <AuthorizeView Roles="@Roles.CanEditPolicy">
+                    <div class="row g-2 mb-2 mt-2">
+                        <div class="col-md-3"><input type="number" class="form-control form-control-sm" placeholder="Estimated space (GB)" @bind="_estimateSpaceGb" /></div>
+                        <div class="col-md-9"><input class="form-control form-control-sm" placeholder="Assumptions (required)" @bind="_estimateAssumptions" @bind:event="oninput" /></div>
+                    </div>
+                    <button class="btn btn-outline-secondary btn-sm" @onclick="AddEstimate" disabled="@string.IsNullOrWhiteSpace(_estimateAssumptions)">Record migration space estimate</button>
+                    @if (!string.IsNullOrWhiteSpace(_estimateError))
+                    {
+                        <p class="small mt-1" style="color:var(--dbt-failed);">@_estimateError</p>
+                    }
+                </AuthorizeView>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    private DatabaseInstance? _instance;
+    private bool _loaded;
+    private string? _userName;
+
+    private List<MaintenanceEvidenceRow> _maintenanceRows = new();
+    private MaintenanceCheckType _checkType = MaintenanceCheckType.IntegrityCheck;
+    private string _nodeLabel = "", _toolName = "", _sourceReference = "";
+    private int? _expectedIntervalHours;
+    private MaintenanceOutcome _outcome = MaintenanceOutcome.Passed;
+    private MaintenanceEvidenceSource _source = MaintenanceEvidenceSource.ManuallyEntered;
+    private string _maintenanceError = "";
+
+    private List<CapacityMeasurement> _measurements = new();
+    private List<MigrationCapacityEstimate> _estimates = new();
+    private CapacityForecastResult? _forecast;
+    private double? _capacityLimitGb;
+    private CapacityMeasurementType _measurementType = CapacityMeasurementType.Growth;
+    private double? _measurementValue;
+    private string _measurementUnit = "GB", _measurementPeriod = "", _measurementSource = "";
+    private double? _estimateSpaceGb;
+    private string _estimateAssumptions = "";
+    private string _estimateError = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        var state = await AuthProvider.GetAuthenticationStateAsync();
+        _userName = state.User.Identity?.Name ?? "unknown";
+        await Load();
+        _loaded = true;
+    }
+
+    private async Task Load()
+    {
+        var overview = await OverviewService.GetByIdAsync(Id);
+        _instance = overview?.Instance;
+        if (_instance is null)
+        {
+            return;
+        }
+
+        _maintenanceRows = await Maintenance.ListForInstanceAsync(Id);
+
+        var capacity = await Capacity.GetForInstanceAsync(Id, _capacityLimitGb);
+        if (capacity is not null)
+        {
+            _measurements = capacity.Measurements.ToList();
+            _estimates = capacity.Estimates.ToList();
+            _forecast = capacity.Forecast;
+        }
+    }
+
+    private async Task RecordMaintenanceEvidence()
+    {
+        var (ok, error) = await Maintenance.RecordAsync(new MaintenanceEvidenceRecord
+        {
+            DatabaseInstanceId = Id,
+            CheckType = _checkType,
+            NodeOrDeploymentLabel = _nodeLabel,
+            ToolName = _toolName,
+            ExpectedIntervalHours = _expectedIntervalHours,
+            RanAtUtc = DateTime.UtcNow,
+            Outcome = _outcome,
+            Source = _source,
+            SourceReference = _sourceReference
+        }, _userName ?? "unknown");
+
+        if (!ok)
+        {
+            _maintenanceError = error;
+            return;
+        }
+
+        _maintenanceError = "";
+        Toasts.Success($"{_checkType} result recorded: {_outcome}.");
+        _nodeLabel = _toolName = _sourceReference = "";
+        await Load();
+    }
+
+    private async Task AddMeasurement()
+    {
+        if (_measurementValue is null)
+        {
+            return;
+        }
+
+        await Capacity.AddMeasurementAsync(new CapacityMeasurement
+        {
+            DatabaseInstanceId = Id,
+            MeasurementType = _measurementType,
+            MeasuredAtUtc = DateTime.UtcNow,
+            Value = _measurementValue.Value,
+            Unit = _measurementUnit,
+            MeasurementPeriodDescription = _measurementPeriod,
+            Source = _measurementSource
+        }, _userName ?? "unknown");
+
+        Toasts.Success("Capacity measurement recorded.");
+        _measurementValue = null;
+        _measurementPeriod = _measurementSource = "";
+        await Load();
+    }
+
+    private async Task AddEstimate()
+    {
+        var (ok, error) = await Capacity.AddEstimateAsync(new MigrationCapacityEstimate
+        {
+            DatabaseInstanceId = Id,
+            EstimatedSpaceGb = _estimateSpaceGb,
+            AssumptionsText = _estimateAssumptions
+        }, _userName ?? "unknown");
+
+        if (!ok)
+        {
+            _estimateError = error;
+            return;
+        }
+
+        _estimateError = "";
+        Toasts.Success("Migration space estimate recorded.");
+        _estimateSpaceGb = null;
+        _estimateAssumptions = "";
+        await Load();
+    }
+
+    private static string MaintenanceCssClass(MaintenanceEvidenceStatus status) => status switch
+    {
+        MaintenanceEvidenceStatus.Current => "OnTrack",
+        MaintenanceEvidenceStatus.Failed => "Failed",
+        MaintenanceEvidenceStatus.Missing => "Failed",
+        MaintenanceEvidenceStatus.Stale => "Overdue",
+        _ => "Overdue"
+    };
+}
