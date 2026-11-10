@@ -1,0 +1,215 @@
+@page "/campaigns/{Id:int}/change-windows"
+@attribute [Authorize]
+@using DBTracker.Core.Entities
+@using DBTracker.Core.Enums
+@using DBTracker.Core.Services
+@using DBTracker.Infrastructure.ChangeManagement
+@using DBTracker.Infrastructure.Identity
+@using DBTracker.Infrastructure.MigrationPlanning
+@using DBTracker.Infrastructure.Ownership
+@using Microsoft.AspNetCore.Components.Authorization
+@inject CampaignService Campaigns
+@inject ChangeWindowService Windows
+@inject TeamService Teams
+@inject AuthenticationStateProvider AuthProvider
+@inject DBTracker.Web.Services.ToastService Toasts
+
+<PageTitle>Change windows · @(_campaign?.Name ?? "Campaign") · DBTracker</PageTitle>
+
+@if (!_loaded)
+{
+    <div class="spinner-ring"></div>
+}
+else if (_campaign is null)
+{
+    <div class="dbt-card" style="max-width:600px;">
+        <div class="empty-state py-4"><i class="bi bi-question-diamond"></i> Campaign #@Id doesn't exist.</div>
+        <a class="btn btn-outline-secondary" href="/campaigns">Back to campaigns</a>
+    </div>
+}
+else
+{
+    <div class="app-topbar">
+        <div>
+            <div class="eyebrow">Epic 20 (D12)</div>
+            <h1>Scheduled change windows</h1>
+            <div class="subtitle">
+                @_campaign.Name · <a href="/campaigns/@Id">Back to campaign</a> ·
+                Planning a window here never executes anything or sends any notification by itself.
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-3">
+        <AuthorizeView Roles="@Roles.CanEditPolicy" Context="editAuth">
+            <div class="col-lg-5">
+                <div class="dbt-card">
+                    <h2 class="h6 text-muted text-uppercase mb-3">Plan a change window</h2>
+                    <div class="mb-2"><input class="form-control form-control-sm" placeholder="Title" @bind="_title" @bind:event="oninput" /></div>
+                    <div class="row g-2 mb-2">
+                        <div class="col-6">
+                            <label class="form-label small">Planned start (UTC)</label>
+                            <input type="datetime-local" class="form-control form-control-sm" @bind="_start" />
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label small">Planned end (UTC)</label>
+                            <input type="datetime-local" class="form-control form-control-sm" @bind="_end" />
+                        </div>
+                    </div>
+                    <div class="row g-2 mb-2">
+                        <div class="col-6"><input class="form-control form-control-sm" placeholder="Timezone label (e.g. America/New_York)" @bind="_timeZoneLabel" @bind:event="oninput" /></div>
+                        <div class="col-6"><input type="number" class="form-control form-control-sm" placeholder="Outage estimate (min)" @bind="_outageMinutes" /></div>
+                    </div>
+                    <div class="mb-2">
+                        <select class="form-select form-select-sm" @bind="_commOwnerTeamId">
+                            <option value="0">Communication owner: none</option>
+                            @foreach (var t in _teams)
+                            {
+                                <option value="@t.Id">@t.Name</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="mb-2"><textarea class="form-control form-control-sm" rows="2" placeholder="Runbook notes" @bind="_runbookNotes"></textarea></div>
+
+                    <p class="small text-muted mb-1">Required approvals:</p>
+                    @foreach (var scope in AllScopes)
+                    {
+                        <div class="form-check form-check-inline">
+                            <input class="form-check-input" type="checkbox" id="@($"scope-{scope}")" checked="@_selectedScopes.Contains(scope)" @onchange="e => ToggleScope(scope, (bool)e.Value!)" />
+                            <label class="form-check-label small" for="@($"scope-{scope}")">@scope</label>
+                        </div>
+                    }
+
+                    <div class="mt-2 mb-2">
+                        <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="CheckConflicts" disabled="@(_start == default || _end == default)" data-testid="check-conflicts-button">Check conflicts</button>
+                    </div>
+                    @if (_conflictResult is not null)
+                    {
+                        <div class="small mb-2" data-testid="conflict-result">
+                            @if (_conflictResult.HasFreezeConflicts)
+                            {
+                                <div style="color:var(--dbt-overdue);"><strong>Freeze conflicts:</strong>
+                                    <ul class="mb-1">
+                                        @foreach (var c in _conflictResult.FreezeConflicts)
+                                        {
+                                            <li>@c</li>
+                                        }
+                                    </ul>
+                                </div>
+                            }
+                            else
+                            {
+                                <div style="color:var(--dbt-ontrack);">No freeze conflicts with other scheduled windows.</div>
+                            }
+                            @foreach (var m in _conflictResult.MaintenanceOverlaps)
+                            {
+                                <div class="text-muted">@m</div>
+                            }
+                        </div>
+                    }
+
+                    <button class="btn btn-primary btn-sm" @onclick="CreateWindow" disabled="@(string.IsNullOrWhiteSpace(_title) || _start == default || _end == default)" data-testid="create-window-button">Plan window</button>
+                </div>
+            </div>
+        </AuthorizeView>
+
+        <div class="col-lg-7">
+            @if (_windows.Count == 0)
+            {
+                <div class="empty-state"><i class="bi bi-calendar-event"></i> No change windows planned yet.</div>
+            }
+            else
+            {
+                <table class="table table-sm dbt-table" data-testid="change-window-table">
+                    <thead><tr><th>Title</th><th>Window (UTC)</th><th>Status</th><th></th></tr></thead>
+                    <tbody>
+                        @foreach (var w in _windows)
+                        {
+                            <tr data-testid="change-window-row">
+                                <td class="small">@w.Title</td>
+                                <td class="small">@w.PlannedStartUtc:yyyy-MM-dd HH:mm – @w.PlannedEndUtc:HH:mm (@w.TimeZoneLabel)</td>
+                                <td class="small"><span class="badge-health dot Overdue" data-testid="change-window-status">@w.Status</span></td>
+                                <td class="small"><a class="btn btn-outline-secondary btn-sm" href="/change-windows/@w.Id">Open</a></td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    private static readonly string[] AllScopes = ["DBA", "Change manager", "Application owner", "Security"];
+
+    private MigrationCampaign? _campaign;
+    private List<ChangeWindow> _windows = new();
+    private List<Team> _teams = new();
+    private bool _loaded;
+    private string? _userName;
+
+    private string _title = "", _timeZoneLabel = "UTC", _runbookNotes = "";
+    private DateTime _start, _end;
+    private int? _outageMinutes;
+    private int _commOwnerTeamId;
+    private readonly HashSet<string> _selectedScopes = new() { "DBA" };
+    private ChangeWindowConflictResult? _conflictResult;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var state = await AuthProvider.GetAuthenticationStateAsync();
+        _userName = state.User.Identity?.Name ?? "unknown";
+        await Load();
+        _loaded = true;
+    }
+
+    private async Task Load()
+    {
+        _campaign = await Campaigns.GetAsync(Id);
+        _windows = await Windows.ListForCampaignAsync(Id);
+        _teams = (await Teams.ListAsync()).Select(s => s.Team).ToList();
+    }
+
+    private void ToggleScope(string scope, bool isChecked)
+    {
+        if (isChecked)
+        {
+            _selectedScopes.Add(scope);
+        }
+        else
+        {
+            _selectedScopes.Remove(scope);
+        }
+    }
+
+    private async Task CheckConflicts()
+    {
+        // Same interpretation as CreateWindow: the datetime-local value is treated as the UTC
+        // instant typed (SpecifyKind), not converted from local time — otherwise this check and the
+        // saved window's own PlannedStartUtc/PlannedEndUtc would disagree by the host's UTC offset.
+        _conflictResult = await Windows.DetectConflictsAsync(Id, DateTime.SpecifyKind(_start, DateTimeKind.Utc), DateTime.SpecifyKind(_end, DateTimeKind.Utc));
+    }
+
+    private async Task CreateWindow()
+    {
+        var window = new ChangeWindow
+        {
+            MigrationCampaignId = Id,
+            Title = _title,
+            PlannedStartUtc = DateTime.SpecifyKind(_start, DateTimeKind.Utc),
+            PlannedEndUtc = DateTime.SpecifyKind(_end, DateTimeKind.Utc),
+            TimeZoneLabel = _timeZoneLabel,
+            OutageEstimateMinutes = _outageMinutes,
+            CommunicationOwnerTeamId = _commOwnerTeamId == 0 ? null : _commOwnerTeamId,
+            RunbookNotes = _runbookNotes
+        };
+        await Windows.CreateAsync(window, _selectedScopes, _userName ?? "unknown");
+        Toasts.Success($"Change window \"{_title}\" planned — nothing executed by this.");
+        _title = _runbookNotes = "";
+        _outageMinutes = null;
+        _conflictResult = null;
+        await Load();
+    }
+}

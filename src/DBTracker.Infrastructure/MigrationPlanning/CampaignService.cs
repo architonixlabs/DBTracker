@@ -2,6 +2,7 @@ using DBTracker.Core.Entities;
 using DBTracker.Core.Enums;
 using DBTracker.Core.Services;
 using DBTracker.Infrastructure.Audit;
+using DBTracker.Infrastructure.ChangeManagement;
 using Microsoft.EntityFrameworkCore;
 
 namespace DBTracker.Infrastructure.MigrationPlanning;
@@ -15,7 +16,7 @@ namespace DBTracker.Infrastructure.MigrationPlanning;
 /// state) never touches PathAssessment/ReadinessChecklist/SupportRunway — scheduling a campaign
 /// cannot, by construction, change or imply anything about risk/readiness recorded elsewhere.
 /// </summary>
-public class CampaignService(IDbContextFactory<DBTrackerDbContext> factory, AuditRecorder audit)
+public class CampaignService(IDbContextFactory<DBTrackerDbContext> factory, AuditRecorder audit, CampaignCompletionGateService completionGate)
 {
     public async Task<List<MigrationCampaign>> ListAsync()
     {
@@ -139,9 +140,12 @@ public class CampaignService(IDbContextFactory<DBTrackerDbContext> factory, Audi
     /// <summary>
     /// The only path that changes MigrationCampaign.State. Validates against
     /// CampaignStateTransitionValidator first; an invalid jump is refused (ok=false, with a reason)
-    /// and nothing is written. On success, records the CampaignStateTransition history row and
-    /// nothing else — no other table is touched, so this cannot imply a change to risk/readiness
-    /// tracked elsewhere.
+    /// and nothing is written. Reaching Completed specifically (D13/D14) additionally requires
+    /// CampaignCompletionGateService to confirm every linked instance has passing post-change
+    /// validation, required sign-offs and current rehearsal evidence — or a currently-active,
+    /// campaign-scoped D14 exception — so a bare field edit elsewhere in the app can never complete a
+    /// change on its own. Every other transition still only ever writes the CampaignStateTransition
+    /// history row and nothing else, so it cannot imply a change to risk/readiness tracked elsewhere.
     /// </summary>
     public async Task<(bool Ok, string Reason)> TransitionAsync(int campaignId, CampaignState toState, string reason, string actorName)
     {
@@ -155,6 +159,15 @@ public class CampaignService(IDbContextFactory<DBTrackerDbContext> factory, Audi
         if (!CampaignStateTransitionValidator.IsValidTransition(campaign.State, toState))
         {
             return (false, CampaignStateTransitionValidator.DescribeInvalidReason(campaign.State, toState));
+        }
+
+        if (toState == CampaignState.Completed)
+        {
+            var gate = await completionGate.EvaluateAsync(campaignId);
+            if (!gate.CanComplete)
+            {
+                return (false, "Cannot complete — " + string.Join("; ", gate.BlockingReasons));
+            }
         }
 
         var fromState = campaign.State;

@@ -1,0 +1,225 @@
+@page "/exceptions"
+@attribute [Authorize]
+@using DBTracker.Core.Entities
+@using DBTracker.Core.Enums
+@using DBTracker.Core.Services
+@using DBTracker.Infrastructure.ChangeManagement
+@using DBTracker.Infrastructure.Identity
+@using DBTracker.Infrastructure.Ownership
+@using Microsoft.AspNetCore.Components.Authorization
+@inject ReadinessExceptionService ExceptionSvc
+@inject TeamService Teams
+@inject AuthenticationStateProvider AuthProvider
+@inject DBTracker.Web.Services.ToastService Toasts
+
+<PageTitle>Readiness exceptions · DBTracker</PageTitle>
+
+<div class="app-topbar">
+    <div>
+        <div class="eyebrow">Epic 20 (D14)</div>
+        <h1>Readiness &amp; support exceptions</h1>
+        <div class="subtitle">
+            An explicit, time-boxed risk acceptance against a specific target/gate — never a status override. An exception never
+            changes any vendor fact and never clears the underlying risk; it is distinct from actual paid vendor support coverage.
+        </div>
+    </div>
+</div>
+
+@if (!_loaded)
+{
+    <div class="spinner-ring"></div>
+}
+else
+{
+    <div class="row g-3">
+        <div class="col-lg-5">
+            <div class="dbt-card">
+                <h2 class="h6 text-muted text-uppercase mb-3">Record an exception</h2>
+                <div class="row g-2 mb-2">
+                    <div class="col-6"><input class="form-control form-control-sm" placeholder="Target type (e.g. MigrationCampaign)" @bind="_targetType" @bind:event="oninput" /></div>
+                    <div class="col-6"><input type="number" class="form-control form-control-sm" placeholder="Target id" @bind="_targetId" /></div>
+                </div>
+                <div class="mb-2"><input class="form-control form-control-sm" placeholder="Waived check/policy reference" @bind="_waivedCheckReference" @bind:event="oninput" /></div>
+                <div class="mb-2"><textarea class="form-control form-control-sm" rows="2" placeholder="Reason" @bind="_reason"></textarea></div>
+                <div class="mb-2"><textarea class="form-control form-control-sm" rows="2" placeholder="Compensating controls" @bind="_compensatingControls"></textarea></div>
+                <div class="row g-2 mb-2">
+                    <div class="col-6">
+                        <select class="form-select form-select-sm" @bind="_ownerTeamId">
+                            <option value="0">No owner team</option>
+                            @foreach (var t in _teams)
+                            {
+                                <option value="@t.Id">@t.Name</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-6"><input class="form-control form-control-sm" placeholder="Accountable owner (name)" @bind="_ownerName" @bind:event="oninput" /></div>
+                </div>
+                <div class="row g-2 mb-2">
+                    <div class="col-6"><input class="form-control form-control-sm" placeholder="Permitted approver role (e.g. Admin, ITManager)" @bind="_permittedApproverRole" @bind:event="oninput" /></div>
+                    <div class="col-6 form-check pt-2">
+                        <input class="form-check-input" type="checkbox" id="require-sep" @bind="_requiresSeparateApprover" />
+                        <label class="form-check-label small" for="require-sep">Requires separate approver</label>
+                    </div>
+                </div>
+                <div class="row g-2 mb-2">
+                    <div class="col-6">
+                        <label class="form-label small">Expires</label>
+                        <input type="date" class="form-control form-control-sm" @bind="_expiresAt" data-testid="exception-expires-input" />
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label small">Review date</label>
+                        <input type="date" class="form-control form-control-sm" @bind="_reviewDate" />
+                    </div>
+                </div>
+                <div class="mb-2"><input class="form-control form-control-sm" placeholder="Evidence URL/reference" @bind="_evidenceUrl" @bind:event="oninput" /></div>
+                <button class="btn btn-primary btn-sm" @onclick="CreateException" disabled="@(string.IsNullOrWhiteSpace(_targetType) || _targetId == 0 || string.IsNullOrWhiteSpace(_reason) || _expiresAt == default)" data-testid="create-exception-button">Record exception</button>
+            </div>
+        </div>
+
+        <div class="col-lg-7">
+            @if (_exceptions.Count == 0)
+            {
+                <div class="empty-state"><i class="bi bi-shield-exclamation"></i> No exceptions recorded.</div>
+            }
+            else
+            {
+                <table class="table table-sm dbt-table" data-testid="exception-table">
+                    <thead><tr><th>Target</th><th>Waived check</th><th>Status</th><th>Expires</th><th></th></tr></thead>
+                    <tbody>
+                        @foreach (var e in _exceptions)
+                        {
+                            var effective = ReadinessExceptionEvaluator.EffectiveStatus(e, DateTime.UtcNow);
+                            <tr data-testid="exception-row">
+                                <td class="small">@e.TargetType #@e.TargetId</td>
+                                <td class="small">@e.WaivedCheckReference</td>
+                                <td class="small"><span class="badge-health dot @StatusCss(effective)" data-testid="exception-status">@effective</span></td>
+                                <td class="small">@e.ExpiresAtUtc.ToString("yyyy-MM-dd")</td>
+                                <td class="small">
+                                    @if (effective == ReadinessExceptionEffectiveStatus.PendingApproval)
+                                    {
+                                        <button class="btn btn-link btn-sm p-0" @onclick="() => Decide(e.Id, true)" data-testid="approve-exception-button">Approve</button>
+                                        <button class="btn btn-link btn-sm p-0" @onclick="() => Decide(e.Id, false)">Reject</button>
+                                    }
+                                    else if (effective == ReadinessExceptionEffectiveStatus.Active)
+                                    {
+                                        <button class="btn btn-link btn-sm p-0" @onclick="() => Revoke(e.Id)" data-testid="revoke-exception-button">Revoke</button>
+                                    }
+                                    else if (effective is ReadinessExceptionEffectiveStatus.Expired or ReadinessExceptionEffectiveStatus.Rejected or ReadinessExceptionEffectiveStatus.Revoked)
+                                    {
+                                        <button class="btn btn-link btn-sm p-0" @onclick="() => Renew(e)" data-testid="renew-exception-button">Renew</button>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    private List<ReadinessException> _exceptions = new();
+    private List<Team> _teams = new();
+    private bool _loaded;
+    private string? _userId, _userName;
+    private IReadOnlyCollection<string> _userRoles = [];
+
+    private string _targetType = "", _waivedCheckReference = "", _reason = "", _compensatingControls = "", _ownerName = "", _permittedApproverRole = "", _evidenceUrl = "";
+    private int _targetId;
+    private int _ownerTeamId;
+    private bool _requiresSeparateApprover = true;
+    private DateTime _expiresAt;
+    private DateTime? _reviewDate;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var state = await AuthProvider.GetAuthenticationStateAsync();
+        _userName = state.User.Identity?.Name ?? "unknown";
+        _userId = state.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? _userName;
+        _userRoles = state.User.Claims.Where(c => c.Type == System.Security.Claims.ClaimTypes.Role).Select(c => c.Value).ToList();
+        await Load();
+        _loaded = true;
+    }
+
+    private async Task Load()
+    {
+        _exceptions = await ExceptionSvc.ListAsync();
+        _teams = (await Teams.ListAsync()).Select(s => s.Team).ToList();
+    }
+
+    private async Task CreateException()
+    {
+        var exception = new ReadinessException
+        {
+            TargetType = _targetType,
+            TargetId = _targetId,
+            WaivedCheckReference = _waivedCheckReference,
+            Reason = _reason,
+            CompensatingControls = _compensatingControls,
+            AccountableOwnerTeamId = _ownerTeamId == 0 ? null : _ownerTeamId,
+            AccountableOwnerName = _ownerName,
+            PermittedApproverRole = _permittedApproverRole,
+            RequiresSeparateApprover = _requiresSeparateApprover,
+            EvidenceUrl = _evidenceUrl,
+            ExpiresAtUtc = DateTime.SpecifyKind(_expiresAt, DateTimeKind.Utc),
+            ReviewDate = _reviewDate
+        };
+        await ExceptionSvc.CreateAsync(exception, _userId ?? "unknown", _userName ?? "unknown");
+        Toasts.Success("Exception recorded — pending approval.");
+        _targetType = _waivedCheckReference = _reason = _compensatingControls = _ownerName = _permittedApproverRole = _evidenceUrl = "";
+        _targetId = 0;
+        await Load();
+    }
+
+    private async Task Decide(int id, bool approve)
+    {
+        var (ok, reason) = await ExceptionSvc.DecideAsync(id, approve, _userId ?? "unknown", _userName ?? "unknown", _userRoles, "");
+        if (ok)
+        {
+            Toasts.Success(approve ? "Exception approved." : "Exception rejected.");
+        }
+        else
+        {
+            Toasts.Error($"Not recorded: {reason}");
+        }
+        await Load();
+    }
+
+    private async Task Revoke(int id)
+    {
+        await ExceptionSvc.RevokeAsync(id, _userName ?? "unknown", "Revoked from the exceptions hub.");
+        Toasts.Success("Exception revoked — the waived action is reopened.");
+        await Load();
+    }
+
+    private async Task Renew(ReadinessException original)
+    {
+        var renewal = new ReadinessException
+        {
+            TargetType = original.TargetType,
+            TargetId = original.TargetId,
+            WaivedCheckReference = original.WaivedCheckReference,
+            Reason = original.Reason,
+            CompensatingControls = original.CompensatingControls,
+            AccountableOwnerTeamId = original.AccountableOwnerTeamId,
+            AccountableOwnerName = original.AccountableOwnerName,
+            PermittedApproverRole = original.PermittedApproverRole,
+            RequiresSeparateApprover = original.RequiresSeparateApprover,
+            EvidenceUrl = original.EvidenceUrl,
+            ExpiresAtUtc = DateTime.UtcNow.AddDays(30)
+        };
+        await ExceptionSvc.RenewAsync(original.Id, renewal, _userId ?? "unknown", _userName ?? "unknown");
+        Toasts.Success("Renewal recorded — pending approval; original history preserved.");
+        await Load();
+    }
+
+    private static string StatusCss(ReadinessExceptionEffectiveStatus status) => status switch
+    {
+        ReadinessExceptionEffectiveStatus.Active => "OnTrack",
+        ReadinessExceptionEffectiveStatus.Expired => "Overdue",
+        ReadinessExceptionEffectiveStatus.Revoked => "Failed",
+        ReadinessExceptionEffectiveStatus.Rejected => "Failed",
+        _ => "Overdue"
+    };
+}

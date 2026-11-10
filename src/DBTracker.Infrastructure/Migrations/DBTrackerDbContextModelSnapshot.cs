@@ -605,6 +605,288 @@ namespace DBTracker.Infrastructure.Migrations
                     b.ToTable("CampaignStateTransitions");
                 });
 
+            modelBuilder.Entity("DBTracker.Core.Entities.ChangeValidation", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("AfterEvidenceJson")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("ApplicationTestsNotes")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<int>("ApplicationTestsOutcome")
+                        .HasColumnType("int");
+
+                    b.Property<string>("BeforeEvidenceJson")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int>("DatabaseInstanceId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("HaReplicationStateOutcome")
+                        .HasColumnType("int");
+
+                    b.Property<string>("IntegrityCheckNotes")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<int>("IntegrityCheckOutcome")
+                        .HasColumnType("int");
+
+                    b.Property<int>("JobsPermissionsOutcome")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("LinkedBackupRecordId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("LinkedRestoreEventId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("MigrationCampaignId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("NewBackupRestoreEvidenceOutcome")
+                        .HasColumnType("int");
+
+                    b.Property<string>("ObservedCompatibilityLevel")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("ObservedTargetBuildText")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("PerformanceComparisonNotes")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<DateTime>("RecordedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("RecordedBy")
+                        .IsRequired()
+                        .HasMaxLength(320)
+                        .HasColumnType("nvarchar(320)");
+
+                    b.Property<DateTime?>("RollbackRetentionDeadlineUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("ValidationTimeUtc")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("LinkedBackupRecordId");
+
+                    b.HasIndex("LinkedRestoreEventId");
+
+                    b.HasIndex("MigrationCampaignId");
+
+                    b.HasIndex("DatabaseInstanceId", "RecordedAtUtc");
+
+                    b.ToTable("ChangeValidations");
+                });
+
+            modelBuilder.Entity("DBTracker.Core.Entities.ChangeValidationSignoff", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("ChangeValidationId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Notes")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<int>("Outcome")
+                        .HasColumnType("int");
+
+                    b.Property<string>("ReviewerName")
+                        .IsRequired()
+                        .HasMaxLength(320)
+                        .HasColumnType("nvarchar(320)");
+
+                    b.Property<string>("ReviewerScope")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<DateTime>("SignedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ChangeValidationId");
+
+                    b.ToTable("ChangeValidationSignoffs");
+                });
+
+            modelBuilder.Entity("DBTracker.Core.Entities.ChangeWindow", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int?>("CommunicationOwnerTeamId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasMaxLength(320)
+                        .HasColumnType("nvarchar(320)");
+
+                    b.Property<int?>("EmergencyExceptionId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("MigrationCampaignId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("OutageEstimateMinutes")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("PlannedEndUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime>("PlannedStartUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("RunbookNotes")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("int");
+
+                    b.Property<string>("TimeZoneLabel")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("nvarchar(300)");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CommunicationOwnerTeamId");
+
+                    b.HasIndex("EmergencyExceptionId");
+
+                    b.HasIndex("MigrationCampaignId");
+
+                    b.HasIndex("PlannedStartUtc");
+
+                    b.ToTable("ChangeWindows");
+                });
+
+            modelBuilder.Entity("DBTracker.Core.Entities.ChangeWindowApproval", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("ApproverName")
+                        .IsRequired()
+                        .HasMaxLength(320)
+                        .HasColumnType("nvarchar(320)");
+
+                    b.Property<string>("ApproverUserId")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<int>("ChangeWindowId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("DecidedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("Decision")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Notes")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<string>("RequiredScope")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ChangeWindowId");
+
+                    b.ToTable("ChangeWindowApprovals");
+                });
+
+            modelBuilder.Entity("DBTracker.Core.Entities.ChangeWindowRunbookStep", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("ChangeWindowId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<bool>("IsCompleted")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsRequired")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("Order")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ChangeWindowId");
+
+                    b.ToTable("ChangeWindowRunbookSteps");
+                });
+
             modelBuilder.Entity("DBTracker.Core.Entities.ClusterNodeVersion", b =>
                 {
                     b.Property<int>("Id")
@@ -800,6 +1082,51 @@ namespace DBTracker.Infrastructure.Migrations
                     b.ToTable("ContactCorrectionRequests");
                 });
 
+            modelBuilder.Entity("DBTracker.Core.Entities.CutoverJournalEntry", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("ChangeWindowId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("Decision")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<int>("EntryType")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("RecordedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("RecordedBy")
+                        .IsRequired()
+                        .HasMaxLength(320)
+                        .HasColumnType("nvarchar(320)");
+
+                    b.Property<DateTime>("TimestampUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("TrafficOrWriteStateNote")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ChangeWindowId", "TimestampUtc");
+
+                    b.ToTable("CutoverJournalEntries");
+                });
+
             modelBuilder.Entity("DBTracker.Core.Entities.DatabaseInstance", b =>
                 {
                     b.Property<int>("Id")
@@ -892,6 +1219,9 @@ namespace DBTracker.Infrastructure.Migrations
 
                     b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("datetime2");
+
+                    b.Property<int>("Criticality")
+                        .HasColumnType("int");
 
                     b.Property<string>("DatabaseIp")
                         .IsRequired()
@@ -1018,6 +1348,8 @@ namespace DBTracker.Infrastructure.Migrations
                     b.HasIndex("Cluster");
 
                     b.HasIndex("Company");
+
+                    b.HasIndex("Criticality");
 
                     b.HasIndex("Engine");
 
@@ -1831,6 +2163,301 @@ namespace DBTracker.Infrastructure.Migrations
                     b.HasIndex("PathAssessmentId");
 
                     b.ToTable("ReadinessChecklists");
+                });
+
+            modelBuilder.Entity("DBTracker.Core.Entities.ReadinessException", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("AccountableOwnerName")
+                        .IsRequired()
+                        .HasMaxLength(320)
+                        .HasColumnType("nvarchar(320)");
+
+                    b.Property<int?>("AccountableOwnerTeamId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("ApprovedByUserId")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<string>("ApprovedByUserName")
+                        .IsRequired()
+                        .HasMaxLength(320)
+                        .HasColumnType("nvarchar(320)");
+
+                    b.Property<string>("CompensatingControls")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasMaxLength(320)
+                        .HasColumnType("nvarchar(320)");
+
+                    b.Property<DateTime?>("DecidedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("DecisionNotes")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<string>("EvidenceNotes")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<string>("EvidenceUrl")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<DateTime>("ExpiresAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("ExpiryNotifiedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<bool>("IsVendorSupportCoverage")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("PermittedApproverRole")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("PreparedByUserId")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<string>("PreparedByUserName")
+                        .IsRequired()
+                        .HasMaxLength(320)
+                        .HasColumnType("nvarchar(320)");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<int?>("RenewalOfExceptionId")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("RequiresSeparateApprover")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime?>("ReviewDate")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("RevokedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("RevokedBy")
+                        .IsRequired()
+                        .HasMaxLength(320)
+                        .HasColumnType("nvarchar(320)");
+
+                    b.Property<string>("RevokedReason")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("int");
+
+                    b.Property<int>("TargetId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("TargetType")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("WaivedCheckReference")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AccountableOwnerTeamId");
+
+                    b.HasIndex("ExpiresAtUtc");
+
+                    b.HasIndex("RenewalOfExceptionId");
+
+                    b.HasIndex("Status");
+
+                    b.HasIndex("TargetType", "TargetId");
+
+                    b.ToTable("ReadinessExceptions");
+                });
+
+            modelBuilder.Entity("DBTracker.Core.Entities.RehearsalRecord", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("BackupRestoreOutcome")
+                        .HasColumnType("int");
+
+                    b.Property<string>("CorrectnessCheckNotes")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<int>("CorrectnessCheckOutcome")
+                        .HasColumnType("int");
+
+                    b.Property<int>("DatabaseInstanceId")
+                        .HasColumnType("int");
+
+                    b.Property<double?>("DurationMinutes")
+                        .HasColumnType("float");
+
+                    b.Property<int?>("LinkedRestoreEventId")
+                        .HasColumnType("int");
+
+                    b.Property<double?>("MeasuredRpoMinutes")
+                        .HasColumnType("float");
+
+                    b.Property<double?>("MeasuredRtoMinutes")
+                        .HasColumnType("float");
+
+                    b.Property<int>("Method")
+                        .HasColumnType("int");
+
+                    b.Property<int>("MigrationCampaignId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("PathAssessmentId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("PerformanceCheckOutcome")
+                        .HasColumnType("int");
+
+                    b.Property<string>("PerformanceComparisonNotes")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<DateTime>("PerformedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("PerformedBy")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<int>("PostCutoverWriteDisposition")
+                        .HasColumnType("int");
+
+                    b.Property<string>("PostCutoverWriteReconciliationPlan")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<string>("PrerequisitesText")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<DateTime>("RecordedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("RecordedBy")
+                        .IsRequired()
+                        .HasMaxLength(320)
+                        .HasColumnType("nvarchar(320)");
+
+                    b.Property<string>("RecoveryKeyDependenciesText")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<string>("RepresentativeDatasetDescription")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<string>("SourceLabel")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("nvarchar(300)");
+
+                    b.Property<string>("TargetLabel")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("nvarchar(300)");
+
+                    b.Property<double?>("TargetRpoMinutes")
+                        .HasColumnType("float");
+
+                    b.Property<double?>("TargetRtoMinutes")
+                        .HasColumnType("float");
+
+                    b.Property<int?>("ValidityDays")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("LinkedRestoreEventId");
+
+                    b.HasIndex("MigrationCampaignId");
+
+                    b.HasIndex("PathAssessmentId");
+
+                    b.HasIndex("DatabaseInstanceId", "PerformedAtUtc");
+
+                    b.ToTable("RehearsalRecords");
+                });
+
+            modelBuilder.Entity("DBTracker.Core.Entities.RehearsalRollbackDecisionPoint", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Decision")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<bool>("IsPointOfNoReturn")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("Order")
+                        .HasColumnType("int");
+
+                    b.Property<int>("RehearsalRecordId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("TriggerCondition")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RehearsalRecordId");
+
+                    b.ToTable("RehearsalRollbackDecisionPoints");
                 });
 
             modelBuilder.Entity("DBTracker.Core.Entities.ReleaseCatalogEntry", b =>
@@ -2776,6 +3403,97 @@ namespace DBTracker.Infrastructure.Migrations
                     b.Navigation("MigrationCampaign");
                 });
 
+            modelBuilder.Entity("DBTracker.Core.Entities.ChangeValidation", b =>
+                {
+                    b.HasOne("DBTracker.Core.Entities.DatabaseInstance", "DatabaseInstance")
+                        .WithMany()
+                        .HasForeignKey("DatabaseInstanceId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+
+                    b.HasOne("DBTracker.Core.Entities.BackupRecord", "LinkedBackupRecord")
+                        .WithMany()
+                        .HasForeignKey("LinkedBackupRecordId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
+                    b.HasOne("DBTracker.Core.Entities.RestoreEvent", "LinkedRestoreEvent")
+                        .WithMany()
+                        .HasForeignKey("LinkedRestoreEventId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
+                    b.HasOne("DBTracker.Core.Entities.MigrationCampaign", "MigrationCampaign")
+                        .WithMany()
+                        .HasForeignKey("MigrationCampaignId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("DatabaseInstance");
+
+                    b.Navigation("LinkedBackupRecord");
+
+                    b.Navigation("LinkedRestoreEvent");
+
+                    b.Navigation("MigrationCampaign");
+                });
+
+            modelBuilder.Entity("DBTracker.Core.Entities.ChangeValidationSignoff", b =>
+                {
+                    b.HasOne("DBTracker.Core.Entities.ChangeValidation", "ChangeValidation")
+                        .WithMany("Signoffs")
+                        .HasForeignKey("ChangeValidationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("ChangeValidation");
+                });
+
+            modelBuilder.Entity("DBTracker.Core.Entities.ChangeWindow", b =>
+                {
+                    b.HasOne("DBTracker.Core.Entities.Team", "CommunicationOwnerTeam")
+                        .WithMany()
+                        .HasForeignKey("CommunicationOwnerTeamId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("DBTracker.Core.Entities.ReadinessException", "EmergencyException")
+                        .WithMany()
+                        .HasForeignKey("EmergencyExceptionId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
+                    b.HasOne("DBTracker.Core.Entities.MigrationCampaign", "MigrationCampaign")
+                        .WithMany()
+                        .HasForeignKey("MigrationCampaignId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("CommunicationOwnerTeam");
+
+                    b.Navigation("EmergencyException");
+
+                    b.Navigation("MigrationCampaign");
+                });
+
+            modelBuilder.Entity("DBTracker.Core.Entities.ChangeWindowApproval", b =>
+                {
+                    b.HasOne("DBTracker.Core.Entities.ChangeWindow", "ChangeWindow")
+                        .WithMany("Approvals")
+                        .HasForeignKey("ChangeWindowId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("ChangeWindow");
+                });
+
+            modelBuilder.Entity("DBTracker.Core.Entities.ChangeWindowRunbookStep", b =>
+                {
+                    b.HasOne("DBTracker.Core.Entities.ChangeWindow", "ChangeWindow")
+                        .WithMany("RunbookSteps")
+                        .HasForeignKey("ChangeWindowId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("ChangeWindow");
+                });
+
             modelBuilder.Entity("DBTracker.Core.Entities.ClusterNodeVersion", b =>
                 {
                     b.HasOne("DBTracker.Core.Entities.DatabaseInstance", "DatabaseInstance")
@@ -2803,6 +3521,17 @@ namespace DBTracker.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("DatabaseInstance");
+                });
+
+            modelBuilder.Entity("DBTracker.Core.Entities.CutoverJournalEntry", b =>
+                {
+                    b.HasOne("DBTracker.Core.Entities.ChangeWindow", "ChangeWindow")
+                        .WithMany("JournalEntries")
+                        .HasForeignKey("ChangeWindowId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("ChangeWindow");
                 });
 
             modelBuilder.Entity("DBTracker.Core.Entities.DatabaseInstance", b =>
@@ -2971,6 +3700,67 @@ namespace DBTracker.Infrastructure.Migrations
                     b.Navigation("PathAssessment");
                 });
 
+            modelBuilder.Entity("DBTracker.Core.Entities.ReadinessException", b =>
+                {
+                    b.HasOne("DBTracker.Core.Entities.Team", "AccountableOwnerTeam")
+                        .WithMany()
+                        .HasForeignKey("AccountableOwnerTeamId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("DBTracker.Core.Entities.ReadinessException", "RenewalOfException")
+                        .WithMany()
+                        .HasForeignKey("RenewalOfExceptionId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("AccountableOwnerTeam");
+
+                    b.Navigation("RenewalOfException");
+                });
+
+            modelBuilder.Entity("DBTracker.Core.Entities.RehearsalRecord", b =>
+                {
+                    b.HasOne("DBTracker.Core.Entities.DatabaseInstance", "DatabaseInstance")
+                        .WithMany()
+                        .HasForeignKey("DatabaseInstanceId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+
+                    b.HasOne("DBTracker.Core.Entities.RestoreEvent", "LinkedRestoreEvent")
+                        .WithMany()
+                        .HasForeignKey("LinkedRestoreEventId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
+                    b.HasOne("DBTracker.Core.Entities.MigrationCampaign", "MigrationCampaign")
+                        .WithMany()
+                        .HasForeignKey("MigrationCampaignId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("DBTracker.Core.Entities.PathAssessment", "PathAssessment")
+                        .WithMany()
+                        .HasForeignKey("PathAssessmentId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
+                    b.Navigation("DatabaseInstance");
+
+                    b.Navigation("LinkedRestoreEvent");
+
+                    b.Navigation("MigrationCampaign");
+
+                    b.Navigation("PathAssessment");
+                });
+
+            modelBuilder.Entity("DBTracker.Core.Entities.RehearsalRollbackDecisionPoint", b =>
+                {
+                    b.HasOne("DBTracker.Core.Entities.RehearsalRecord", "RehearsalRecord")
+                        .WithMany("RollbackDecisionPoints")
+                        .HasForeignKey("RehearsalRecordId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("RehearsalRecord");
+                });
+
             modelBuilder.Entity("DBTracker.Core.Entities.ReleaseCatalogRevision", b =>
                 {
                     b.HasOne("DBTracker.Core.Entities.ReleaseCatalogEntry", "ReleaseCatalogEntry")
@@ -3123,6 +3913,20 @@ namespace DBTracker.Infrastructure.Migrations
                     b.Navigation("Corrections");
                 });
 
+            modelBuilder.Entity("DBTracker.Core.Entities.ChangeValidation", b =>
+                {
+                    b.Navigation("Signoffs");
+                });
+
+            modelBuilder.Entity("DBTracker.Core.Entities.ChangeWindow", b =>
+                {
+                    b.Navigation("Approvals");
+
+                    b.Navigation("JournalEntries");
+
+                    b.Navigation("RunbookSteps");
+                });
+
             modelBuilder.Entity("DBTracker.Core.Entities.DatabaseInstance", b =>
                 {
                     b.Navigation("BackupRecords");
@@ -3144,6 +3948,11 @@ namespace DBTracker.Infrastructure.Migrations
             modelBuilder.Entity("DBTracker.Core.Entities.ReadinessChecklist", b =>
                 {
                     b.Navigation("Items");
+                });
+
+            modelBuilder.Entity("DBTracker.Core.Entities.RehearsalRecord", b =>
+                {
+                    b.Navigation("RollbackDecisionPoints");
                 });
 
             modelBuilder.Entity("DBTracker.Core.Entities.ReleaseCatalogEntry", b =>

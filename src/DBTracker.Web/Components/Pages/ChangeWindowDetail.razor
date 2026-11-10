@@ -1,0 +1,228 @@
+@page "/change-windows/{Id:int}"
+@attribute [Authorize]
+@using DBTracker.Core.Entities
+@using DBTracker.Core.Enums
+@using DBTracker.Core.Services
+@using DBTracker.Infrastructure.ChangeManagement
+@using DBTracker.Infrastructure.Identity
+@using Microsoft.AspNetCore.Components.Authorization
+@inject ChangeWindowService Windows
+@inject AuthenticationStateProvider AuthProvider
+@inject DBTracker.Web.Services.ToastService Toasts
+
+<PageTitle>@(_window?.Title ?? "Change window") · DBTracker</PageTitle>
+
+@if (!_loaded)
+{
+    <div class="spinner-ring"></div>
+}
+else if (_window is null)
+{
+    <div class="dbt-card" style="max-width:600px;">
+        <div class="empty-state py-4"><i class="bi bi-question-diamond"></i> Change window #@Id doesn't exist.</div>
+    </div>
+}
+else
+{
+    <div class="app-topbar">
+        <div>
+            <div class="eyebrow">Epic 20 (D12) · Cutover journal</div>
+            <h1>@_window.Title <span class="badge-health dot Overdue" data-testid="change-window-detail-status">@_window.Status</span></h1>
+            <div class="subtitle">
+                @_window.PlannedStartUtc.ToString("yyyy-MM-dd HH:mm") – @_window.PlannedEndUtc.ToString("HH:mm") UTC (@_window.TimeZoneLabel) ·
+                <a href="/campaigns/@_window.MigrationCampaignId/change-windows">Back to change windows</a>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-3">
+        <div class="col-lg-6">
+            <div class="dbt-card h-100">
+                <h2 class="h6 text-muted text-uppercase mb-3">Required approvals</h2>
+                <p class="small text-muted">Each scope is checked against the recording user's role — recording outside the permitted role/scope is refused, not just hidden.</p>
+                <table class="table table-sm dbt-table mb-2">
+                    <thead><tr><th>Scope</th><th>Decision</th><th>Approver</th></tr></thead>
+                    <tbody>
+                        @foreach (var a in _window.Approvals)
+                        {
+                            <tr data-testid="approval-row">
+                                <td class="small">@a.RequiredScope</td>
+                                <td class="small" data-testid="approval-decision">@(a.Decision?.ToString() ?? "Pending")</td>
+                                <td class="small">@a.ApproverName</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+
+                <div class="row g-2 mb-2">
+                    <div class="col-4">
+                        <select class="form-select form-select-sm" @bind="_approvalId">
+                            <option value="0">Choose approval…</option>
+                            @foreach (var a in _window.Approvals)
+                            {
+                                <option value="@a.Id">@a.RequiredScope</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-4">
+                        <select class="form-select form-select-sm" @bind="_approvalDecision">
+                            @foreach (var d in Enum.GetValues<CampaignApprovalDecision>())
+                            {
+                                <option value="@d">@d</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-4"><input class="form-control form-control-sm" placeholder="Your name" @bind="_approverName" @bind:event="oninput" /></div>
+                </div>
+                <button class="btn btn-outline-secondary btn-sm" @onclick="RecordApproval" disabled="@(_approvalId == 0 || string.IsNullOrWhiteSpace(_approverName))" data-testid="record-approval-button">Record decision</button>
+
+                <hr />
+                <p class="small mb-1">Status: <strong>@_window.Status</strong></p>
+                <div class="d-flex gap-2 flex-wrap">
+                    @foreach (var s in Enum.GetValues<ChangeWindowStatus>().Where(s => s != _window.Status))
+                    {
+                        <button class="btn btn-outline-secondary btn-sm" @onclick="() => SetStatus(s)" data-testid="@($"status-{s}")">→ @s</button>
+                    }
+                </div>
+                <div class="mt-2">
+                    <label class="form-label small">Emergency exception id (D14, optional)</label>
+                    <div class="d-flex gap-2">
+                        <input type="number" class="form-control form-control-sm" @bind="_emergencyExceptionId" />
+                        <button class="btn btn-link btn-sm" @onclick="LinkException">Link</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-6">
+            <div class="dbt-card h-100">
+                <h2 class="h6 text-muted text-uppercase mb-3">Cutover journal</h2>
+                <p class="small text-muted">Externally performed actions, traffic/write-state notes, go/no-go decisions, the point of no return, and rollback outcomes. Adding an entry never runs anything against any database.</p>
+
+                @if (_window.JournalEntries.Count > 0)
+                {
+                    <table class="table table-sm dbt-table mb-2" data-testid="journal-table">
+                        <thead><tr><th>When</th><th>Type</th><th>Description</th><th>Decision</th></tr></thead>
+                        <tbody>
+                            @foreach (var e in _window.JournalEntries.OrderBy(e => e.TimestampUtc))
+                            {
+                                <tr data-testid="journal-row">
+                                    <td class="small">@e.TimestampUtc.ToString("MMM d, HH:mm")</td>
+                                    <td class="small">@e.EntryType</td>
+                                    <td class="small">@e.Description</td>
+                                    <td class="small">@e.Decision</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                }
+
+                <div class="row g-2 mb-2">
+                    <div class="col-4">
+                        <select class="form-select form-select-sm" @bind="_entryType">
+                            @foreach (var t in Enum.GetValues<CutoverJournalEntryType>())
+                            {
+                                <option value="@t">@t</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-4">
+                        <select class="form-select form-select-sm" @bind="_entryDecision">
+                            @foreach (var d in Enum.GetValues<GoNoGoDecision>())
+                            {
+                                <option value="@d">@d</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-4"><input class="form-control form-control-sm" placeholder="Description" @bind="_entryDescription" @bind:event="oninput" /></div>
+                </div>
+                <div class="mb-2"><input class="form-control form-control-sm" placeholder="Traffic/write-state note" @bind="_entryTrafficNote" @bind:event="oninput" /></div>
+                <button class="btn btn-primary btn-sm" @onclick="AddJournalEntry" disabled="@string.IsNullOrWhiteSpace(_entryDescription)" data-testid="add-journal-entry-button">Add journal entry</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    private ChangeWindow? _window;
+    private bool _loaded;
+    private string? _userName;
+    private IReadOnlyCollection<string> _userRoles = [];
+
+    private int _approvalId;
+    private CampaignApprovalDecision _approvalDecision = CampaignApprovalDecision.Approved;
+    private string _approverName = "";
+
+    private CutoverJournalEntryType _entryType = CutoverJournalEntryType.Action;
+    private GoNoGoDecision _entryDecision = GoNoGoDecision.None;
+    private string _entryDescription = "", _entryTrafficNote = "";
+
+    private int? _emergencyExceptionId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var state = await AuthProvider.GetAuthenticationStateAsync();
+        _userName = state.User.Identity?.Name ?? "unknown";
+        _userRoles = state.User.Claims.Where(c => c.Type == System.Security.Claims.ClaimTypes.Role).Select(c => c.Value).ToList();
+        await Load();
+        _loaded = true;
+    }
+
+    private async Task Load()
+    {
+        _window = await Windows.GetAsync(Id);
+    }
+
+    private async Task RecordApproval()
+    {
+        var (ok, reason) = await Windows.RecordApprovalAsync(_approvalId, _approvalDecision, _approverName, _userName ?? "unknown", _userRoles, "", _userName ?? "unknown");
+        if (ok)
+        {
+            Toasts.Success("Approval decision recorded.");
+            _approverName = "";
+        }
+        else
+        {
+            Toasts.Error($"Not recorded: {reason}");
+        }
+        await Load();
+    }
+
+    private async Task SetStatus(ChangeWindowStatus status)
+    {
+        var (ok, reason) = await Windows.SetStatusAsync(Id, status, _userName ?? "unknown");
+        if (ok)
+        {
+            Toasts.Success($"Status changed to {status}.");
+        }
+        else
+        {
+            Toasts.Error($"Blocked: {reason}");
+        }
+        await Load();
+    }
+
+    private async Task AddJournalEntry()
+    {
+        await Windows.AddJournalEntryAsync(Id, new CutoverJournalEntry
+        {
+            EntryType = _entryType,
+            Description = _entryDescription,
+            TrafficOrWriteStateNote = _entryTrafficNote,
+            Decision = _entryDecision,
+            TimestampUtc = DateTime.UtcNow
+        }, _userName ?? "unknown");
+        Toasts.Success("Journal entry recorded.");
+        _entryDescription = _entryTrafficNote = "";
+        await Load();
+    }
+
+    private async Task LinkException()
+    {
+        await Windows.SetEmergencyExceptionAsync(Id, _emergencyExceptionId, _userName ?? "unknown");
+        Toasts.Success("Emergency exception linked.");
+        await Load();
+    }
+}

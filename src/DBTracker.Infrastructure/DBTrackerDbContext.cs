@@ -53,6 +53,19 @@ public class DBTrackerDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<CampaignStateTransition> CampaignStateTransitions => Set<CampaignStateTransition>();
     public DbSet<CampaignApproval> CampaignApprovals => Set<CampaignApproval>();
 
+    // Epic 20 (D11-D15): rehearsal/recovery evidence, scheduled change windows and cutover journal,
+    // post-change validation, generic readiness exceptions, and the lifecycle workspace (read-only
+    // over existing data — no new DbSet needed for D15 itself).
+    public DbSet<RehearsalRecord> RehearsalRecords => Set<RehearsalRecord>();
+    public DbSet<RehearsalRollbackDecisionPoint> RehearsalRollbackDecisionPoints => Set<RehearsalRollbackDecisionPoint>();
+    public DbSet<ChangeWindow> ChangeWindows => Set<ChangeWindow>();
+    public DbSet<ChangeWindowRunbookStep> ChangeWindowRunbookSteps => Set<ChangeWindowRunbookStep>();
+    public DbSet<ChangeWindowApproval> ChangeWindowApprovals => Set<ChangeWindowApproval>();
+    public DbSet<CutoverJournalEntry> CutoverJournalEntries => Set<CutoverJournalEntry>();
+    public DbSet<ChangeValidation> ChangeValidations => Set<ChangeValidation>();
+    public DbSet<ChangeValidationSignoff> ChangeValidationSignoffs => Set<ChangeValidationSignoff>();
+    public DbSet<ReadinessException> ReadinessExceptions => Set<ReadinessException>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -115,6 +128,7 @@ public class DBTrackerDbContext : IdentityDbContext<ApplicationUser>
             entity.HasIndex(e => e.OwnerTeamId);
             entity.HasIndex(e => e.Region);
             entity.HasIndex(e => e.Cluster);
+            entity.HasIndex(e => e.Criticality);
         });
 
         modelBuilder.Entity<BackupRecord>(entity =>
@@ -779,6 +793,219 @@ public class DBTrackerDbContext : IdentityDbContext<ApplicationUser>
                 .OnDelete(DeleteBehavior.Cascade);
 
             entity.HasIndex(e => e.MigrationCampaignId);
+        });
+
+        // Epic 20 (D11-D15).
+        modelBuilder.Entity<RehearsalRecord>(entity =>
+        {
+            entity.Property(e => e.SourceLabel).HasMaxLength(300);
+            entity.Property(e => e.TargetLabel).HasMaxLength(300);
+            entity.Property(e => e.RepresentativeDatasetDescription).HasMaxLength(1000);
+            entity.Property(e => e.PerformedBy).HasMaxLength(200);
+            entity.Property(e => e.CorrectnessCheckNotes).HasMaxLength(2000);
+            entity.Property(e => e.PerformanceComparisonNotes).HasMaxLength(2000);
+            entity.Property(e => e.PrerequisitesText).HasMaxLength(2000);
+            entity.Property(e => e.RecoveryKeyDependenciesText).HasMaxLength(2000);
+            entity.Property(e => e.PostCutoverWriteReconciliationPlan).HasMaxLength(2000);
+            entity.Property(e => e.RecordedBy).HasMaxLength(320);
+
+            entity.HasOne(e => e.MigrationCampaign)
+                .WithMany()
+                .HasForeignKey(e => e.MigrationCampaignId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // NoAction, not Cascade/SetNull: DatabaseInstance already cascades to this table directly
+            // and to PathAssessment, which this FK also points at — the same "second cascade path"
+            // shape already resolved this way for ReadinessChecklist.PathAssessmentId.
+            entity.HasOne(e => e.DatabaseInstance)
+                .WithMany()
+                .HasForeignKey(e => e.DatabaseInstanceId)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            entity.HasOne(e => e.PathAssessment)
+                .WithMany()
+                .HasForeignKey(e => e.PathAssessmentId)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            // NoAction, not SetNull: same shape as RestoreEvent.LinkedBackupRecordId — a restore
+            // event referenced by a rehearsal is never deleted on its own, only alongside its whole
+            // instance, which already cascades RestoreEvents away.
+            entity.HasOne(e => e.LinkedRestoreEvent)
+                .WithMany()
+                .HasForeignKey(e => e.LinkedRestoreEventId)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            entity.HasIndex(e => new { e.DatabaseInstanceId, e.PerformedAtUtc });
+            entity.HasIndex(e => e.MigrationCampaignId);
+        });
+
+        modelBuilder.Entity<RehearsalRollbackDecisionPoint>(entity =>
+        {
+            entity.Property(e => e.TriggerCondition).HasMaxLength(500);
+            entity.Property(e => e.Decision).HasMaxLength(1000);
+
+            entity.HasOne(e => e.RehearsalRecord)
+                .WithMany(r => r.RollbackDecisionPoints)
+                .HasForeignKey(e => e.RehearsalRecordId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(e => e.RehearsalRecordId);
+        });
+
+        modelBuilder.Entity<ChangeWindow>(entity =>
+        {
+            entity.Property(e => e.Title).HasMaxLength(300);
+            entity.Property(e => e.TimeZoneLabel).HasMaxLength(100);
+            entity.Property(e => e.RunbookNotes).HasMaxLength(2000);
+            entity.Property(e => e.CreatedBy).HasMaxLength(320);
+
+            entity.HasOne(e => e.MigrationCampaign)
+                .WithMany()
+                .HasForeignKey(e => e.MigrationCampaignId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(e => e.CommunicationOwnerTeam)
+                .WithMany()
+                .HasForeignKey(e => e.CommunicationOwnerTeamId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            // NoAction: ReadinessException is also reachable from MigrationCampaign/DatabaseInstance
+            // via its generic TargetType/TargetId (no FK, so no cascade path there), but this is a
+            // direct FK from ChangeWindow — Restrict/NoAction avoids any future cycle if a cascade
+            // path is ever added between ChangeWindow and ReadinessException's own ancestry.
+            entity.HasOne(e => e.EmergencyException)
+                .WithMany()
+                .HasForeignKey(e => e.EmergencyExceptionId)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            entity.HasIndex(e => e.MigrationCampaignId);
+            entity.HasIndex(e => e.PlannedStartUtc);
+        });
+
+        modelBuilder.Entity<ChangeWindowRunbookStep>(entity =>
+        {
+            entity.Property(e => e.Description).HasMaxLength(500);
+
+            entity.HasOne(e => e.ChangeWindow)
+                .WithMany(w => w.RunbookSteps)
+                .HasForeignKey(e => e.ChangeWindowId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(e => e.ChangeWindowId);
+        });
+
+        modelBuilder.Entity<ChangeWindowApproval>(entity =>
+        {
+            entity.Property(e => e.RequiredScope).HasMaxLength(200);
+            entity.Property(e => e.ApproverName).HasMaxLength(320);
+            entity.Property(e => e.ApproverUserId).HasMaxLength(450);
+            entity.Property(e => e.Notes).HasMaxLength(1000);
+
+            entity.HasOne(e => e.ChangeWindow)
+                .WithMany(w => w.Approvals)
+                .HasForeignKey(e => e.ChangeWindowId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(e => e.ChangeWindowId);
+        });
+
+        modelBuilder.Entity<CutoverJournalEntry>(entity =>
+        {
+            entity.Property(e => e.Description).HasMaxLength(1000);
+            entity.Property(e => e.TrafficOrWriteStateNote).HasMaxLength(1000);
+            entity.Property(e => e.RecordedBy).HasMaxLength(320);
+
+            entity.HasOne(e => e.ChangeWindow)
+                .WithMany(w => w.JournalEntries)
+                .HasForeignKey(e => e.ChangeWindowId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(e => new { e.ChangeWindowId, e.TimestampUtc });
+        });
+
+        modelBuilder.Entity<ChangeValidation>(entity =>
+        {
+            entity.Property(e => e.ObservedTargetBuildText).HasMaxLength(200);
+            entity.Property(e => e.ObservedCompatibilityLevel).HasMaxLength(100);
+            entity.Property(e => e.ApplicationTestsNotes).HasMaxLength(2000);
+            entity.Property(e => e.IntegrityCheckNotes).HasMaxLength(2000);
+            entity.Property(e => e.PerformanceComparisonNotes).HasMaxLength(2000);
+            entity.Property(e => e.RecordedBy).HasMaxLength(320);
+
+            entity.HasOne(e => e.MigrationCampaign)
+                .WithMany()
+                .HasForeignKey(e => e.MigrationCampaignId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // NoAction: same "second cascade path from DatabaseInstance" shape as RehearsalRecord above.
+            entity.HasOne(e => e.DatabaseInstance)
+                .WithMany()
+                .HasForeignKey(e => e.DatabaseInstanceId)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            entity.HasOne(e => e.LinkedBackupRecord)
+                .WithMany()
+                .HasForeignKey(e => e.LinkedBackupRecordId)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            entity.HasOne(e => e.LinkedRestoreEvent)
+                .WithMany()
+                .HasForeignKey(e => e.LinkedRestoreEventId)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            entity.HasIndex(e => new { e.DatabaseInstanceId, e.RecordedAtUtc });
+            entity.HasIndex(e => e.MigrationCampaignId);
+        });
+
+        modelBuilder.Entity<ChangeValidationSignoff>(entity =>
+        {
+            entity.Property(e => e.ReviewerScope).HasMaxLength(200);
+            entity.Property(e => e.ReviewerName).HasMaxLength(320);
+            entity.Property(e => e.Notes).HasMaxLength(1000);
+
+            entity.HasOne(e => e.ChangeValidation)
+                .WithMany(v => v.Signoffs)
+                .HasForeignKey(e => e.ChangeValidationId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(e => e.ChangeValidationId);
+        });
+
+        modelBuilder.Entity<ReadinessException>(entity =>
+        {
+            entity.Property(e => e.TargetType).HasMaxLength(100).IsRequired();
+            entity.Property(e => e.WaivedCheckReference).HasMaxLength(500);
+            entity.Property(e => e.Reason).HasMaxLength(2000);
+            entity.Property(e => e.CompensatingControls).HasMaxLength(2000);
+            entity.Property(e => e.AccountableOwnerName).HasMaxLength(320);
+            entity.Property(e => e.PreparedByUserId).HasMaxLength(450);
+            entity.Property(e => e.PreparedByUserName).HasMaxLength(320);
+            entity.Property(e => e.PermittedApproverRole).HasMaxLength(100);
+            entity.Property(e => e.ApprovedByUserId).HasMaxLength(450);
+            entity.Property(e => e.ApprovedByUserName).HasMaxLength(320);
+            entity.Property(e => e.DecisionNotes).HasMaxLength(1000);
+            entity.Property(e => e.EvidenceUrl).HasMaxLength(500);
+            entity.Property(e => e.EvidenceNotes).HasMaxLength(2000);
+            entity.Property(e => e.RevokedBy).HasMaxLength(320);
+            entity.Property(e => e.RevokedReason).HasMaxLength(1000);
+            entity.Property(e => e.CreatedBy).HasMaxLength(320);
+
+            entity.HasOne(e => e.AccountableOwnerTeam)
+                .WithMany()
+                .HasForeignKey(e => e.AccountableOwnerTeamId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            // Restrict, not Cascade: a self-referencing FK must not cascade-delete (SQL Server
+            // rejects a self-referencing cascade path outright), and there is no delete feature for
+            // exceptions in this app anyway — renewal history is preserved by construction.
+            entity.HasOne(e => e.RenewalOfException)
+                .WithMany()
+                .HasForeignKey(e => e.RenewalOfExceptionId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(e => new { e.TargetType, e.TargetId });
+            entity.HasIndex(e => e.Status);
+            entity.HasIndex(e => e.ExpiresAtUtc);
         });
     }
 }

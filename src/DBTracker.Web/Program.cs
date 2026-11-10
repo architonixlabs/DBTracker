@@ -1,5 +1,6 @@
 using DBTracker.Infrastructure;
 using DBTracker.Infrastructure.Audit;
+using DBTracker.Infrastructure.ChangeManagement;
 using DBTracker.Infrastructure.Diagnostics;
 using DBTracker.Infrastructure.Identity;
 using DBTracker.Infrastructure.Lifecycle;
@@ -83,7 +84,17 @@ builder.Services.AddHostedService<SupportRunwayCheckHostedService>();
 builder.Services.AddScoped<DependencyService>();
 builder.Services.AddScoped<PathAssessmentService>();
 builder.Services.AddScoped<ReadinessChecklistService>();
+builder.Services.AddScoped<CampaignCompletionGateService>();
 builder.Services.AddScoped<CampaignService>();
+
+// Epic 20 (D11-D15): rehearsal/recovery evidence, scheduled change windows and cutover journal,
+// post-change validation, the generic D14 exception/waiver mechanism, and the lifecycle workspace.
+builder.Services.AddScoped<RehearsalService>();
+builder.Services.AddScoped<ChangeWindowService>();
+builder.Services.AddScoped<ChangeValidationService>();
+builder.Services.AddScoped<ReadinessExceptionService>();
+builder.Services.AddHostedService<ReadinessExceptionExpiryCheckHostedService>();
+builder.Services.AddScoped<DBTracker.Infrastructure.Lifecycle.LifecycleWorkspaceService>();
 
 // Process-lifetime record of each background worker's last/next run (U15 setup/diagnostics page).
 builder.Services.AddSingleton<WorkerHeartbeatStore>();

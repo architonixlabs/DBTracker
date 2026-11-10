@@ -1,0 +1,252 @@
+@page "/campaigns/{Id:int}/validation"
+@attribute [Authorize(Roles = Roles.CanEditPolicy)]
+@using DBTracker.Core.Entities
+@using DBTracker.Core.Enums
+@using DBTracker.Core.Services
+@using DBTracker.Infrastructure.ChangeManagement
+@using DBTracker.Infrastructure.Identity
+@using DBTracker.Infrastructure.MigrationPlanning
+@using Microsoft.AspNetCore.Components.Authorization
+@inject CampaignService Campaigns
+@inject ChangeValidationService Validations
+@inject CampaignCompletionGateService CompletionGate
+@inject AuthenticationStateProvider AuthProvider
+@inject DBTracker.Web.Services.ToastService Toasts
+
+<PageTitle>Validation · @(_campaign?.Name ?? "Campaign") · DBTracker</PageTitle>
+
+@if (!_loaded)
+{
+    <div class="spinner-ring"></div>
+}
+else if (_campaign is null)
+{
+    <div class="dbt-card" style="max-width:600px;">
+        <div class="empty-state py-4"><i class="bi bi-question-diamond"></i> Campaign #@Id doesn't exist.</div>
+        <a class="btn btn-outline-secondary" href="/campaigns">Back to campaigns</a>
+    </div>
+}
+else
+{
+    <div class="app-topbar">
+        <div>
+            <div class="eyebrow">Epic 20 (D13)</div>
+            <h1>Post-change validation</h1>
+            <div class="subtitle">
+                @_campaign.Name · <a href="/campaigns/@Id">Back to campaign</a> ·
+                A Version text edit alone never completes a change — completion requires the evidence below, every required sign-off, and current rehearsal evidence.
+            </div>
+        </div>
+    </div>
+
+    @if (_gate is not null)
+    {
+        <div class="dbt-card mb-3" data-testid="validation-gate-banner" style="border-color:@(_gate.CanComplete ? "var(--dbt-ontrack)" : "var(--dbt-overdue)");">
+            @if (_gate.CanComplete)
+            {
+                <strong style="color:var(--dbt-ontrack);">Ready to complete.</strong>
+            }
+            else
+            {
+                <strong style="color:var(--dbt-overdue);">Not ready to complete:</strong>
+                <ul class="small mb-0" data-testid="validation-gate-reasons">
+                    @foreach (var r in _gate.BlockingReasons)
+                    {
+                        <li>@r</li>
+                    }
+                </ul>
+            }
+        </div>
+    }
+
+    <div class="row g-3">
+        <div class="col-lg-6">
+            <div class="dbt-card">
+                <h2 class="h6 text-muted text-uppercase mb-3">Record validation</h2>
+                <div class="mb-2">
+                    <select class="form-select form-select-sm" @bind="_instanceId" data-testid="validation-instance-select">
+                        <option value="0">Choose instance…</option>
+                        @foreach (var link in _campaign.InstanceLinks)
+                        {
+                            <option value="@link.DatabaseInstanceId">@(link.DatabaseInstance?.Name ?? $"#{link.DatabaseInstanceId}")</option>
+                        }
+                    </select>
+                </div>
+                <div class="row g-2 mb-2">
+                    <div class="col-6"><input class="form-control form-control-sm" placeholder="Observed target build" @bind="_observedBuild" @bind:event="oninput" /></div>
+                    <div class="col-6"><input class="form-control form-control-sm" placeholder="Observed compatibility level" @bind="_observedCompat" @bind:event="oninput" /></div>
+                </div>
+                <div class="row g-2 mb-2">
+                    <div class="col-6">
+                        <label class="form-label small">Application tests</label>
+                        <select class="form-select form-select-sm" @bind="_appTests" data-testid="app-tests-outcome">
+                            @foreach (var o in Enum.GetValues<EvidenceCheckOutcome>())
+                            {
+                                <option value="@o">@o</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label small">Integrity checks</label>
+                        <select class="form-select form-select-sm" @bind="_integrity" data-testid="integrity-outcome">
+                            @foreach (var o in Enum.GetValues<EvidenceCheckOutcome>())
+                            {
+                                <option value="@o">@o</option>
+                            }
+                        </select>
+                    </div>
+                </div>
+                <div class="mb-2"><input class="form-control form-control-sm" placeholder="Performance comparison notes" @bind="_perfNotes" @bind:event="oninput" /></div>
+                <div class="row g-2 mb-2">
+                    <div class="col-6">
+                        <label class="form-label small">Jobs/permissions</label>
+                        <select class="form-select form-select-sm" @bind="_jobsPermissions" data-testid="jobs-permissions-outcome">
+                            @foreach (var o in Enum.GetValues<EvidenceCheckOutcome>())
+                            {
+                                <option value="@o">@o</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label small">HA/replication state</label>
+                        <select class="form-select form-select-sm" @bind="_haState" data-testid="ha-state-outcome">
+                            @foreach (var o in Enum.GetValues<EvidenceCheckOutcome>())
+                            {
+                                <option value="@o">@o</option>
+                            }
+                        </select>
+                    </div>
+                </div>
+                <div class="mb-2">
+                    <label class="form-label small">New successful backup/restore evidence</label>
+                    <select class="form-select form-select-sm" @bind="_backupRestoreEvidence" data-testid="backup-restore-evidence-outcome">
+                        @foreach (var o in Enum.GetValues<EvidenceCheckOutcome>())
+                        {
+                            <option value="@o">@o</option>
+                        }
+                    </select>
+                </div>
+                <div class="row g-2 mb-2">
+                    <div class="col-6">
+                        <label class="form-label small">Rollback retention deadline</label>
+                        <input type="date" class="form-control form-control-sm" @bind="_rollbackRetentionDeadline" />
+                    </div>
+                </div>
+                <button class="btn btn-primary btn-sm" @onclick="SaveValidation" disabled="@(_instanceId == 0)" data-testid="record-validation-button">Record validation</button>
+            </div>
+        </div>
+
+        <div class="col-lg-6">
+            <div class="dbt-card">
+                <h2 class="h6 text-muted text-uppercase mb-3">Recorded validations &amp; sign-offs</h2>
+                @if (_validations.Count == 0)
+                {
+                    <div class="empty-state py-3"><i class="bi bi-clipboard-check"></i> None recorded yet.</div>
+                }
+                else
+                {
+                    @foreach (var v in _validations)
+                    {
+                        <div class="mb-2 pb-2" style="border-bottom:1px solid var(--dbt-line);" data-testid="validation-row">
+                            <strong class="small">@(v.DatabaseInstance?.Name ?? $"#{v.DatabaseInstanceId}")</strong>
+                            <span class="small text-muted"> — build @v.ObservedTargetBuildText, @v.RecordedAtUtc.ToString("yyyy-MM-dd")</span>
+                            <div class="small">App tests: @v.ApplicationTestsOutcome · Integrity: @v.IntegrityCheckOutcome · Backup/restore evidence: @v.NewBackupRestoreEvidenceOutcome</div>
+                            @foreach (var s in v.Signoffs)
+                            {
+                                <div class="small" data-testid="signoff-row">@s.ReviewerScope: @s.Outcome by @s.ReviewerName</div>
+                            }
+                            <div class="d-flex gap-2 mt-1">
+                                <select class="form-select form-select-sm" @bind="_signoffScope">
+                                    <option value="DBA">DBA</option>
+                                    <option value="Application owner">Application owner</option>
+                                    <option value="Security">Security</option>
+                                </select>
+                                <select class="form-select form-select-sm" @bind="_signoffOutcome">
+                                    @foreach (var o in Enum.GetValues<SignoffOutcome>())
+                                    {
+                                        <option value="@o">@o</option>
+                                    }
+                                </select>
+                                <input class="form-control form-control-sm" placeholder="Reviewer name" @bind="_signoffReviewer" @bind:event="oninput" />
+                                <button class="btn btn-outline-secondary btn-sm" @onclick="() => AddSignoff(v.Id)" disabled="@string.IsNullOrWhiteSpace(_signoffReviewer)" data-testid="add-signoff-button">Sign off</button>
+                            </div>
+                        </div>
+                    }
+                }
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    private MigrationCampaign? _campaign;
+    private List<ChangeValidation> _validations = new();
+    private CampaignCompletionGateView? _gate;
+    private bool _loaded;
+    private string? _userName;
+
+    private int _instanceId;
+    private string _observedBuild = "", _observedCompat = "", _perfNotes = "";
+    private EvidenceCheckOutcome _appTests = EvidenceCheckOutcome.NotPerformed;
+    private EvidenceCheckOutcome _integrity = EvidenceCheckOutcome.NotPerformed;
+    private EvidenceCheckOutcome _jobsPermissions = EvidenceCheckOutcome.NotPerformed;
+    private EvidenceCheckOutcome _haState = EvidenceCheckOutcome.NotPerformed;
+    private EvidenceCheckOutcome _backupRestoreEvidence = EvidenceCheckOutcome.NotPerformed;
+    private DateTime? _rollbackRetentionDeadline;
+
+    private string _signoffScope = "DBA", _signoffReviewer = "";
+    private SignoffOutcome _signoffOutcome = SignoffOutcome.Approved;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var state = await AuthProvider.GetAuthenticationStateAsync();
+        _userName = state.User.Identity?.Name ?? "unknown";
+        await Load();
+        _loaded = true;
+    }
+
+    private async Task Load()
+    {
+        _campaign = await Campaigns.GetAsync(Id);
+        _validations = await Validations.ListForCampaignAsync(Id);
+        _gate = await CompletionGate.EvaluateAsync(Id);
+    }
+
+    private async Task SaveValidation()
+    {
+        var validation = new ChangeValidation
+        {
+            MigrationCampaignId = Id,
+            DatabaseInstanceId = _instanceId,
+            ObservedTargetBuildText = _observedBuild,
+            ObservedCompatibilityLevel = _observedCompat,
+            ApplicationTestsOutcome = _appTests,
+            IntegrityCheckOutcome = _integrity,
+            PerformanceComparisonNotes = _perfNotes,
+            JobsPermissionsOutcome = _jobsPermissions,
+            HaReplicationStateOutcome = _haState,
+            NewBackupRestoreEvidenceOutcome = _backupRestoreEvidence,
+            ValidationTimeUtc = DateTime.UtcNow,
+            RollbackRetentionDeadlineUtc = _rollbackRetentionDeadline
+        };
+        await Validations.RecordAsync(validation, _userName ?? "unknown");
+        Toasts.Success("Validation recorded.");
+        _observedBuild = _observedCompat = _perfNotes = "";
+        await Load();
+    }
+
+    private async Task AddSignoff(int validationId)
+    {
+        await Validations.AddSignoffAsync(validationId, new ChangeValidationSignoff
+        {
+            ReviewerScope = _signoffScope,
+            ReviewerName = _signoffReviewer,
+            Outcome = _signoffOutcome
+        }, _userName ?? "unknown");
+        Toasts.Success("Sign-off recorded.");
+        _signoffReviewer = "";
+        await Load();
+    }
+}

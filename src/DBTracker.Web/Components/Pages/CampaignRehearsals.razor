@@ -1,0 +1,274 @@
+@page "/campaigns/{Id:int}/rehearsals"
+@attribute [Authorize(Roles = Roles.CanEditPolicy)]
+@using DBTracker.Core.Entities
+@using DBTracker.Core.Enums
+@using DBTracker.Core.Services
+@using DBTracker.Infrastructure.ChangeManagement
+@using DBTracker.Infrastructure.Identity
+@using DBTracker.Infrastructure.MigrationPlanning
+@using Microsoft.AspNetCore.Components.Authorization
+@inject CampaignService Campaigns
+@inject RehearsalService Rehearsals
+@inject AuthenticationStateProvider AuthProvider
+@inject DBTracker.Web.Services.ToastService Toasts
+
+<PageTitle>Rehearsals · @(_campaign?.Name ?? "Campaign") · DBTracker</PageTitle>
+
+@if (!_loaded)
+{
+    <div class="spinner-ring"></div>
+}
+else if (_campaign is null)
+{
+    <div class="dbt-card" style="max-width:600px;">
+        <div class="empty-state py-4"><i class="bi bi-question-diamond"></i> Campaign #@Id doesn't exist.</div>
+        <a class="btn btn-outline-secondary" href="/campaigns">Back to campaigns</a>
+    </div>
+}
+else
+{
+    <div class="app-topbar">
+        <div>
+            <div class="eyebrow">Epic 20 (D11)</div>
+            <h1>Rehearsal, recovery &amp; rollback evidence</h1>
+            <div class="subtitle">
+                @_campaign.Name · <a href="/campaigns/@Id">Back to campaign</a> ·
+                Named source/target, a representative dataset, measured RPO/RTO vs. target, and an explicit plan for post-cutover writes — never implying a newer-format backup always restores to an older engine.
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-3">
+        <div class="col-lg-5">
+            <div class="dbt-card">
+                <h2 class="h6 text-muted text-uppercase mb-3">Record a rehearsal</h2>
+                <div class="mb-2">
+                    <select class="form-select form-select-sm" @bind="_instanceId" data-testid="rehearsal-instance-select">
+                        <option value="0">Choose instance…</option>
+                        @foreach (var link in _campaign.InstanceLinks)
+                        {
+                            <option value="@link.DatabaseInstanceId">@(link.DatabaseInstance?.Name ?? $"#{link.DatabaseInstanceId}")</option>
+                        }
+                    </select>
+                </div>
+                <div class="row g-2 mb-2">
+                    <div class="col-6"><input class="form-control form-control-sm" placeholder="Source label" @bind="_sourceLabel" @bind:event="oninput" /></div>
+                    <div class="col-6"><input class="form-control form-control-sm" placeholder="Target label" @bind="_targetLabel" @bind:event="oninput" /></div>
+                </div>
+                <div class="mb-2"><input class="form-control form-control-sm" placeholder="Representative dataset description" @bind="_dataset" @bind:event="oninput" /></div>
+                <div class="row g-2 mb-2">
+                    <div class="col-6">
+                        <select class="form-select form-select-sm" @bind="_method">
+                            @foreach (var m in Enum.GetValues<MigrationMethod>())
+                            {
+                                <option value="@m">@m</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-6"><input type="number" class="form-control form-control-sm" placeholder="Duration (minutes)" @bind="_durationMinutes" /></div>
+                </div>
+                <div class="row g-2 mb-2">
+                    <div class="col-6">
+                        <label class="form-label small">Backup-restore outcome</label>
+                        <select class="form-select form-select-sm" @bind="_backupRestoreOutcome" data-testid="backup-restore-outcome">
+                            @foreach (var o in Enum.GetValues<EvidenceCheckOutcome>())
+                            {
+                                <option value="@o">@o</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label small">Correctness outcome</label>
+                        <select class="form-select form-select-sm" @bind="_correctnessOutcome" data-testid="correctness-outcome">
+                            @foreach (var o in Enum.GetValues<EvidenceCheckOutcome>())
+                            {
+                                <option value="@o">@o</option>
+                            }
+                        </select>
+                    </div>
+                </div>
+                <div class="mb-2"><input class="form-control form-control-sm" placeholder="Correctness check notes" @bind="_correctnessNotes" @bind:event="oninput" /></div>
+                <div class="row g-2 mb-2">
+                    <div class="col-6">
+                        <label class="form-label small">Performance outcome</label>
+                        <select class="form-select form-select-sm" @bind="_performanceOutcome" data-testid="performance-outcome">
+                            @foreach (var o in Enum.GetValues<EvidenceCheckOutcome>())
+                            {
+                                <option value="@o">@o</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-6"><input class="form-control form-control-sm" placeholder="Performance comparison notes" @bind="_performanceNotes" @bind:event="oninput" /></div>
+                </div>
+                <div class="row g-2 mb-2">
+                    <div class="col-3"><input type="number" class="form-control form-control-sm" placeholder="Target RPO (min)" @bind="_targetRpo" /></div>
+                    <div class="col-3"><input type="number" class="form-control form-control-sm" placeholder="Target RTO (min)" @bind="_targetRto" /></div>
+                    <div class="col-3"><input type="number" class="form-control form-control-sm" placeholder="Measured RPO (min)" @bind="_measuredRpo" /></div>
+                    <div class="col-3"><input type="number" class="form-control form-control-sm" placeholder="Measured RTO (min)" @bind="_measuredRto" /></div>
+                </div>
+                <div class="mb-2"><input class="form-control form-control-sm" placeholder="Prerequisites" @bind="_prerequisites" @bind:event="oninput" /></div>
+                <div class="mb-2"><input class="form-control form-control-sm" placeholder="Recovery/key dependencies (encryption keys, certs…)" @bind="_recoveryDeps" @bind:event="oninput" /></div>
+                <div class="row g-2 mb-2">
+                    <div class="col-5">
+                        <label class="form-label small">Post-cutover writes</label>
+                        <select class="form-select form-select-sm" @bind="_writeDisposition" data-testid="write-disposition">
+                            @foreach (var d in Enum.GetValues<PostCutoverWriteDisposition>())
+                            {
+                                <option value="@d">@d</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-7"><input class="form-control form-control-sm" placeholder="Reconciliation plan (required unless N/A)" @bind="_reconciliationPlan" @bind:event="oninput" /></div>
+                </div>
+                <div class="mb-2"><input class="form-control form-control-sm" placeholder="Performed by" @bind="_performedBy" @bind:event="oninput" /></div>
+
+                <p class="small text-muted mb-1">Rollback decision points:</p>
+                @for (var i = 0; i < _decisionPoints.Count; i++)
+                {
+                    var dp = _decisionPoints[i];
+                    <div class="small mb-1">@(i + 1). @dp.TriggerCondition → @dp.Decision @(dp.IsPointOfNoReturn ? "(point of no return)" : "")</div>
+                }
+                <div class="row g-2 mb-2">
+                    <div class="col-5"><input class="form-control form-control-sm" placeholder="Trigger condition" @bind="_dpTrigger" @bind:event="oninput" /></div>
+                    <div class="col-5"><input class="form-control form-control-sm" placeholder="Decision" @bind="_dpDecision" @bind:event="oninput" /></div>
+                    <div class="col-2 form-check pt-2">
+                        <input class="form-check-input" type="checkbox" @bind="_dpIsPointOfNoReturn" id="dp-ponr" />
+                        <label class="form-check-label small" for="dp-ponr">PONR</label>
+                    </div>
+                </div>
+                <button class="btn btn-outline-secondary btn-sm mb-2" @onclick="AddDecisionPoint" disabled="@(string.IsNullOrWhiteSpace(_dpTrigger))">Add decision point</button>
+                <br />
+                <button class="btn btn-primary btn-sm" @onclick="SaveRehearsal" disabled="@(_instanceId == 0 || string.IsNullOrWhiteSpace(_sourceLabel) || string.IsNullOrWhiteSpace(_targetLabel))" data-testid="record-rehearsal-button">Record rehearsal</button>
+            </div>
+        </div>
+
+        <div class="col-lg-7">
+            @if (_rehearsals.Count == 0)
+            {
+                <div class="empty-state"><i class="bi bi-arrow-repeat"></i> No rehearsals recorded yet for this campaign — every linked instance's readiness shows as Missing until one is.</div>
+            }
+            else
+            {
+                <table class="table table-sm dbt-table" data-testid="rehearsal-table">
+                    <thead><tr><th>Instance</th><th>Source → target</th><th>Performed</th><th>Readiness</th></tr></thead>
+                    <tbody>
+                        @foreach (var r in _rehearsals)
+                        {
+                            var readiness = RehearsalEvidenceEvaluator.Evaluate(r, DateTime.UtcNow);
+                            <tr data-testid="rehearsal-row">
+                                <td class="small">@(r.DatabaseInstance?.Name ?? $"#{r.DatabaseInstanceId}")</td>
+                                <td class="small">@r.SourceLabel → @r.TargetLabel</td>
+                                <td class="small">@r.PerformedAtUtc.ToString("yyyy-MM-dd")</td>
+                                <td class="small"><span class="badge-health dot @ReadinessCss(readiness.Status)" data-testid="rehearsal-readiness">@readiness.Status</span></td>
+                            </tr>
+                            <tr><td colspan="4" class="small text-muted">@readiness.Reason</td></tr>
+                        }
+                    </tbody>
+                </table>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    private MigrationCampaign? _campaign;
+    private List<RehearsalRecord> _rehearsals = new();
+    private bool _loaded;
+    private string? _userName;
+
+    private int _instanceId;
+    private string _sourceLabel = "", _targetLabel = "", _dataset = "", _performedBy = "";
+    private MigrationMethod _method = MigrationMethod.InPlaceUpgrade;
+    private double? _durationMinutes, _targetRpo, _targetRto, _measuredRpo, _measuredRto;
+    private EvidenceCheckOutcome _backupRestoreOutcome = EvidenceCheckOutcome.NotPerformed;
+    private EvidenceCheckOutcome _correctnessOutcome = EvidenceCheckOutcome.NotPerformed;
+    private string _correctnessNotes = "";
+    private EvidenceCheckOutcome _performanceOutcome = EvidenceCheckOutcome.NotPerformed;
+    private string _performanceNotes = "";
+    private string _prerequisites = "", _recoveryDeps = "";
+    private PostCutoverWriteDisposition _writeDisposition = PostCutoverWriteDisposition.NotApplicable;
+    private string _reconciliationPlan = "";
+
+    private readonly List<RehearsalRollbackDecisionPoint> _decisionPoints = new();
+    private string _dpTrigger = "", _dpDecision = "";
+    private bool _dpIsPointOfNoReturn;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var state = await AuthProvider.GetAuthenticationStateAsync();
+        _userName = state.User.Identity?.Name ?? "unknown";
+        await Load();
+        _loaded = true;
+    }
+
+    private async Task Load()
+    {
+        _campaign = await Campaigns.GetAsync(Id);
+        _rehearsals = await Rehearsals.ListForCampaignAsync(Id);
+    }
+
+    private void AddDecisionPoint()
+    {
+        _decisionPoints.Add(new RehearsalRollbackDecisionPoint
+        {
+            Order = _decisionPoints.Count + 1,
+            TriggerCondition = _dpTrigger,
+            Decision = _dpDecision,
+            IsPointOfNoReturn = _dpIsPointOfNoReturn
+        });
+        _dpTrigger = _dpDecision = "";
+        _dpIsPointOfNoReturn = false;
+    }
+
+    private async Task SaveRehearsal()
+    {
+        var rehearsal = new RehearsalRecord
+        {
+            MigrationCampaignId = Id,
+            DatabaseInstanceId = _instanceId,
+            SourceLabel = _sourceLabel,
+            TargetLabel = _targetLabel,
+            RepresentativeDatasetDescription = _dataset,
+            Method = _method,
+            PerformedAtUtc = DateTime.UtcNow,
+            PerformedBy = _performedBy,
+            DurationMinutes = _durationMinutes,
+            BackupRestoreOutcome = _backupRestoreOutcome,
+            CorrectnessCheckOutcome = _correctnessOutcome,
+            CorrectnessCheckNotes = _correctnessNotes,
+            PerformanceCheckOutcome = _performanceOutcome,
+            PerformanceComparisonNotes = _performanceNotes,
+            TargetRpoMinutes = _targetRpo,
+            TargetRtoMinutes = _targetRto,
+            MeasuredRpoMinutes = _measuredRpo,
+            MeasuredRtoMinutes = _measuredRto,
+            PrerequisitesText = _prerequisites,
+            RecoveryKeyDependenciesText = _recoveryDeps,
+            PostCutoverWriteDisposition = _writeDisposition,
+            PostCutoverWriteReconciliationPlan = _reconciliationPlan
+        };
+        foreach (var dp in _decisionPoints)
+        {
+            rehearsal.RollbackDecisionPoints.Add(dp);
+        }
+
+        await Rehearsals.RecordAsync(rehearsal, _userName ?? "unknown");
+        var readiness = RehearsalEvidenceEvaluator.Evaluate(rehearsal, DateTime.UtcNow);
+        Toasts.Success($"Rehearsal recorded — readiness: {readiness.Status}.");
+
+        _sourceLabel = _targetLabel = _dataset = _performedBy = _correctnessNotes = _performanceNotes = _prerequisites = _recoveryDeps = _reconciliationPlan = "";
+        _durationMinutes = _targetRpo = _targetRto = _measuredRpo = _measuredRto = null;
+        _decisionPoints.Clear();
+        await Load();
+    }
+
+    private static string ReadinessCss(RehearsalReadinessStatus status) => status switch
+    {
+        RehearsalReadinessStatus.Passed => "OnTrack",
+        RehearsalReadinessStatus.Failed => "Failed",
+        RehearsalReadinessStatus.Stale => "Overdue",
+        _ => "Overdue"
+    };
+}

@@ -5,9 +5,11 @@
 @using DBTracker.Core.Services
 @using DBTracker.Infrastructure.Identity
 @using DBTracker.Infrastructure.MigrationPlanning
+@using DBTracker.Infrastructure.ChangeManagement
 @using DBTracker.Infrastructure.Queries
 @using Microsoft.AspNetCore.Components.Authorization
 @inject CampaignService Campaigns
+@inject CampaignCompletionGateService CompletionGate
 @inject InstanceOverviewService OverviewService
 @inject AuthenticationStateProvider AuthProvider
 @inject DBTracker.Web.Services.ToastService Toasts
@@ -31,9 +33,40 @@ else
         <div>
             <div class="eyebrow">Migration campaign · Epic 19 (D10)</div>
             <h1>@_campaign.Name <span class="badge-health dot Overdue" data-testid="campaign-detail-state">@_campaign.State</span></h1>
-            <div class="subtitle">@_campaign.SourceLabel → @_campaign.TargetLabel · @_campaign.ChosenMethod · <a href="/campaigns">Back to campaigns</a></div>
+            <div class="subtitle">
+                @_campaign.SourceLabel → @_campaign.TargetLabel · @_campaign.ChosenMethod · <a href="/campaigns">Back to campaigns</a> ·
+                <a href="/campaigns/@Id/rehearsals">Rehearsals (D11)</a> ·
+                <a href="/campaigns/@Id/change-windows">Change windows (D12)</a> ·
+                <a href="/campaigns/@Id/validation">Validation (D13)</a> ·
+                <a href="/exceptions">Exceptions (D14)</a>
+            </div>
         </div>
     </div>
+
+    @if (_completionGate is not null)
+    {
+        <div class="dbt-card mb-3" data-testid="completion-gate-banner" style="border-color:@(_completionGate.CanComplete ? "var(--dbt-ontrack)" : "var(--dbt-overdue)");">
+            @if (_completionGate.CanComplete)
+            {
+                <strong style="color:var(--dbt-ontrack);"><i class="bi bi-check-circle"></i> Completion readiness: ready.</strong>
+                @if (_completionGate.UsedException)
+                {
+                    <span class="small"> — proceeding on an active D14 exception, not full evidence.</span>
+                }
+            }
+            else
+            {
+                <strong style="color:var(--dbt-overdue);"><i class="bi bi-exclamation-triangle"></i> Completion readiness: blocked.</strong>
+                <ul class="small mb-0">
+                    @foreach (var r in _completionGate.BlockingReasons)
+                    {
+                        <li>@r</li>
+                    }
+                </ul>
+                <span class="small text-muted">Resolve the evidence above, or record a scoped D14 exception, before this campaign can reach Completed.</span>
+            }
+        </div>
+    }
 
     <div class="row g-3">
         <div class="col-lg-6">
@@ -192,6 +225,7 @@ else
 
     private MigrationCampaign? _campaign;
     private List<DBTracker.Core.Services.InstanceListRow> _instances = new();
+    private CampaignCompletionGateView? _completionGate;
     private bool _loaded;
     private string? _userName;
 
@@ -224,6 +258,7 @@ else
             {
                 _nextState = next[0];
             }
+            _completionGate = await CompletionGate.EvaluateAsync(Id);
         }
     }
 

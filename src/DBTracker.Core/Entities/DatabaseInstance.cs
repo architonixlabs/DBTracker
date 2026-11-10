@@ -41,6 +41,9 @@ public class DatabaseInstance
     public InstanceRole Role { get; set; } = InstanceRole.Active;
     public EnvironmentTier Environment { get; set; } = EnvironmentTier.Production;
 
+    /// <summary>Business criticality (D15) — a distinct, explainable factor from EnvironmentTier; Unknown is the correct, non-blocking default, never inferred from Environment.</summary>
+    public InstanceCriticality Criticality { get; set; } = InstanceCriticality.Unknown;
+
     public string DatabaseIp { get; set; } = string.Empty;
     public string ServerIp { get; set; } = string.Empty;
 

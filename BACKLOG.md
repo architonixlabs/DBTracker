@@ -689,6 +689,63 @@ authenticated role already, same as the rest of the app, so no separate "my apps
   and a migration campaign comparing two alternatives, choosing one, transitioning state and recording
   an approval. Full suite: 454/454 (379 unit + 75 E2E). This completes Epic 19 (D07-D10) in full;
   Epics 20-22 (D11-D22) remain proposed and unimplemented.
+- 2026-11-10 — Built Epic 20 (D11-D15), the third epic of the DBA lifecycle roadmap. **D11** — a new
+  `RehearsalRecord` (+ `RehearsalRollbackDecisionPoint` children) attaches named source/target,
+  representative-dataset, method, duration, backup-restore/correctness/performance outcomes, target
+  vs. measured RPO/RTO, prerequisites, recovery/key dependencies, and a `PostCutoverWriteDisposition`
+  reconciliation plan to an instance/campaign pairing, with an optional link to an existing U11/U12
+  `RestoreEvent` rather than a duplicate evidence model; pure `RehearsalEvidenceEvaluator` computes
+  Missing/Stale/Failed/Passed and feeds D13's completion gate. **D12** — `ChangeWindow` (+
+  `ChangeWindowRunbookStep`/`ChangeWindowApproval`/`CutoverJournalEntry`) plans a timezone-labelled
+  future window with outage estimate, communication owner, required approval scopes, runbook steps,
+  and an append-only cutover journal; pure `ChangeWindowConflictDetector` checks overlap against
+  sibling windows and Epic 12's existing maintenance windows (reported, never silently treated as
+  safe); pure `ChangeWindowApprovalAuthorizer`/`ChangeWindowApprovalGate` enforce an explicit
+  role/scope check before a window advances past Planned, with a D14 emergency-exception bypass —
+  creating or editing a window never executes or notifies anything by itself. **D13** —
+  `ChangeValidation` (+ `ChangeValidationSignoff`) captures observed build/compatibility state
+  (reusing D01), application tests, integrity checks, a performance comparison, jobs/permissions,
+  HA/replication, and a new backup/restore-evidence requirement, plus before/after evidence and a
+  rollback-retention deadline; pure `ChangeCompletionGateEvaluator` requires every evidence field
+  Passed, both DBA and Application-owner sign-offs Approved, and current/passing D11 rehearsal
+  evidence — it never reads `DatabaseInstance.Version`, so a bare version-text edit cannot complete a
+  change by construction. Wired into `CampaignService.TransitionAsync`: reaching `Completed` now runs
+  the gate across every linked instance and refuses with the aggregated reasons unless an active,
+  campaign-scoped D14 exception exists. **D14** — a generic `ReadinessException` (TargetType +
+  TargetId + WaivedCheckReference, not hardcoded to one feature) records reason, compensating
+  controls, accountable owner, a separate preparer/approver where policy requires it, and an
+  expiry/review date; `IsVendorSupportCoverage` is always false — an internal waiver never changes
+  the underlying vendor facts (D02/D03) or clears real risk; pure `ReadinessExceptionEvaluator`
+  derives Active/Expired/Revoked/Rejected/PendingApproval live from status + expiry, so every gate
+  re-blocks the instant the clock runs out without depending on a sweep; a disabled-in-Testing
+  `ReadinessExceptionExpiryCheckHostedService` sends a one-time owner notice on expiry, and
+  revoke/renew preserves history via `RenewalOfExceptionId`. **D15** — a new `/lifecycle/workspace`
+  page + `LifecycleWorkspaceBuilder`/`LifecycleWorkspaceFilter`/`LifecycleWorkspaceSummary` and
+  `LifecycleReportBuilder` (pure) project one row per instance (cluster nodes counted, never expanded
+  into extra rows) with engine/branch, support phase, patch-baseline coverage, a new
+  `DatabaseInstance.Criticality` field (distinct from environment tier), owner, campaign state,
+  expiring-exception count, and explicit denominator/unknown-identity/unknown-support-phase counts;
+  the CSV export reads from the same `AllRows`/`MatchingRows` pair the page renders, so it can't drift
+  from what's shown. Found and fixed one real bug while building the change-window conflict preview:
+  `CampaignChangeWindows.razor`'s "Check conflicts" button computed the candidate window's UTC instant
+  with `_start.ToUniversalTime()` (converts the `datetime-local` value as if it were local time), while
+  the actual save path used `DateTime.SpecifyKind(_start, DateTimeKind.Utc)` (treats the typed value
+  as the literal UTC instant) — the two disagreed by the host machine's UTC offset, so a genuinely
+  overlapping second window could be previewed as "no conflict" and then actually collide on save;
+  fixed by making the preview use the same `SpecifyKind` interpretation as `CreateAsync`, caught by a
+  new E2E conflict-detection test. One new EF migration (`AddEpic20RehearsalChangeManagement`) for the
+  rehearsal/change-window/validation/exception/criticality tables, continuing the `NoAction`-on-shared-
+  parent-table pattern from Epics 18-19 for `RehearsalRecord`/`ChangeValidation`'s instance FKs and
+  `ReadinessException`'s self-referencing renewal FK. 78 new unit tests
+  (`RehearsalEvidenceEvaluatorTests`, `ChangeWindowConflictDetectorTests`,
+  `ChangeWindowApprovalAuthorizerTests`, `ChangeWindowApprovalGateTests`,
+  `ChangeCompletionGateEvaluatorTests`, `ReadinessExceptionEvaluatorTests`,
+  `ExceptionApprovalAuthorizerTests`, `LifecycleWorkspaceBuilderTests`, `LifecycleReportBuilderTests`)
+  and 5 new E2E tests (`Epic20RehearsalCutoverTests`) covering a failed rehearsal blocking campaign
+  completion, a detected change-window conflict, campaign completion blocked-then-allowed as evidence
+  accrues, creating then revoking/renewing a readiness exception, and the lifecycle workspace's
+  filtered/denominator-labelled/exported view. Full suite: 537/537 (457 unit + 80 E2E). This completes
+  Epic 20 (D11-D15) in full; Epics 21-22 (D16-D22) remain proposed and unimplemented.
 
 ## Out of scope (future)
 - Automated backup execution/orchestration (this tracks status, doesn't run backups)
@@ -1047,7 +1104,7 @@ A newer release alone does not make migration required. No automatic upgrade exe
 
 ### Epic 20 - Rehearsal, cutover, acceptance and exceptions
 
-- [ ] **2026-11-10 | D11 | NEW | P1 | M - Rehearsal, recovery and rollback evidence.**
+- [x] **2026-11-10 | D11 | NEW | P1 | M - Rehearsal, recovery and rollback evidence.**
   DBA/SRE/app-owner personas need a tested recovery route, not just a recent backup.
   **Acceptance:** attach rehearsal results for a named source/target and representative dataset,
   method, duration, backup restore, correctness/performance checks and rollback decision points.
@@ -1056,7 +1113,7 @@ A newer release alone does not make migration required. No automatic upgrade exe
   always restore to an older engine. Failed/missing rehearsal blocks normal readiness or requires
   a scoped D14 exception. Reuse U11/U12 restore evidence; depends on D08-D09, integrates with D16.
 
-- [ ] **2026-11-10 | D12 | NEW | P2 | L - Scheduled change windows and cutover journal.**
+- [x] **2026-11-10 | D12 | NEW | P2 | L - Scheduled change windows and cutover journal.**
   DBA/SRE/change-manager personas need coordinated work and clear stop conditions.
   **Acceptance:** plan future timezone-labelled windows, outage estimates, freeze/conflict checks,
   communication owners, approvals and runbook/checklist steps. Track externally performed actions,
@@ -1065,7 +1122,7 @@ A newer release alone does not make migration required. No automatic upgrade exe
   Integrate existing maintenance suppression without hiding health or lifecycle exposure. Depends
   on D10-D11/U19; no cutover or notifications are executed merely by creating a plan.
 
-- [ ] **2026-11-10 | D13 | NEW | P1 | M - Post-change validation and version history.**
+- [x] **2026-11-10 | D13 | NEW | P1 | M - Post-change validation and version history.**
   DBA/app-owner/auditor personas need proof that the service works on the intended target.
   **Acceptance:** capture observed target/node builds and compatibility state, application tests,
   integrity checks, representative performance comparison, jobs/permissions, HA/replication and a new
@@ -1074,7 +1131,7 @@ A newer release alone does not make migration required. No automatic upgrade exe
   validation time and rollback-retention deadline. A Version text edit alone cannot complete a change.
   Depends on D09-D11; uses U19 audit/U10 snapshots and supports documented D14 exceptions.
 
-- [ ] **2026-11-10 | D14 | NEW | P1 | M - Expiring support and readiness exceptions.**
+- [x] **2026-11-10 | D14 | NEW | P1 | M - Expiring support and readiness exceptions.**
   Security/change-manager/service-owner personas need explicit risk acceptance when work cannot finish.
   **Acceptance:** record affected assets, precise waived policy/gate, reason, compensating controls,
   accountable owner, permitted approver, evidence and expiry/review date. Distinguish an internal
@@ -1082,7 +1139,7 @@ A newer release alone does not make migration required. No automatic upgrade exe
   Expiry/revocation reopens action and alerts owners. Preserve rejection/renewal history and separate
   preparer/approver where required by policy. Supports D03/D05/D09-D13; uses U19 authorization/audit.
 
-- [ ] **2026-11-10 | D15 | NEW | P1 | M - DBA lifecycle workspace and planning reports.**
+- [x] **2026-11-10 | D15 | NEW | P1 | M - DBA lifecycle workspace and planning reports.**
   DBA/manager/auditor personas need a usable prioritized work list with evidence drill-down.
   **Acceptance:** filters for engine/branch, support phase, deadline horizon, coverage, unknown/stale
   identity, criticality, owner and campaign state; show affected deployments and hosted databases

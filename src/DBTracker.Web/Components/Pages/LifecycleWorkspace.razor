@@ -1,0 +1,189 @@
+@page "/lifecycle/workspace"
+@attribute [Authorize]
+@using DBTracker.Core.Enums
+@using DBTracker.Core.Services
+@using DBTracker.Infrastructure.Lifecycle
+@using Microsoft.AspNetCore.Components.Authorization
+@inject LifecycleWorkspaceService Workspace
+@inject IJSRuntime JS
+@inject DBTracker.Web.Services.ToastService Toasts
+
+<PageTitle>Lifecycle workspace · DBTracker</PageTitle>
+
+<div class="app-topbar">
+    <div>
+        <div class="eyebrow">Epic 20 (D15)</div>
+        <h1>DBA lifecycle workspace</h1>
+        <div class="subtitle">
+            One instance, one row — cluster nodes are counted, never double-counted as separate rows. Backup health is tracked
+            elsewhere and deliberately not blended in here; every view below shows its denominator and unknown counts.
+        </div>
+    </div>
+</div>
+
+@if (_view is null)
+{
+    <div class="spinner-ring"></div>
+}
+else
+{
+    <div class="dbt-card mb-3" data-testid="workspace-summary">
+        <span class="small">Denominator: <strong data-testid="workspace-denominator">@_view.Summary.Denominator</strong> non-archived instance(s) ·
+            Matching this filter: <strong data-testid="workspace-matching">@_view.Summary.MatchingCount</strong> ·
+            Unknown/stale identity: <strong data-testid="workspace-unknown-identity">@_view.Summary.UnknownIdentityCount</strong> ·
+            Unknown support phase: @_view.Summary.UnknownSupportPhaseCount ·
+            Oldest identity observation: @(_view.Summary.OldestObservedAtUtc?.ToString("yyyy-MM-dd") ?? "none recorded")</span>
+    </div>
+
+    <div class="filter-bar" style="flex-wrap:wrap;gap:10px;">
+        <select class="form-select form-select-sm" style="width:auto;" @bind="_engineFilter" @bind:after="Apply">
+            <option value="">Engine: any</option>
+            @foreach (var e in Enum.GetValues<DatabaseEngine>())
+            {
+                <option value="@e">@e</option>
+            }
+        </select>
+        <select class="form-select form-select-sm" style="width:auto;" @bind="_phaseFilter" @bind:after="Apply">
+            <option value="">Support phase: any</option>
+            @foreach (var p in Enum.GetValues<SupportPhase>())
+            {
+                <option value="@p">@p</option>
+            }
+        </select>
+        <select class="form-select form-select-sm" style="width:auto;" @bind="_coverageFilter" @bind:after="Apply">
+            <option value="">Coverage: any</option>
+            @foreach (var c in Enum.GetValues<LifecycleCoverageStatus>())
+            {
+                <option value="@c">@c</option>
+            }
+        </select>
+        <select class="form-select form-select-sm" style="width:auto;" @bind="_criticalityFilter" @bind:after="Apply">
+            <option value="">Criticality: any</option>
+            @foreach (var c in Enum.GetValues<InstanceCriticality>())
+            {
+                <option value="@c">@c</option>
+            }
+        </select>
+        <select class="form-select form-select-sm" style="width:auto;" @bind="_campaignStateFilter" @bind:after="Apply">
+            <option value="">Campaign state: any</option>
+            @foreach (var s in Enum.GetValues<CampaignState>())
+            {
+                <option value="@s">@s</option>
+            }
+        </select>
+        <input class="form-control form-control-sm" style="width:160px;" placeholder="Deadline within (days)" @bind="_deadlineWithinDays" @bind:after="Apply" data-testid="deadline-horizon-input" />
+        <div class="form-check">
+            <input class="form-check-input" type="checkbox" id="unknown-stale" @bind="_unknownOrStaleOnly" @bind:after="Apply" />
+            <label class="form-check-label small" for="unknown-stale">Unknown/stale identity only</label>
+        </div>
+        <button class="btn btn-outline-secondary btn-sm" @onclick="Export" data-testid="export-workspace-button">Export CSV (this filtered view)</button>
+    </div>
+
+    @if (_view.MatchingRows.Count == 0)
+    {
+        <div class="empty-state"><i class="bi bi-filter"></i> No instances match this filter.</div>
+    }
+    else
+    {
+        <div class="table-responsive" role="region" aria-label="Lifecycle workspace">
+            <table class="table table-sm dbt-table" data-testid="workspace-table">
+                <thead><tr><th>Instance</th><th>Engine/family</th><th>Support phase</th><th>Days to milestone</th><th>Coverage</th><th>Criticality</th><th>Owner</th><th>Cluster nodes</th><th>Campaign</th><th>Expiring exceptions</th></tr></thead>
+                <tbody>
+                    @foreach (var r in _view.MatchingRows)
+                    {
+                        <tr data-testid="workspace-row">
+                            <td class="small">@r.InstanceName @(r.IsIdentityUnknownOrStale ? "⚠" : "")</td>
+                            <td class="small">@r.Engine / @(r.IdentityFamily ?? "Unknown")</td>
+                            <td class="small">@r.SupportPhase</td>
+                            <td class="small">@(r.DaysToNextMilestone?.ToString() ?? "—")</td>
+                            <td class="small">@r.Coverage</td>
+                            <td class="small">@r.Criticality</td>
+                            <td class="small">@(r.OwnerTeamName ?? "—")</td>
+                            <td class="small">@r.ClusterNodeCount</td>
+                            <td class="small">@(r.LatestCampaignState?.ToString() ?? "—") @(r.IsBlockedOrLate ? "(blocked)" : "")</td>
+                            <td class="small">@r.ExpiringExceptionCount</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+
+    <div class="row g-3 mt-3">
+        <div class="col-lg-4">
+            <div class="dbt-card h-100">
+                <h2 class="h6 text-muted text-uppercase mb-2">Support runway</h2>
+                @foreach (var kv in _report!.SupportPhaseCounts.OrderByDescending(kv => kv.Value))
+                {
+                    <div class="small">@kv.Key: @kv.Value</div>
+                }
+            </div>
+        </div>
+        <div class="col-lg-4">
+            <div class="dbt-card h-100">
+                <h2 class="h6 text-muted text-uppercase mb-2">Patch-baseline coverage</h2>
+                @foreach (var kv in _report!.CoverageCounts.OrderByDescending(kv => kv.Value))
+                {
+                    <div class="small">@kv.Key: @kv.Value</div>
+                }
+            </div>
+        </div>
+        <div class="col-lg-4">
+            <div class="dbt-card h-100">
+                <h2 class="h6 text-muted text-uppercase mb-2">Expiring exceptions &amp; blocked migrations</h2>
+                <div class="small" data-testid="expiring-exceptions-count">Expiring exceptions: @_report!.ExpiringExceptionRows.Count instance(s)</div>
+                <div class="small" data-testid="blocked-migrations-count">Blocked migrations: @_report!.BlockedOrLateRows.Count instance(s)</div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private LifecycleWorkspaceView? _view;
+    private LifecycleReport? _report;
+
+    private string _engineFilter = "", _phaseFilter = "", _coverageFilter = "", _criticalityFilter = "", _campaignStateFilter = "", _deadlineWithinDays = "";
+    private bool _unknownOrStaleOnly;
+
+    protected override async Task OnInitializedAsync() => await Apply();
+
+    private LifecycleWorkspaceFilter BuildFilter() => new(
+        Engine: string.IsNullOrWhiteSpace(_engineFilter) ? null : Enum.Parse<DatabaseEngine>(_engineFilter),
+        SupportPhase: string.IsNullOrWhiteSpace(_phaseFilter) ? null : Enum.Parse<SupportPhase>(_phaseFilter),
+        DeadlineWithinDays: int.TryParse(_deadlineWithinDays, out var d) ? d : null,
+        Coverage: string.IsNullOrWhiteSpace(_coverageFilter) ? null : Enum.Parse<LifecycleCoverageStatus>(_coverageFilter),
+        UnknownOrStaleIdentityOnly: _unknownOrStaleOnly,
+        Criticality: string.IsNullOrWhiteSpace(_criticalityFilter) ? null : Enum.Parse<InstanceCriticality>(_criticalityFilter),
+        CampaignState: string.IsNullOrWhiteSpace(_campaignStateFilter) ? null : Enum.Parse<CampaignState>(_campaignStateFilter));
+
+    private async Task Apply()
+    {
+        var filter = BuildFilter();
+        _view = await Workspace.GetWorkspaceAsync(filter);
+        _report = LifecycleReportBuilder.Build(_view.AllRows, _view.MatchingRows);
+    }
+
+    private async Task Export()
+    {
+        if (_view is null)
+        {
+            return;
+        }
+
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("Instance,Engine,Family,SupportPhase,DaysToNextMilestone,Coverage,Criticality,Owner,ClusterNodes,CampaignState,ExpiringExceptions");
+        foreach (var r in _view.MatchingRows)
+        {
+            sb.AppendLine(string.Join(",", Csv(r.InstanceName), Csv(r.Engine.ToString()), Csv(r.IdentityFamily ?? ""), Csv(r.SupportPhase.ToString()),
+                Csv(r.DaysToNextMilestone?.ToString() ?? ""), Csv(r.Coverage.ToString()), Csv(r.Criticality.ToString()), Csv(r.OwnerTeamName ?? ""),
+                Csv(r.ClusterNodeCount.ToString()), Csv(r.LatestCampaignState?.ToString() ?? ""), Csv(r.ExpiringExceptionCount.ToString())));
+        }
+        await JS.InvokeVoidAsync("dbtracker.downloadCsv", $"dbtracker-lifecycle-workspace-{DateTime.UtcNow:yyyyMMdd-HHmm}.csv", sb.ToString());
+        Toasts.Success($"Exported {_view.MatchingRows.Count} row(s) — exactly the filtered view shown above.");
+    }
+
+    private static string Csv(string value) =>
+        value.Contains(',') || value.Contains('"')
+            ? $"\"{value.Replace("\"", "\"\"")}\""
+            : value;
+}
