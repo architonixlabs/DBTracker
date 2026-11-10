@@ -10,8 +10,9 @@ public class Notification
     public int? DatabaseInstanceId { get; set; }
     public DatabaseInstance? DatabaseInstance { get; set; }
 
-    /// <summary>Instance name at the time of the alert, kept even if the instance is later archived/removed.</summary>
+    /// <summary>Instance name/company at the time of the alert, kept even if the instance is later archived/removed — also what NotificationSubscriptionMatcher (U07) matches a Company-scoped subscription against.</summary>
     public string InstanceName { get; set; } = string.Empty;
+    public string Company { get; set; } = string.Empty;
 
     public string Message { get; set; } = string.Empty;
     public NotificationSeverity Severity { get; set; } = NotificationSeverity.Info;

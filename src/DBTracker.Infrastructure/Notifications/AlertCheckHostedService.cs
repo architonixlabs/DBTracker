@@ -1,4 +1,6 @@
 using DBTracker.Core.Services;
+using DBTracker.Infrastructure.Identity;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -9,7 +11,9 @@ namespace DBTracker.Infrastructure.Notifications;
 
 /// <summary>
 /// Periodically recomputes every active instance's backup health and raises an alert (in-app
-/// notification + email to the instance's contact) the moment it crosses into Overdue or Failed.
+/// notification + email to the instance's contact and any matching Email/Both subscribers, U07)
+/// the moment it crosses into an alertable health. Also opens/escalates/closes the instance's
+/// Incident record (U08) in step with the same alert lifecycle.
 /// Interval: "Alerts:IntervalMinutes" (default 10); &lt;= 0 disables it.
 /// </summary>
 public class AlertCheckHostedService(
@@ -57,6 +61,11 @@ public class AlertCheckHostedService(
         var emailSender = scope.ServiceProvider.GetRequiredService<IEmailSender>();
         var webhookSender = scope.ServiceProvider.GetRequiredService<IWebhookSender>();
         var notifications = scope.ServiceProvider.GetRequiredService<NotificationService>();
+        var subscriptionService = scope.ServiceProvider.GetRequiredService<NotificationSubscriptionService>();
+        var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+
+        var graceHours = configuration.GetValue("Alerts:NeverBackedUpGraceHours", 24);
+        var escalationMinutes = configuration.GetValue("Alerts:EscalationIntervalMinutes", 240);
 
         var instances = await db.DatabaseInstances
             .Where(i => !i.IsArchived)
@@ -72,45 +81,107 @@ public class AlertCheckHostedService(
 
             // A planned maintenance window suppresses the alert entirely — including the state
             // update — so a still-bad health correctly re-alerts once the window ends instead of
-            // being remembered as already-notified.
+            // being remembered as already-notified. The open incident (if any) is left untouched:
+            // it stays open and visible, it just doesn't re-page anyone until maintenance ends.
             if (AlertEvaluator.IsSuppressedByMaintenance(instance.MaintenanceUntilUtc, now))
             {
                 continue;
             }
 
-            var shouldNotify = AlertEvaluator.ShouldNotify(instance.LastNotifiedHealth, health);
+            var suppressNeverBackedUp = AlertEvaluator.IsWithinOnboardingGrace(instance.CreatedAtUtc, now, graceHours);
+            var shouldNotify = AlertEvaluator.ShouldNotify(instance.LastNotifiedHealth, health, suppressNeverBackedUp);
+            var isAlertableNow = health is Core.Enums.BackupHealth.Overdue or Core.Enums.BackupHealth.Failed ||
+                (health is Core.Enums.BackupHealth.NeverBackedUp && !suppressNeverBackedUp);
 
-            if (shouldNotify)
+            if (isAlertableNow)
             {
-                var message = $"{instance.Name} is now {DescribeHealth(health)}.";
-                await notifications.CreateAsync(instance, message, health == Core.Enums.BackupHealth.Failed
-                    ? Core.Enums.NotificationSeverity.Critical
-                    : Core.Enums.NotificationSeverity.Warning);
+                var incident = await IncidentLifecycle.OpenOrContinueAsync(db, instance.Id, health, now);
 
-                if (!string.IsNullOrWhiteSpace(instance.ContactEmail))
+                if (shouldNotify)
                 {
-                    await emailSender.SendAsync(
-                        instance.ContactEmail,
-                        $"DBTracker alert: {instance.Name} is {DescribeHealth(health)}",
-                        $"{message}\n\nApplication: {instance.Application}\nCompany: {instance.Company}\n\nOpen DBTracker to view backup history and log a fix.",
-                        ct);
+                    await RaiseAlertAsync(db, instance, health, now, notifications, subscriptionService, userManager, emailSender, webhookSender, ct);
                 }
-
-                await webhookSender.SendAsync(WebhookPayloadBuilder.BuildAlertPayload(instance, health, now), ct);
-
-                instance.LastNotifiedUtc = now;
+                else if (IncidentEscalationEvaluator.ShouldEscalate(incident, now, escalationMinutes))
+                {
+                    incident.EscalationLevel++;
+                    incident.LastEscalatedAtUtc = now;
+                    await RaiseAlertAsync(db, instance, health, now, notifications, subscriptionService, userManager, emailSender, webhookSender, ct,
+                        escalationLevel: incident.EscalationLevel);
+                }
+            }
+            else if (health == Core.Enums.BackupHealth.OnTrack)
+            {
+                var hadOpenIncident = await IncidentLifecycle.CloseOpenAsync(db, instance.Id, now);
+                if (hadOpenIncident)
+                {
+                    await notifications.CreateAsync(instance, $"{instance.Name} has recovered — backup health is on track again.", Core.Enums.NotificationSeverity.Info);
+                }
             }
 
             instance.LastNotifiedHealth = AlertEvaluator.NextNotifiedState(health);
+            if (shouldNotify)
+            {
+                instance.LastNotifiedUtc = now;
+            }
         }
 
         await db.SaveChangesAsync(ct);
+    }
+
+    private static async Task RaiseAlertAsync(
+        DBTrackerDbContext db,
+        Core.Entities.DatabaseInstance instance,
+        Core.Enums.BackupHealth health,
+        DateTime now,
+        NotificationService notifications,
+        NotificationSubscriptionService subscriptionService,
+        UserManager<ApplicationUser> userManager,
+        IEmailSender emailSender,
+        IWebhookSender webhookSender,
+        CancellationToken ct,
+        int? escalationLevel = null)
+    {
+        var message = escalationLevel is { } level
+            ? $"{instance.Name} is still {DescribeHealth(health)} (escalation #{level}, unacknowledged)."
+            : $"{instance.Name} is now {DescribeHealth(health)}.";
+
+        await notifications.CreateAsync(instance, message, health == Core.Enums.BackupHealth.Failed
+            ? Core.Enums.NotificationSeverity.Critical
+            : Core.Enums.NotificationSeverity.Warning);
+
+        var recipientEmails = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (!string.IsNullOrWhiteSpace(instance.ContactEmail))
+        {
+            recipientEmails.Add(instance.ContactEmail);
+        }
+
+        var subscriberUserIds = await subscriptionService.GetEmailSubscriberUserIdsAsync(instance.Id, instance.Company);
+        foreach (var userId in subscriberUserIds)
+        {
+            var user = await userManager.FindByIdAsync(userId);
+            if (user?.Email is { Length: > 0 } email)
+            {
+                recipientEmails.Add(email);
+            }
+        }
+
+        foreach (var email in recipientEmails)
+        {
+            await emailSender.SendAsync(
+                email,
+                $"DBTracker alert: {instance.Name} is {DescribeHealth(health)}",
+                $"{message}\n\nApplication: {instance.Application}\nCompany: {instance.Company}\n\nOpen DBTracker to view backup history and log a fix.",
+                ct);
+        }
+
+        await webhookSender.SendAsync(WebhookPayloadBuilder.BuildAlertPayload(instance, health, now), ct);
     }
 
     private static string DescribeHealth(Core.Enums.BackupHealth health) => health switch
     {
         Core.Enums.BackupHealth.Overdue => "overdue for backup",
         Core.Enums.BackupHealth.Failed => "failing backups",
+        Core.Enums.BackupHealth.NeverBackedUp => "never backed up",
         _ => health.ToString()
     };
 }

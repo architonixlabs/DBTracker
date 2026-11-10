@@ -1,0 +1,226 @@
+@page "/notifications"
+@inject NotificationService NotificationSvc
+@inject NotificationSubscriptionService Subscriptions
+@inject InstanceOverviewService OverviewService
+@inject AuthenticationStateProvider AuthProvider
+@inject ToastService Toasts
+@inject NavigationManager Nav
+
+<PageTitle>Notifications · DBTracker</PageTitle>
+
+<div class="app-topbar">
+    <div>
+        <div class="eyebrow">Personal</div>
+        <h1>Notifications</h1>
+        <div class="subtitle">Your own read state and subscriptions — reading a notification here never affects what anyone else sees as unread.</div>
+    </div>
+</div>
+
+@if (_page is null)
+{
+    <div class="spinner-ring"></div>
+}
+else
+{
+    <div class="row g-4">
+        <div class="col-lg-7">
+            <div class="dbt-card">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h2 class="h6 text-muted text-uppercase mb-0">Inbox (@_page.UnreadCount unread of @_page.TotalCount)</h2>
+                    @if (_page.UnreadCount > 0)
+                    {
+                        <button class="btn btn-outline-secondary btn-sm" @onclick="MarkAllRead">Mark all read</button>
+                    }
+                </div>
+
+                @if (_page.Items.Count == 0)
+                {
+                    <div class="empty-state py-3"><i class="bi bi-inbox"></i>No notifications yet.</div>
+                }
+                else
+                {
+                    @foreach (var n in _page.Items)
+                    {
+                        <div class="notif-item @(n.IsRead ? "" : "unread")" style="cursor:pointer" @onclick="() => OpenItem(n)">
+                            <span class="dot" style="background:@SeverityColor(n.Severity)"></span>
+                            <div>
+                                <div class="notif-message">@n.Message</div>
+                                <div class="notif-time">@n.CreatedAtUtc.ToLocalTime().ToString("MMM d, h:mm tt") @(n.IsRead ? "" : "· unread")</div>
+                            </div>
+                        </div>
+                    }
+
+                    <div class="d-flex justify-content-between align-items-center pt-3">
+                        <span class="small text-muted">Page @_inboxPage</span>
+                        <div class="d-flex gap-1">
+                            <button class="btn btn-outline-secondary btn-sm" disabled="@(_inboxPage <= 1)" @onclick="() => ChangeInboxPage(_inboxPage - 1)">Prev</button>
+                            <button class="btn btn-outline-secondary btn-sm" disabled="@(_inboxPage * PageSize >= _page.TotalCount)" @onclick="() => ChangeInboxPage(_inboxPage + 1)">Next</button>
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+
+        <div class="col-lg-5">
+            <div class="dbt-card">
+                <h2 class="h6 text-muted text-uppercase mb-3">Subscriptions</h2>
+                <p class="small text-muted">Narrows which broadcast alerts land in your inbox/email. No subscriptions = everything (today's default). A subscription can only narrow what you already see — it never grants visibility into an instance your role couldn't already see.</p>
+
+                @if (_subscriptions.Count == 0)
+                {
+                    <div class="text-muted small mb-3">No subscriptions — you see every alert.</div>
+                }
+                else
+                {
+                    @foreach (var s in _subscriptions)
+                    {
+                        <div class="d-flex justify-content-between align-items-center mb-2 small">
+                            <span>
+                                <span class="role-pill">@s.Scope</span>
+                                @(s.Scope == SubscriptionScope.Instance ? s.DatabaseInstance?.Name ?? "(deleted instance)" : s.Scope == SubscriptionScope.Company ? s.Company : "")
+                                <span class="text-muted">· @s.Channel</span>
+                            </span>
+                            <button class="btn btn-link btn-sm text-danger p-0" @onclick="() => DeleteSubscription(s.Id)"><i class="bi bi-trash"></i></button>
+                        </div>
+                    }
+                    <hr />
+                }
+
+                <div class="d-flex gap-2 flex-wrap align-items-end">
+                    <div class="field">
+                        <label class="form-label small">Scope</label>
+                        <select class="form-select form-select-sm" @bind="_newScope">
+                            <option value="@SubscriptionScope.AllInstances">All instances</option>
+                            <option value="@SubscriptionScope.Instance">One instance</option>
+                            <option value="@SubscriptionScope.Company">Company</option>
+                        </select>
+                    </div>
+                    @if (_newScope == SubscriptionScope.Instance)
+                    {
+                        <div class="field">
+                            <label class="form-label small">Instance</label>
+                            <select class="form-select form-select-sm" @bind="_newInstanceId">
+                                @foreach (var i in _instances)
+                                {
+                                    <option value="@i.Id">@i.Name</option>
+                                }
+                            </select>
+                        </div>
+                    }
+                    @if (_newScope == SubscriptionScope.Company)
+                    {
+                        <div class="field">
+                            <label class="form-label small">Company</label>
+                            <select class="form-select form-select-sm" @bind="_newCompany">
+                                @foreach (var c in _companies)
+                                {
+                                    <option value="@c">@c</option>
+                                }
+                            </select>
+                        </div>
+                    }
+                    <div class="field">
+                        <label class="form-label small">Channel</label>
+                        <select class="form-select form-select-sm" @bind="_newChannel">
+                            <option value="@NotificationChannel.InApp">In-app only</option>
+                            <option value="@NotificationChannel.Email">Email only</option>
+                            <option value="@NotificationChannel.Both">In-app + email</option>
+                        </select>
+                    </div>
+                    <button class="btn btn-primary btn-sm" @onclick="AddSubscription">Add</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private const int PageSize = 20;
+    private NotificationInboxPage? _page;
+    private int _inboxPage = 1;
+    private string? _userId;
+
+    private List<NotificationSubscription> _subscriptions = new();
+    private List<InstanceListRow> _instances = new();
+    private List<string> _companies = new();
+    private SubscriptionScope _newScope = SubscriptionScope.AllInstances;
+    private int _newInstanceId;
+    private string _newCompany = "";
+    private NotificationChannel _newChannel = NotificationChannel.InApp;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var state = await AuthProvider.GetAuthenticationStateAsync();
+        _userId = state.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+
+        _instances = await OverviewService.GetAllSummariesAsync();
+        _companies = _instances.Select(i => i.Company).Where(c => !string.IsNullOrWhiteSpace(c)).Distinct().OrderBy(c => c).ToList();
+        if (_instances.Count > 0) _newInstanceId = _instances[0].Id;
+        if (_companies.Count > 0) _newCompany = _companies[0];
+
+        await LoadInbox();
+        await LoadSubscriptions();
+    }
+
+    private async Task LoadInbox()
+    {
+        if (string.IsNullOrEmpty(_userId)) return;
+        _page = await NotificationSvc.GetInboxAsync(_userId, _inboxPage, PageSize);
+    }
+
+    private async Task LoadSubscriptions()
+    {
+        if (string.IsNullOrEmpty(_userId)) return;
+        _subscriptions = await Subscriptions.ListAsync(_userId);
+    }
+
+    private async Task ChangeInboxPage(int page)
+    {
+        _inboxPage = Math.Max(1, page);
+        await LoadInbox();
+    }
+
+    private async Task MarkAllRead()
+    {
+        if (string.IsNullOrEmpty(_userId)) return;
+        await NotificationSvc.MarkAllReadAsync(_userId);
+        await LoadInbox();
+    }
+
+    private async Task OpenItem(NotificationInboxItem n)
+    {
+        if (string.IsNullOrEmpty(_userId)) return;
+        if (!n.IsRead)
+        {
+            await NotificationSvc.MarkReadAsync(_userId, n.Id);
+            await LoadInbox();
+        }
+        if (n.DatabaseInstanceId is { } id)
+        {
+            Nav.NavigateTo($"/instances/{id}");
+        }
+    }
+
+    private async Task AddSubscription()
+    {
+        if (string.IsNullOrEmpty(_userId)) return;
+        await Subscriptions.AddAsync(_userId, _newScope, _newScope == SubscriptionScope.Instance ? _newInstanceId : null,
+            _newScope == SubscriptionScope.Company ? _newCompany : "", _newChannel);
+        await LoadSubscriptions();
+        Toasts.Success("Subscription added.");
+    }
+
+    private async Task DeleteSubscription(int id)
+    {
+        if (string.IsNullOrEmpty(_userId)) return;
+        await Subscriptions.DeleteAsync(id, _userId);
+        await LoadSubscriptions();
+    }
+
+    private static string SeverityColor(NotificationSeverity severity) => severity switch
+    {
+        NotificationSeverity.Critical => "var(--dbt-failed)",
+        NotificationSeverity.Warning => "var(--dbt-overdue)",
+        _ => "var(--dbt-never)"
+    };
+}

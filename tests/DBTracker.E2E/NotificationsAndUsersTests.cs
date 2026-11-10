@@ -32,28 +32,38 @@ public class NotificationsAndUsersTests
     }
 
     [Test]
-    public async Task NotificationBell_ShowsUnreadSeedData_AndMarkAllReadClearsBadge()
+    public async Task NotificationBell_FreshUserFirstVisit_SeedNotificationsStartAlreadyRead()
     {
+        // Under U07's per-user read state, a brand-new user's first-ever visit treats every
+        // notification that already existed at that moment as read (the one-time "migration" of
+        // the old shared/broadcast world, applied lazily per user) — so a user created today isn't
+        // confronted with the whole backlog as unread. See NotificationPersonalInboxTests for the
+        // cross-user isolation and mark-all-read coverage on notifications created *after* that
+        // first visit, which is what actually proves per-user state.
         _page = await GlobalSetup.Server.Browser.NewPageAsync();
-        await LoginAsync("priya.nair@architonixlabs.com");
+        await LoginAsync("admin@architonixlabs.com");
 
+        await GotoAsync("/users");
+        await WaitForCircuitAsync();
+        var email = $"e2e-freshbell-{Guid.NewGuid():N}@architonixlabs.com";
+        await FillByLabel("Display name", "E2E Fresh Bell User");
+        await FillByLabel("Email", email);
+        await FillByLabel("Temporary password", "Str0ngTempPass!");
+        await SelectByLabel("Role", "Viewer");
+        await _page.ClickAsync("button[type=submit]:text('Create user')");
+        await _page.WaitForTimeoutAsync(800);
+
+        await LoginAsync(email, "Str0ngTempPass!");
         await GotoAsync("/");
         await _page.WaitForSelectorAsync(".notif-bell-btn");
         await WaitForCircuitAsync();
 
-        // Seed data has 2 unread (Failed) + 1 read (Overdue) notification.
-        await Assertions.Expect(_page.Locator(".notif-badge")).ToHaveTextAsync("2");
+        await Assertions.Expect(_page.Locator(".notif-badge")).Not.ToBeVisibleAsync();
 
         await _page.ClickAsync(".notif-bell-btn");
         await _page.WaitForTimeoutAsync(400);
 
-        await Assertions.Expect(_page.Locator(".notif-item")).ToHaveCountAsync(3);
-        await Assertions.Expect(_page.Locator(".notif-item.unread")).ToHaveCountAsync(2);
-
-        await _page.ClickAsync(".notif-mark-read");
-        await _page.WaitForTimeoutAsync(400);
-
-        await Assertions.Expect(_page.Locator(".notif-badge")).Not.ToBeVisibleAsync();
+        await Assertions.Expect(_page.Locator(".notif-item")).Not.ToHaveCountAsync(0);
         await Assertions.Expect(_page.Locator(".notif-item.unread")).ToHaveCountAsync(0);
     }
 
@@ -100,11 +110,13 @@ public class NotificationsAndUsersTests
         await Assertions.Expect(_page.Locator(".dbt-toast")).ToContainTextAsync("Report sent to 1 recipient");
     }
 
-    private async Task LoginAsync(string email)
+    private Task LoginAsync(string email) => LoginAsync(email, "ArxDemo#2026!");
+
+    private async Task LoginAsync(string email, string password)
     {
         await GotoAsync("/Account/Login");
         await _page.FillAsync("input[autocomplete=username]", email);
-        await _page.FillAsync("input[autocomplete=current-password]", "ArxDemo#2026!");
+        await _page.FillAsync("input[autocomplete=current-password]", password);
 
         await _page.ClickAsync("button[type=submit]");
         await _page.WaitForURLAsync(url => !url.Contains("/Account/Login"), new PageWaitForURLOptions { Timeout = 15000 });

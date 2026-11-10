@@ -105,8 +105,9 @@ needs a record of DR drills and emergency restores, not just backups going out).
 - [x] In-app notification center: bell with unread badge in the sidebar, dropdown list, mark-all-read
 - [x] Alerts fire on a *state change* into Overdue/Failed (not every sweep) via a background check
       (`Alerts:IntervalMinutes`, default 10) — re-alerts if it recovers and relapses later
-- [ ] Per-user notification preferences (which instances/companies they care about) — currently
-      broadcast to everyone, emailed to the instance's own contact
+- [x] Per-user notification preferences (which instances/companies they care about) — delivered
+      under Epic 14 (U07): per-user subscriptions and personal read state, see below. Broadcast to
+      everyone remains the default when a user has no subscriptions configured.
 - [x] (bonus, fixes a dangling nav link from Epic 5) Admin "Users" page: list users + roles, create
       a new user with a role
 
@@ -331,6 +332,60 @@ authenticated role already, same as the rest of the app, so no separate "my apps
   config (needed to keep seeded fixture data from registering as falsely stale) makes a live
   "Stale" badge impractical to reproduce in the browser without a dedicated test server
   configuration — a gap worth closing if U02's UI regresses. Full suite: 141/141 (107 unit + 34 E2E).
+- 2026-11-10 — Built Epic 14 (U05-U08) from the usability roadmap: shareable/saved filtered views,
+  bounded list browsing, a personal notification inbox, and incident acknowledgement/escalation.
+  **U05** — Instances-list filters/sort/page now live entirely in validated URL query parameters
+  (`?engine=&health=&company=&dept=&owner=&tag=&mine=&sort=&dir=&page=`), so any filtered view is a
+  plain shareable link and the browser back button restores the prior state; added dedicated
+  Department/Owner/Tag facet dropdowns (previously only engine/health/role/env/company existed) and
+  clickable column-sort headers. Per-user named "saved views" (`SavedView` entity) store that same
+  query string and can be applied, renamed or deleted from a "Views" menu; the dashboard's stat
+  cells and the scan-issue banner now deep-link into the same `/instances`/`/reports` query params
+  rather than only filtering in place. **U06** — added `InstanceListRow`/`InstanceListFilter`, a
+  pure, fully unit-tested projection+filter+sort+page engine in `DBTracker.Core.Services`, and a new
+  `InstanceOverviewService.GetAllSummariesAsync`/`GetPagedAsync` that computes each instance's
+  health from one correlated-subquery "latest record" and "latest successful record" pair instead
+  of `Include`-ing every instance's entire BackupRecords/RestoreEvents graph — the Instances list
+  and the Dashboard both moved onto it. The Instances list is now genuinely paged (25/page, stable
+  sort, total count shown) instead of rendering every row. Per-instance Backup/Restore/Change
+  history on the instance detail page gained real pagination and a status/outcome/field filter too,
+  client-side over that one instance's own (much smaller) history — the big win was cutting the
+  cross-instance dashboard/list queries down to summaries, so that's where the rework went; exports
+  on the Reports page now say explicitly that they cover every matching row, not just what's
+  rendered. **U07** — notification read state is now per-user (`NotificationReadState`), not a
+  single shared `IsRead` flag: a user's first-ever visit to their inbox treats everything that
+  already existed at that moment as already read (the one-time migration of the old shared/broadcast
+  world, applied lazily per user rather than one big backfill), so nobody opens the bell to years of
+  backlog marked unread, and only notifications created after that first visit are ever unread for
+  them — reading or mark-all-reading never touches another user's state. Added per-user
+  `NotificationSubscription`s (All instances / one instance / a company, each with In-app/Email/Both)
+  and a `/notifications` page for the inbox + managing them; the bell now shows a personal count and
+  deep-links each item to its instance. Subscriptions only ever narrow an already-broadcast alert —
+  there's no per-instance row-level security in the app yet (that's U21), so a subscription can't
+  grant visibility beyond what the viewer's role already sees. **U08** — a new `Incident` entity
+  tracks assignment, acknowledgement (who/when), a note/ticket reference and escalation level for an
+  at-risk instance, entirely separate from `BackupHealthCalculator` — acknowledging never changes
+  the health badge, by construction, since nothing about acknowledgement feeds into the health
+  calculation. `AlertCheckHostedService` now opens an incident the moment an instance becomes
+  alertable (re-using the existing one rather than duplicating if it's already open — including
+  across a maintenance window, so a still-bad instance correctly re-alerts post-maintenance without
+  a second incident), closes it on recovery (with a "recovered" notification), and escalates
+  (`IncidentEscalationEvaluator`, pure/unit-tested) on a configurable interval
+  (`Alerts:EscalationIntervalMinutes`) until someone acknowledges it. `NeverBackedUp` is now
+  alertable too (it previously never notified at all), gated by a configurable onboarding grace
+  period (`Alerts:NeverBackedUpGraceHours`, default 24h) so a database added minutes ago doesn't
+  immediately page anyone — this is an intentional behavior change, and the existing
+  `AlertEvaluatorTests` were updated accordingly rather than left asserting the old behavior. Since
+  `AlertCheckHostedService` itself is disabled in the Testing environment (same as every prior
+  alert-dependent feature), `SeedData` now also seeds one open incident on the already-seeded Failed
+  instance so acknowledgement has something real to exercise end-to-end. One new EF migration
+  (`AddSavedViewsSubscriptionsIncidents`) for the four new tables plus a `Company` column on
+  `Notification` (subscription matching needs it, the same way `InstanceName` was already
+  denormalized onto it). 29 new unit tests; 6 new/changed E2E tests across three new files
+  (`SavedViewsAndPagingTests`, `NotificationPersonalInboxTests`, `IncidentAcknowledgementTests`) plus
+  a rewrite of the one existing notification-bell E2E test whose premise (counting unread seed data
+  against a shared `IsRead` flag) no longer held once reads became personal. Full suite: 176/176
+  (136 unit + 40 E2E).
 
 ### Epic 12 — Handiness features (user-prioritized)
 *Every item below was proposed as a shortlist and picked by the user, not decided unilaterally.*
@@ -422,21 +477,21 @@ The U identifiers are canonical: references from existing epics describe the sam
 
 ### Epic 14 — Faster navigation and triage
 
-- [ ] **U05 · P2 · M — Saved, shareable views and consistent filtering.**
+- [x] **U05 · P2 · M — Saved, shareable views and consistent filtering.**
   Priya/Marcus want repeatable production/team views; Dev wants My instances as a saved default.
   **Acceptance:** persist filters, sort, report type and date window in validated URLs; add dedicated
   owner/department/tag facets and column sort controls. Back navigation restores the prior list.
   Dashboard counts and drill-down use the same scope; Scan Activity can open directly. Saved views
   can be renamed/reset and respect each viewer's permissions; personal filters grant no access.
 
-- [ ] **U06 · P2 · L — Bounded inventory and history browsing.**
+- [x] **U06 · P2 · L — Bounded inventory and history browsing.**
   Priya/Marcus want usable large inventories; Alex wants predictable controls over endless rows.
   **Acceptance:** query-side filtering/sorting/paging with counts and stable ordering; overview
   queries fetch required summaries rather than all histories. Backup/restore/change history is
   paged and filterable. Export covers the entire selected result, with explicit scope. Benchmark
   the representative dataset in the review and agree response-time targets from that baseline.
 
-- [ ] **U07 · P1 · M — Personal notification inbox and preferences.**
+- [x] **U07 · P1 · M — Personal notification inbox and preferences.**
   Extends Epic 8's existing open preference item. Dev wants relevant notifications; Noor needs
   direct navigation; Angela requires reading to remain separate from operational acknowledgement.
   **Acceptance:** per-user read state, single/all-read actions, instance links and paged history;
@@ -444,7 +499,7 @@ The U identifiers are canonical: references from existing epics describe the sam
   channel with understandable defaults. Define migration of existing shared notifications/read
   flags explicitly; subscriptions always respect authorization. Shared incident state belongs to U08.
 
-- [ ] **U08 · P2 · L — Acknowledge, assign and hand off outstanding risk.**
+- [x] **U08 · P2 · L — Acknowledge, assign and hand off outstanding risk.**
   Priya/Noor need to avoid duplicate response; Marcus wants accountable owners; Angela rejects
   acknowledgement as evidence of recovery.
   **Acceptance:** track assignee, acknowledgement, note/runbook/ticket reference and activity log;
@@ -612,6 +667,7 @@ clarifies, extends, or supersedes the earlier entry. Earlier wording remains his
 - 2026-11-10 | UPDATE-008 | Supersedes the prioritization of the future custom report date-range item: it is now a proposed P2 item within U10. The original future entry is retained as history; implementation remains incomplete.
 - 2026-11-10 | UPDATE-009 | Tracking correction: the review log above describes corrections/refinements from the usability review. Their authoritative clarification is now recorded in these separate update entries; original backlog wording has been restored and preserved.
 - 2026-11-10 | NEW-001 | Added U01-U22 under Epics 13-17 as separate proposed features/refinements, with priorities, effort, persona rationale and acceptance criteria. These remain unimplemented; see USABILITY_REVIEW.md for supporting evidence.
+- 2026-11-10 | UPDATE-015 | Epics 13 and 14 (U01-U08) are now implemented — see the Progress log entries dated 2026-11-10 for what shipped and any scope notes. This supersedes UPDATE-005 (U07 delivered, so Epic 8's preference item above is now marked done) and partially supersedes UPDATE-001/UPDATE-002/UPDATE-007 (U05's facets/shared filtering/sort and U02's staleness detection are delivered; U05's report/filter deep-linking and U06's full remaining scope are covered in the Epic 14 entry). U03/U04's items are also delivered per Epic 13. Earlier wording is preserved as history; U09-U22 remain open.
 
 ## DBA lifecycle roadmap - 2026-11-10
 

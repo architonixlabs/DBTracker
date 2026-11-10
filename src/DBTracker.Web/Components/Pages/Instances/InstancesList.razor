@@ -1,8 +1,10 @@
 @page "/instances"
 @implements IDisposable
 @inject InstanceOverviewService OverviewService
+@inject SavedViewService SavedViews
 @inject NavigationManager Nav
 @inject AuthenticationStateProvider AuthProvider
+@inject ToastService Toasts
 
 <PageTitle>Instances · DBTracker</PageTitle>
 
@@ -10,7 +12,7 @@
     <div>
         <div class="eyebrow">Inventory</div>
         <h1>Database Instances</h1>
-        <div class="subtitle">@(_overviews is null ? "" : $"{Filtered().Count()} of {_overviews.Count} instances")</div>
+        <div class="subtitle">@(_result is null ? "" : $"{_result.TotalCount} matching instance(s)")</div>
     </div>
     <div class="d-flex gap-2 align-items-center flex-wrap">
         <div class="small text-muted" role="status">
@@ -42,7 +44,49 @@
     </div>
 </div>
 
-@if (_overviews is null)
+<div class="filter-bar" style="gap:10px;align-items:center;">
+    <div class="dropdown">
+        <button class="btn btn-outline-secondary btn-sm dropdown-toggle" type="button" @onclick="() => _viewsOpen = !_viewsOpen">
+            <i class="bi bi-bookmark"></i> Views
+        </button>
+        @if (_viewsOpen)
+        {
+            <div class="dbt-card" style="position:absolute;z-index:20;min-width:260px;margin-top:4px;">
+                @if (_savedViews.Count == 0)
+                {
+                    <div class="text-muted small mb-2">No saved views yet.</div>
+                }
+                else
+                {
+                    @foreach (var v in _savedViews)
+                    {
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <a href="@("/instances?" + v.QueryString)" class="small text-truncate" style="max-width:160px;">@v.Name</a>
+                            <button class="btn btn-link btn-sm text-danger p-0" title="Delete view" @onclick="() => DeleteView(v.Id)"><i class="bi bi-trash"></i></button>
+                        </div>
+                    }
+                }
+                <hr class="my-2" />
+                <a href="/instances" class="small d-block mb-2">Reset to defaults</a>
+                @if (_savingView)
+                {
+                    <div class="d-flex gap-1">
+                        <input class="form-control form-control-sm" placeholder="View name" @bind="_newViewName" />
+                        <button class="btn btn-primary btn-sm" @onclick="SaveCurrentView">Save</button>
+                    </div>
+                }
+                else
+                {
+                    <button class="btn btn-outline-secondary btn-sm w-100" @onclick="() => _savingView = true">
+                        <i class="bi bi-plus"></i> Save current view
+                    </button>
+                }
+            </div>
+        }
+    </div>
+</div>
+
+@if (_result is null)
 {
     <div class="skeleton" style="height: 54px; margin-bottom: 1.25rem;"></div>
     <div class="dbt-table">
@@ -56,9 +100,9 @@ else
 {
     <div class="filter-bar">
         <input class="form-control" style="max-width:220px;" placeholder="Search name, app, owner, IP…"
-               value="@_search" @oninput="OnSearchChanged" />
+               value="@_search" @oninput="OnSearchInput" />
 
-        <select class="form-select" style="max-width:150px;" @bind="_engine">
+        <select class="form-select" style="max-width:150px;" value="@_engine" @onchange="e => OnFieldChanged(ref _engine, e.Value)">
             <option value="">All engines</option>
             @foreach (var e in Enum.GetValues<DatabaseEngine>())
             {
@@ -66,7 +110,7 @@ else
             }
         </select>
 
-        <select class="form-select" style="max-width:150px;" @bind="_health">
+        <select class="form-select" style="max-width:150px;" value="@_health" @onchange="e => OnFieldChanged(ref _health, e.Value)">
             <option value="">All health</option>
             @foreach (var h in Enum.GetValues<BackupHealth>())
             {
@@ -74,7 +118,7 @@ else
             }
         </select>
 
-        <select class="form-select" style="max-width:130px;" @bind="_role">
+        <select class="form-select" style="max-width:130px;" value="@_role" @onchange="e => OnFieldChanged(ref _role, e.Value)">
             <option value="">Active + passive</option>
             @foreach (var r in Enum.GetValues<InstanceRole>())
             {
@@ -82,7 +126,7 @@ else
             }
         </select>
 
-        <select class="form-select" style="max-width:160px;" @bind="_envTier">
+        <select class="form-select" style="max-width:160px;" value="@_envTier" @onchange="e => OnFieldChanged(ref _envTier, e.Value)">
             <option value="">All environments</option>
             @foreach (var e in Enum.GetValues<EnvironmentTier>())
             {
@@ -90,18 +134,45 @@ else
             }
         </select>
 
-        <select class="form-select" style="max-width:170px;" @bind="_company">
+        <select class="form-select" style="max-width:170px;" value="@_company" @onchange="e => OnFieldChanged(ref _company, e.Value)">
             <option value="">All companies</option>
-            @foreach (var c in Companies)
+            @foreach (var c in _facetCompanies)
             {
                 <option value="@c">@c</option>
             }
         </select>
 
+        <select class="form-select" style="max-width:170px;" value="@_department" @onchange="e => OnFieldChanged(ref _department, e.Value)">
+            <option value="">All departments</option>
+            @foreach (var d in _facetDepartments)
+            {
+                <option value="@d">@d</option>
+            }
+        </select>
+
+        <select class="form-select" style="max-width:170px;" value="@_owner" @onchange="e => OnFieldChanged(ref _owner, e.Value)">
+            <option value="">All owners</option>
+            @foreach (var o in _facetOwners)
+            {
+                <option value="@o">@o</option>
+            }
+        </select>
+
+        @if (_facetTags.Count > 0)
+        {
+            <select class="form-select" style="max-width:150px;" value="@_tag" @onchange="e => OnFieldChanged(ref _tag, e.Value)">
+                <option value="">All tags</option>
+                @foreach (var t in _facetTags)
+                {
+                    <option value="@t">@t</option>
+                }
+            </select>
+        }
+
         @if (_hasOwnInstances)
         {
             <div class="form-check" style="padding-bottom:7px;">
-                <input class="form-check-input" type="checkbox" id="my-instances" @bind="_myInstancesOnly" />
+                <input class="form-check-input" type="checkbox" id="my-instances" checked="@_myInstancesOnly" @onchange="e => OnMineChanged((bool)(e.Value ?? false))" />
                 <label class="form-check-label" for="my-instances">My instances only</label>
             </div>
         }
@@ -116,39 +187,39 @@ else
         <table class="table">
             <thead>
                 <tr>
-                    <th>Instance</th>
-                    <th>Engine</th>
+                    <th role="button" @onclick="() => ToggleSort(InstanceSortKey.Name)">Instance @SortIndicator(InstanceSortKey.Name)</th>
+                    <th role="button" @onclick="() => ToggleSort(InstanceSortKey.Engine)">Engine @SortIndicator(InstanceSortKey.Engine)</th>
                     <th>Application</th>
-                    <th>Company / Dept</th>
+                    <th role="button" @onclick="() => ToggleSort(InstanceSortKey.Company)">Company / Dept @SortIndicator(InstanceSortKey.Company)</th>
                     <th>Owner</th>
                     <th>Role</th>
-                    <th>Env</th>
-                    <th>Health</th>
+                    <th role="button" @onclick="() => ToggleSort(InstanceSortKey.Environment)">Env @SortIndicator(InstanceSortKey.Environment)</th>
+                    <th role="button" @onclick="() => ToggleSort(InstanceSortKey.Risk)">Health @SortIndicator(InstanceSortKey.Risk)</th>
                 </tr>
             </thead>
             <tbody>
-                @foreach (var o in Filtered())
+                @foreach (var o in _result.Items)
                 {
-                    <tr @onclick='() => Nav.NavigateTo($"/instances/{o.Instance.Id}")'>
+                    <tr @onclick='() => Nav.NavigateTo($"/instances/{o.Id}")'>
                         <td>
-                            <div class="fw-semibold">@o.Instance.Name</div>
-                            <div class="text-muted small">@o.Instance.DatabaseIp</div>
+                            <div class="fw-semibold">@o.Name</div>
+                            <div class="text-muted small">@o.DatabaseIp</div>
                         </td>
-                        <td><span class="engine-pill">@o.Instance.Engine</span> <span class="text-muted small">@o.Instance.Version</span></td>
-                        <td>@o.Instance.Application</td>
+                        <td><span class="engine-pill">@o.Engine</span> <span class="text-muted small">@o.Version</span></td>
+                        <td>@o.Application</td>
                         <td>
-                            <div>@o.Instance.Company</div>
-                            <div class="text-muted small">@o.Instance.Department</div>
+                            <div>@o.Company</div>
+                            <div class="text-muted small">@o.Department</div>
                         </td>
                         <td>
-                            <div>@o.Instance.ContactName</div>
-                            <div class="text-muted small">@o.Instance.ContactEmail</div>
+                            <div>@o.ContactName</div>
+                            <div class="text-muted small">@o.ContactEmail</div>
                         </td>
-                        <td><span class="role-pill @o.Instance.Role">@o.Instance.Role</span></td>
-                        <td>@o.Instance.Environment</td>
+                        <td><span class="role-pill @o.Role">@o.Role</span></td>
+                        <td>@o.Environment</td>
                         <td>
                             <HealthBadge Health="o.Health" />
-                            @if (o.Instance.MaintenanceUntilUtc > DateTime.UtcNow)
+                            @if (o.MaintenanceUntilUtc > DateTime.UtcNow)
                             {
                                 <i class="bi bi-cone-striped text-muted ms-1" title="Under maintenance — alerts suppressed"></i>
                             }
@@ -159,25 +230,56 @@ else
         </table>
     </div>
 
-    @if (!Filtered().Any())
+    @if (_result.Items.Count == 0)
     {
         <div class="empty-state">
             <i class="bi bi-inbox"></i>
             No instances match these filters.
         </div>
     }
+    else
+    {
+        <div class="d-flex justify-content-between align-items-center mt-3">
+            <div class="small text-muted">
+                Page @_result.Page of @_result.TotalPages (@_result.TotalCount total — exports always cover every matching row, not just this page)
+            </div>
+            <div class="d-flex gap-2">
+                <button class="btn btn-outline-secondary btn-sm" disabled="@(_result.Page <= 1)" @onclick="() => GoToPage(_result.Page - 1)">
+                    <i class="bi bi-chevron-left"></i> Prev
+                </button>
+                <button class="btn btn-outline-secondary btn-sm" disabled="@(_result.Page >= _result.TotalPages)" @onclick="() => GoToPage(_result.Page + 1)">
+                    Next <i class="bi bi-chevron-right"></i>
+                </button>
+            </div>
+        </div>
+    }
 }
 
 @code {
-    private List<InstanceOverview>? _overviews;
+    [Parameter, SupplyParameterFromQuery(Name = "s")] public string? Search { get; set; }
+    [Parameter, SupplyParameterFromQuery(Name = "engine")] public string? Engine { get; set; }
+    [Parameter, SupplyParameterFromQuery(Name = "health")] public string? Health { get; set; }
+    [Parameter, SupplyParameterFromQuery(Name = "role")] public string? Role { get; set; }
+    [Parameter, SupplyParameterFromQuery(Name = "env")] public string? Env { get; set; }
+    [Parameter, SupplyParameterFromQuery(Name = "company")] public string? Company { get; set; }
+    [Parameter, SupplyParameterFromQuery(Name = "dept")] public string? Dept { get; set; }
+    [Parameter, SupplyParameterFromQuery(Name = "owner")] public string? Owner { get; set; }
+    [Parameter, SupplyParameterFromQuery(Name = "tag")] public string? Tag { get; set; }
+    [Parameter, SupplyParameterFromQuery(Name = "mine")] public bool? Mine { get; set; }
+    [Parameter, SupplyParameterFromQuery(Name = "sort")] public string? Sort { get; set; }
+    [Parameter, SupplyParameterFromQuery(Name = "dir")] public string? Dir { get; set; }
+    [Parameter, SupplyParameterFromQuery(Name = "page")] public int? Page { get; set; }
 
-    private string _search = "";
-    private string _engine = "";
-    private string _health = "";
-    private string _role = "";
-    private string _envTier = "";
-    private string _company = "";
+    private InstanceListResult? _result;
+    private List<string> _facetCompanies = new(), _facetDepartments = new(), _facetOwners = new(), _facetTags = new();
+
+    private string _search = "", _engine = "", _health = "", _role = "", _envTier = "", _company = "", _department = "", _owner = "", _tag = "";
     private bool _myInstancesOnly;
+    private InstanceSortKey _sortKey = InstanceSortKey.Name;
+    private bool _sortDesc;
+    private int _page = 1;
+    private const int PageSize = 25;
+
     private string? _myEmail;
     private bool _hasOwnInstances;
 
@@ -186,6 +288,12 @@ else
     private bool _refreshing;
     private bool _autoRefreshPaused;
     private Timer? _autoRefreshTimer;
+    private Timer? _searchDebounce;
+
+    private bool _viewsOpen, _savingView;
+    private string _newViewName = "";
+    private List<SavedView> _savedViews = new();
+    private string? _userId;
 
     private static readonly TimeSpan AutoRefreshInterval = TimeSpan.FromSeconds(30);
 
@@ -193,28 +301,76 @@ else
     {
         var state = await AuthProvider.GetAuthenticationStateAsync();
         _myEmail = state.User.Identity?.Name;
+        _userId = state.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
 
+        if (!string.IsNullOrEmpty(_userId))
+        {
+            _savedViews = await SavedViews.ListAsync(_userId, "Instances");
+        }
+
+        ReadFromQuery();
         await Load();
         _autoRefreshTimer = new Timer(async _ => await AutoRefreshTickAsync(), null, AutoRefreshInterval, AutoRefreshInterval);
     }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        ReadFromQuery();
+        await Load();
+    }
+
+    private void ReadFromQuery()
+    {
+        _search = Search ?? "";
+        _engine = Engine ?? "";
+        _health = Health ?? "";
+        _role = Role ?? "";
+        _envTier = Env ?? "";
+        _company = Company ?? "";
+        _department = Dept ?? "";
+        _owner = Owner ?? "";
+        _tag = Tag ?? "";
+        _myInstancesOnly = Mine ?? false;
+        _sortKey = Enum.TryParse<InstanceSortKey>(Sort, true, out var sk) ? sk : InstanceSortKey.Name;
+        _sortDesc = string.Equals(Dir, "desc", StringComparison.OrdinalIgnoreCase);
+        _page = Page is > 0 ? Page.Value : 1;
+    }
+
+    private InstanceListQuery BuildQuery() => new(
+        Search: _search, Engine: TryEnum<DatabaseEngine>(_engine), Health: TryEnum<BackupHealth>(_health),
+        Role: TryEnum<InstanceRole>(_role), Environment: TryEnum<EnvironmentTier>(_envTier),
+        Company: _company.Length > 0 ? _company : null, Department: _department.Length > 0 ? _department : null,
+        Owner: _owner.Length > 0 ? _owner : null, Tag: _tag.Length > 0 ? _tag : null,
+        MyInstancesOnly: _myInstancesOnly, MyEmail: _myEmail,
+        Sort: _sortKey, Descending: _sortDesc, Page: _page, PageSize: PageSize);
+
+    private static TEnum? TryEnum<TEnum>(string value) where TEnum : struct =>
+        value.Length > 0 && Enum.TryParse<TEnum>(value, out var v) ? v : null;
 
     private async Task Load()
     {
         try
         {
-            // Filters (_search, _engine, etc.) are separate fields this reload never touches, so a
-            // refresh preserves whatever the user had selected instead of resetting the view.
-            _overviews = await OverviewService.GetAllAsync();
+            var allForFacets = await OverviewService.GetAllSummariesAsync();
+            _facetCompanies = Distinct(allForFacets.Select(r => r.Company));
+            _facetDepartments = Distinct(allForFacets.Select(r => r.Department));
+            _facetOwners = Distinct(allForFacets.Select(r => r.ContactName));
+            _facetTags = Distinct(allForFacets.SelectMany(r => InstanceListFilter.SplitTags(r.Tags)));
+            _hasOwnInstances = !string.IsNullOrWhiteSpace(_myEmail) &&
+                allForFacets.Any(r => string.Equals(r.ContactEmail, _myEmail, StringComparison.OrdinalIgnoreCase));
+
+            _result = InstanceListFilter.Apply(allForFacets, BuildQuery());
             _lastUpdatedUtc = DateTime.UtcNow;
             _refreshError = null;
-            _hasOwnInstances = !string.IsNullOrWhiteSpace(_myEmail) &&
-                _overviews.Any(o => string.Equals(o.Instance.ContactEmail, _myEmail, StringComparison.OrdinalIgnoreCase));
         }
         catch (Exception ex)
         {
             _refreshError = ex.Message;
         }
     }
+
+    private static List<string> Distinct(IEnumerable<string> values) =>
+        values.Where(v => !string.IsNullOrWhiteSpace(v)).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(v => v).ToList();
 
     private async Task RefreshNow()
     {
@@ -225,11 +381,7 @@ else
 
     private async Task AutoRefreshTickAsync()
     {
-        if (_autoRefreshPaused)
-        {
-            return;
-        }
-
+        if (_autoRefreshPaused) return;
         await InvokeAsync(async () =>
         {
             await Load();
@@ -239,75 +391,122 @@ else
 
     private void ToggleAutoRefresh() => _autoRefreshPaused = !_autoRefreshPaused;
 
-    public void Dispose() => _autoRefreshTimer?.Dispose();
+    public void Dispose()
+    {
+        _autoRefreshTimer?.Dispose();
+        _searchDebounce?.Dispose();
+    }
 
-    private IEnumerable<string> Companies =>
-        _overviews?.Select(o => o.Instance.Company).Where(c => !string.IsNullOrWhiteSpace(c)).Distinct().OrderBy(c => c)
-        ?? Enumerable.Empty<string>();
+    // Pushed to the URL with replace:true while typing (no history spam per keystroke), then a
+    // normal navigation happens for every other filter change — so back navigation restores the
+    // prior list state a step at a time (U05).
+    private void OnSearchInput(ChangeEventArgs e)
+    {
+        _search = e.Value?.ToString() ?? "";
+        _page = 1;
+        _searchDebounce?.Dispose();
+        _searchDebounce = new Timer(_ => InvokeAsync(() => NavigateWithCurrentFilters(replace: true)), null, 400, Timeout.Infinite);
+    }
+
+    private Task OnFieldChanged(ref string field, object? value)
+    {
+        field = value?.ToString() ?? "";
+        _page = 1;
+        return NavigateWithCurrentFilters(replace: false);
+    }
+
+    private Task OnMineChanged(bool value)
+    {
+        _myInstancesOnly = value;
+        _page = 1;
+        return NavigateWithCurrentFilters(replace: false);
+    }
+
+    private Task GoToPage(int page)
+    {
+        _page = page;
+        return NavigateWithCurrentFilters(replace: false);
+    }
+
+    private Task ToggleSort(InstanceSortKey key)
+    {
+        if (_sortKey == key)
+        {
+            _sortDesc = !_sortDesc;
+        }
+        else
+        {
+            _sortKey = key;
+            _sortDesc = false;
+        }
+        _page = 1;
+        return NavigateWithCurrentFilters(replace: false);
+    }
+
+    private Task ClearFilters()
+    {
+        _search = ""; _engine = ""; _health = ""; _role = ""; _envTier = ""; _company = ""; _department = ""; _owner = ""; _tag = ""; _myInstancesOnly = false; _page = 1;
+        return NavigateWithCurrentFilters(replace: false);
+    }
+
+    private Task NavigateWithCurrentFilters(bool replace)
+    {
+        Nav.NavigateTo("/instances?" + CurrentQueryString(), replace);
+        return Task.CompletedTask;
+    }
+
+    private string CurrentQueryString()
+    {
+        var parts = new List<string>();
+        void Add(string key, string? value)
+        {
+            if (!string.IsNullOrWhiteSpace(value))
+            {
+                parts.Add($"{key}={Uri.EscapeDataString(value)}");
+            }
+        }
+        Add("s", _search); Add("engine", _engine); Add("health", _health); Add("role", _role); Add("env", _envTier);
+        Add("company", _company); Add("dept", _department); Add("owner", _owner); Add("tag", _tag);
+        if (_myInstancesOnly) parts.Add("mine=true");
+        if (_sortKey != InstanceSortKey.Name) parts.Add($"sort={_sortKey}");
+        if (_sortDesc) parts.Add("dir=desc");
+        if (_page > 1) parts.Add($"page={_page}");
+        return string.Join("&", parts);
+    }
 
     private bool HasFilters =>
-        _search.Length > 0 || _engine.Length > 0 || _health.Length > 0 || _role.Length > 0 || _envTier.Length > 0 || _company.Length > 0 || _myInstancesOnly;
+        _search.Length > 0 || _engine.Length > 0 || _health.Length > 0 || _role.Length > 0 || _envTier.Length > 0 ||
+        _company.Length > 0 || _department.Length > 0 || _owner.Length > 0 || _tag.Length > 0 || _myInstancesOnly;
 
-    private void ClearFilters()
+    private string SortIndicator(InstanceSortKey key) => _sortKey == key ? (_sortDesc ? "▼" : "▲") : "";
+
+    private async Task SaveCurrentView()
     {
-        _search = ""; _engine = ""; _health = ""; _role = ""; _envTier = ""; _company = ""; _myInstancesOnly = false;
+        if (string.IsNullOrEmpty(_userId) || string.IsNullOrWhiteSpace(_newViewName))
+        {
+            return;
+        }
+
+        var saved = await SavedViews.SaveAsync(_userId, "Instances", _newViewName.Trim(), CurrentQueryString());
+        if (saved)
+        {
+            _savedViews = await SavedViews.ListAsync(_userId, "Instances");
+            Toasts.Success($"Saved view \"{_newViewName}\".");
+            _newViewName = "";
+            _savingView = false;
+        }
+        else
+        {
+            Toasts.Error("You already have a saved view with that name.");
+        }
     }
 
-    private void OnSearchChanged(ChangeEventArgs e) => _search = e.Value?.ToString() ?? "";
-
-    private IEnumerable<InstanceOverview> Filtered()
+    private async Task DeleteView(int id)
     {
-        var items = _overviews ?? Enumerable.Empty<InstanceOverview>();
-
-        if (!string.IsNullOrWhiteSpace(_search))
-        {
-            var term = _search.Trim();
-            items = items.Where(o =>
-                Contains(o.Instance.Name, term) ||
-                Contains(o.Instance.Application, term) ||
-                Contains(o.Instance.Company, term) ||
-                Contains(o.Instance.Department, term) ||
-                Contains(o.Instance.ContactName, term) ||
-                Contains(o.Instance.ContactEmail, term) ||
-                Contains(o.Instance.DatabaseIp, term) ||
-                Contains(o.Instance.ServerIp, term));
-        }
-
-        if (_engine.Length > 0 && Enum.TryParse<DatabaseEngine>(_engine, out var engine))
-        {
-            items = items.Where(o => o.Instance.Engine == engine);
-        }
-
-        if (_health.Length > 0 && Enum.TryParse<BackupHealth>(_health, out var health))
-        {
-            items = items.Where(o => o.Health == health);
-        }
-
-        if (_role.Length > 0 && Enum.TryParse<InstanceRole>(_role, out var role))
-        {
-            items = items.Where(o => o.Instance.Role == role);
-        }
-
-        if (_envTier.Length > 0 && Enum.TryParse<EnvironmentTier>(_envTier, out var env))
-        {
-            items = items.Where(o => o.Instance.Environment == env);
-        }
-
-        if (_company.Length > 0)
-        {
-            items = items.Where(o => o.Instance.Company == _company);
-        }
-
-        if (_myInstancesOnly && !string.IsNullOrWhiteSpace(_myEmail))
-        {
-            items = items.Where(o => string.Equals(o.Instance.ContactEmail, _myEmail, StringComparison.OrdinalIgnoreCase));
-        }
-
-        return items.OrderBy(o => o.Instance.Name);
+        if (string.IsNullOrEmpty(_userId)) return;
+        await SavedViews.DeleteAsync(id, _userId);
+        _savedViews = await SavedViews.ListAsync(_userId, "Instances");
     }
-
-    private static bool Contains(string haystack, string term) =>
-        haystack.Contains(term, StringComparison.OrdinalIgnoreCase);
 
     private static string FilterLabel(BackupHealth health) => health switch
     {

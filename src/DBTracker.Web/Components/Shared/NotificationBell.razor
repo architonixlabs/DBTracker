@@ -1,5 +1,7 @@
 @implements IDisposable
 @inject NotificationService Notifications
+@inject AuthenticationStateProvider AuthProvider
+@inject NavigationManager Nav
 
 <div class="notif-bell-wrap">
     <button type="button" class="notif-bell-btn" @onclick="Toggle" aria-haspopup="true" aria-expanded="@_open" aria-label="Notifications">
@@ -34,7 +36,7 @@
             {
                 @foreach (var n in _recent)
                 {
-                    <div class="notif-item @(n.IsRead ? "" : "unread")">
+                    <div class="notif-item @(n.IsRead ? "" : "unread")" @onclick="() => OpenItem(n)" style="cursor:pointer">
                         <span class="dot" style="background:@SeverityColor(n.Severity)"></span>
                         <div>
                             <div class="notif-message">@n.Message</div>
@@ -43,6 +45,9 @@
                     </div>
                 }
             }
+            <div class="notif-dropdown-header" style="border-top:1px solid var(--dbt-line);border-bottom:none;">
+                <a href="/notifications" class="small">View all &amp; manage subscriptions &rarr;</a>
+            </div>
         </div>
     }
 </div>
@@ -50,15 +55,19 @@
 @code {
     private bool _open;
     private int _unreadCount;
-    private List<Notification> _recent = new();
+    private List<NotificationInboxItem> _recent = new();
     private DateTime _lastUpdatedUtc;
     private bool _refreshing;
     private Timer? _autoRefreshTimer;
+    private string? _userId;
 
     private static readonly TimeSpan AutoRefreshInterval = TimeSpan.FromSeconds(30);
 
     protected override async Task OnInitializedAsync()
     {
+        var state = await AuthProvider.GetAuthenticationStateAsync();
+        _userId = state.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+
         await Refresh();
         // Keeps the unread badge current even while the dropdown is closed, so a new alert shows
         // up without the user having to open and close it to force a reload.
@@ -67,8 +76,13 @@
 
     private async Task Refresh()
     {
-        _unreadCount = await Notifications.UnreadCountAsync();
-        _recent = await Notifications.GetRecentAsync();
+        if (string.IsNullOrEmpty(_userId))
+        {
+            return;
+        }
+
+        _unreadCount = await Notifications.UnreadCountAsync(_userId);
+        _recent = await Notifications.GetRecentAsync(_userId);
         _lastUpdatedUtc = DateTime.UtcNow;
     }
 
@@ -99,8 +113,27 @@
 
     private async Task MarkAllRead()
     {
-        await Notifications.MarkAllReadAsync();
+        if (string.IsNullOrEmpty(_userId))
+        {
+            return;
+        }
+
+        await Notifications.MarkAllReadAsync(_userId);
         await Refresh();
+    }
+
+    private async Task OpenItem(NotificationInboxItem n)
+    {
+        if (!string.IsNullOrEmpty(_userId) && !n.IsRead)
+        {
+            await Notifications.MarkReadAsync(_userId, n.Id);
+            await Refresh();
+        }
+
+        if (n.DatabaseInstanceId is { } id)
+        {
+            Nav.NavigateTo($"/instances/{id}");
+        }
     }
 
     private static string SeverityColor(NotificationSeverity severity) => severity switch

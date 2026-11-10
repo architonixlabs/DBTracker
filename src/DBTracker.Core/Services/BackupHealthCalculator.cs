@@ -23,20 +23,28 @@ public static class BackupHealthCalculator
     /// ignored — evidence from the future can't yet be used to judge an earlier instant (U04).
     /// Ties on timestamp break by Id (insertion order), so results are deterministic.
     /// </summary>
-    public static BackupHealth Compute(DatabaseInstance instance, IReadOnlyCollection<BackupRecord> records, DateTime asOfUtc)
+    public static BackupHealth Compute(DatabaseInstance instance, IReadOnlyCollection<BackupRecord> records, DateTime asOfUtc) =>
+        ComputeFromLatest(instance, MostRecentAsOf(records, asOfUtc), asOfUtc);
+
+    /// <summary>
+    /// Same rule as <see cref="Compute"/>, but takes the single most-recent-as-of record directly
+    /// instead of the full history — lets callers that only need the summary (dashboard/list rows,
+    /// U06) compute health from a lightweight per-instance subquery rather than loading every
+    /// BackupRecord for every instance.
+    /// </summary>
+    public static BackupHealth ComputeFromLatest(DatabaseInstance instance, BackupRecord? mostRecentAsOf, DateTime asOfUtc)
     {
-        var mostRecent = MostRecentAsOf(records, asOfUtc);
-        if (mostRecent is null)
+        if (mostRecentAsOf is null)
         {
             return BackupHealth.NeverBackedUp;
         }
 
-        if (mostRecent.Status == BackupStatus.Failed || mostRecent.Status == BackupStatus.Missed)
+        if (mostRecentAsOf.Status == BackupStatus.Failed || mostRecentAsOf.Status == BackupStatus.Missed)
         {
             return BackupHealth.Failed;
         }
 
-        var deadline = mostRecent.TimestampUtc.AddHours(instance.ExpectedBackupIntervalHours);
+        var deadline = mostRecentAsOf.TimestampUtc.AddHours(instance.ExpectedBackupIntervalHours);
         return asOfUtc > deadline ? BackupHealth.Overdue : BackupHealth.OnTrack;
     }
 

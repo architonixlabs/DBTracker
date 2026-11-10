@@ -3,6 +3,8 @@
 @inject DBTrackerDbContext Db
 @inject BackupFileScanner Scanner
 @inject ConnectivityChecker Connectivity
+@inject IncidentService Incidents
+@inject AuthenticationStateProvider AuthProvider
 @inject NavigationManager Nav
 @inject ToastService Toasts
 @inject IConfiguration Configuration
@@ -223,6 +225,60 @@ else
         </div>
     </div>
 
+    @if (_openIncident is not null)
+    {
+        <div class="row g-0 mb-4" style="border-top:1px solid var(--dbt-line);padding-top:28px;">
+            <div class="col-12">
+                <div class="dbt-card">
+                    <h2 class="h6 text-muted text-uppercase mb-3">Open incident</h2>
+                    <p class="small text-muted mb-2">
+                        Opened @_openIncident.OpenedAtUtc.ToLocalTime().ToString("MMM d, h:mm tt") on @_openIncident.TriggerHealth.
+                        @if (_openIncident.EscalationLevel > 0)
+                        {
+                            <span style="color:var(--dbt-failed)"> Escalated @_openIncident.EscalationLevel time(s), last @_openIncident.LastEscalatedAtUtc?.ToLocalTime().ToString("MMM d, h:mm tt").</span>
+                        }
+                    </p>
+                    @if (_openIncident.AcknowledgedAtUtc is { } ackAt)
+                    {
+                        <p class="mb-2"><span class="badge-health dot OnTrack">Acknowledged</span> by @_openIncident.AcknowledgedBy on @ackAt.ToLocalTime().ToString("MMM d, h:mm tt") — escalation stopped. <span class="text-muted">Acknowledgement is a response record only; it never changes the health badge above.</span></p>
+                        @if (!string.IsNullOrWhiteSpace(_openIncident.Note))
+                        {
+                            <p class="small mb-1"><strong>Note:</strong> @_openIncident.Note</p>
+                        }
+                        @if (!string.IsNullOrWhiteSpace(_openIncident.TicketReference))
+                        {
+                            <p class="small mb-0"><strong>Ticket:</strong> @_openIncident.TicketReference</p>
+                        }
+                    }
+                    else
+                    {
+                        <p class="mb-2"><span class="badge-health dot Overdue">Unacknowledged</span> — will keep escalating until someone acknowledges it.</p>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(_openIncident.AssigneeName))
+                    {
+                        <p class="small mb-2"><strong>Assigned to:</strong> @_openIncident.AssigneeName</p>
+                    }
+                    <AuthorizeView Roles="@Roles.CanEditPolicy">
+                        <Authorized>
+                            <div class="d-flex gap-2 align-items-end flex-wrap mb-2">
+                                <div class="field" style="min-width:160px"><label class="form-label small">Assignee</label><input class="form-control form-control-sm" @bind="_assigneeName" /></div>
+                                <button class="btn btn-outline-secondary btn-sm" @onclick="AssignIncident">Assign</button>
+                            </div>
+                            @if (_openIncident.AcknowledgedAtUtc is null)
+                            {
+                                <div class="d-flex gap-2 align-items-end flex-wrap">
+                                    <div class="field" style="min-width:200px"><label class="form-label small">Note / runbook</label><input class="form-control form-control-sm" @bind="_ackNote" /></div>
+                                    <div class="field" style="min-width:140px"><label class="form-label small">Ticket ref</label><input class="form-control form-control-sm" @bind="_ackTicket" /></div>
+                                    <button class="btn btn-outline-secondary btn-sm" @onclick="AcknowledgeIncident">Acknowledge</button>
+                                </div>
+                            }
+                        </Authorized>
+                    </AuthorizeView>
+                </div>
+            </div>
+        </div>
+    }
+
     <div class="row g-0 mb-4 kv-row">
         <AuthorizeView Roles="@Roles.CanEditPolicy" Context="backupAuth">
             <Authorized>
@@ -270,7 +326,19 @@ else
         </AuthorizeView>
         <div class="col-md-7">
             <div class="dbt-card">
-                <h2 class="h6 text-muted text-uppercase mb-3">Backup history</h2>
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h2 class="h6 text-muted text-uppercase mb-0">Backup history</h2>
+                    @if (instance.BackupRecords.Count > 0)
+                    {
+                        <select class="form-select form-select-sm" style="max-width:150px;" @bind="_backupStatusFilter" @bind:after="() => _backupPage = 1">
+                            <option value="">All statuses</option>
+                            @foreach (var s in Enum.GetValues<BackupStatus>())
+                            {
+                                <option value="@s">@s</option>
+                            }
+                        </select>
+                    }
+                </div>
                 @if (!instance.BackupRecords.Any())
                 {
                     <div class="empty-state py-3">
@@ -285,7 +353,7 @@ else
                             <tr><th>When</th><th>Type</th><th>Status</th><th>Size</th><th>Duration</th><th>Evidence</th><th>File</th></tr>
                         </thead>
                         <tbody>
-                            @foreach (var r in instance.BackupRecords.OrderByDescending(r => r.TimestampUtc).ThenByDescending(r => r.Id))
+                            @foreach (var r in BackupHistoryPage())
                             {
                                 var evidence = BackupEvidenceClassifier.Classify(r, instance.RestoreEvents.ToList());
                                 <tr>
@@ -309,6 +377,20 @@ else
                             }
                         </tbody>
                     </table>
+                    @if (!BackupHistoryFiltered().Any())
+                    {
+                        <div class="text-muted small py-2">No backup records match this filter.</div>
+                    }
+                    else
+                    {
+                        <div class="d-flex justify-content-between align-items-center pt-2">
+                            <span class="small text-muted">Page @_backupPage of @BackupHistoryTotalPages()</span>
+                            <div class="d-flex gap-1">
+                                <button class="btn btn-outline-secondary btn-sm" disabled="@(_backupPage <= 1)" @onclick="() => _backupPage--">Prev</button>
+                                <button class="btn btn-outline-secondary btn-sm" disabled="@(_backupPage >= BackupHistoryTotalPages())" @onclick="() => _backupPage++">Next</button>
+                            </div>
+                        </div>
+                    }
                 }
             </div>
         </div>
@@ -357,7 +439,19 @@ else
         </AuthorizeView>
         <div class="col-md-7">
             <div class="dbt-card">
-                <h2 class="h6 text-muted text-uppercase mb-3">Restore history</h2>
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h2 class="h6 text-muted text-uppercase mb-0">Restore history</h2>
+                    @if (instance.RestoreEvents.Count > 0)
+                    {
+                        <select class="form-select form-select-sm" style="max-width:150px;" @bind="_restoreOutcomeFilter" @bind:after="() => _restorePage = 1">
+                            <option value="">All outcomes</option>
+                            @foreach (var o in Enum.GetValues<RestoreOutcome>())
+                            {
+                                <option value="@o">@o</option>
+                            }
+                        </select>
+                    }
+                </div>
                 @if (!instance.RestoreEvents.Any())
                 {
                     <div class="empty-state py-3">
@@ -372,7 +466,7 @@ else
                             <tr><th>When</th><th>By</th><th>Reason</th><th>Outcome</th></tr>
                         </thead>
                         <tbody>
-                            @foreach (var r in instance.RestoreEvents.OrderByDescending(r => r.TimestampUtc))
+                            @foreach (var r in RestoreHistoryPage())
                             {
                                 <tr>
                                     <td class="small">@r.TimestampUtc.ToLocalTime().ToString("MMM d, h:mm tt")</td>
@@ -383,6 +477,20 @@ else
                             }
                         </tbody>
                     </table>
+                    @if (!RestoreHistoryFiltered().Any())
+                    {
+                        <div class="text-muted small py-2">No restore events match this filter.</div>
+                    }
+                    else
+                    {
+                        <div class="d-flex justify-content-between align-items-center pt-2">
+                            <span class="small text-muted">Page @_restorePage of @RestoreHistoryTotalPages()</span>
+                            <div class="d-flex gap-1">
+                                <button class="btn btn-outline-secondary btn-sm" disabled="@(_restorePage <= 1)" @onclick="() => _restorePage--">Prev</button>
+                                <button class="btn btn-outline-secondary btn-sm" disabled="@(_restorePage >= RestoreHistoryTotalPages())" @onclick="() => _restorePage++">Next</button>
+                            </div>
+                        </div>
+                    }
                 }
             </div>
         </div>
@@ -391,7 +499,13 @@ else
     <div class="row g-0" style="border-top:1px solid var(--dbt-line);padding-top:28px;margin-top:28px;">
         <div class="col-12">
             <div class="dbt-card">
-                <h2 class="h6 text-muted text-uppercase mb-3">Change history</h2>
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h2 class="h6 text-muted text-uppercase mb-0">Change history</h2>
+                    @if (_changeLog.Count > 0)
+                    {
+                        <input class="form-control form-control-sm" style="max-width:180px;" placeholder="Filter by field…" @bind="_changeLogFieldFilter" @bind:event="oninput" @bind:after="() => _changeLogPage = 1" />
+                    }
+                </div>
                 @if (_changeLog.Count == 0)
                 {
                     <div class="empty-state py-3">
@@ -406,7 +520,7 @@ else
                             <tr><th>When</th><th>By</th><th>Field</th><th>From</th><th>To</th></tr>
                         </thead>
                         <tbody>
-                            @foreach (var c in _changeLog)
+                            @foreach (var c in ChangeLogPage())
                             {
                                 <tr>
                                     <td class="small">@c.ChangedAtUtc.ToLocalTime().ToString("MMM d, h:mm tt")</td>
@@ -418,6 +532,20 @@ else
                             }
                         </tbody>
                     </table>
+                    @if (!ChangeLogFiltered().Any())
+                    {
+                        <div class="text-muted small py-2">No changes match this filter.</div>
+                    }
+                    else
+                    {
+                        <div class="d-flex justify-content-between align-items-center pt-2">
+                            <span class="small text-muted">Page @_changeLogPage of @ChangeLogTotalPages()</span>
+                            <div class="d-flex gap-1">
+                                <button class="btn btn-outline-secondary btn-sm" disabled="@(_changeLogPage <= 1)" @onclick="() => _changeLogPage--">Prev</button>
+                                <button class="btn btn-outline-secondary btn-sm" disabled="@(_changeLogPage >= ChangeLogTotalPages())" @onclick="() => _changeLogPage++">Next</button>
+                            </div>
+                        </div>
+                    }
                 }
             </div>
         </div>
@@ -437,8 +565,28 @@ else
     private ConnectivityResult? _connectivityResult;
     private HealthExplanation? _explanation;
     private ScannerHealth? _scannerHealth;
+    private Incident? _openIncident;
+    private string _assigneeName = "";
+    private string _ackNote = "";
+    private string _ackTicket = "";
+    private string? _userDisplayName;
 
-    protected override async Task OnInitializedAsync() => await Load();
+    // History tables are paged/filtered client-side over the already-loaded per-instance
+    // collection (U06) — a single instance's own history is bounded in a way the cross-instance
+    // dashboard/list queries weren't, so the bigger "stop loading full histories" win there
+    // (InstanceListRow) was the priority; this still gives real paging + filtering in the UI.
+    private const int HistoryPageSize = 10;
+    private int _backupPage = 1, _restorePage = 1, _changeLogPage = 1;
+    private string _backupStatusFilter = "";
+    private string _restoreOutcomeFilter = "";
+    private string _changeLogFieldFilter = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        var state = await AuthProvider.GetAuthenticationStateAsync();
+        _userDisplayName = state.User.Identity?.Name ?? "";
+        await Load();
+    }
 
     private async Task Load()
     {
@@ -449,6 +597,8 @@ else
             .Where(c => c.DatabaseInstanceId == Id)
             .OrderByDescending(c => c.ChangedAtUtc)
             .ToListAsync();
+        _openIncident = await Incidents.GetOpenAsync(Id);
+        _assigneeName = _openIncident?.AssigneeName ?? "";
 
         if (_overview is not null)
         {
@@ -462,6 +612,56 @@ else
                 staleAfterMultiplier: Configuration.GetValue("BackupScan:StaleAfterMultiplier", 3),
                 nowUtc: now);
         }
+    }
+
+    private IEnumerable<BackupRecord> BackupHistoryFiltered()
+    {
+        var items = (_overview?.Instance.BackupRecords ?? []).OrderByDescending(r => r.TimestampUtc).ThenByDescending(r => r.Id).AsEnumerable();
+        if (_backupStatusFilter.Length > 0 && Enum.TryParse<BackupStatus>(_backupStatusFilter, out var s))
+        {
+            items = items.Where(r => r.Status == s);
+        }
+        return items;
+    }
+
+    private int BackupHistoryTotalPages() => Math.Max(1, (int)Math.Ceiling(BackupHistoryFiltered().Count() / (double)HistoryPageSize));
+    private IEnumerable<BackupRecord> BackupHistoryPage() => BackupHistoryFiltered().Skip((Math.Clamp(_backupPage, 1, BackupHistoryTotalPages()) - 1) * HistoryPageSize).Take(HistoryPageSize);
+
+    private IEnumerable<RestoreEvent> RestoreHistoryFiltered()
+    {
+        var items = (_overview?.Instance.RestoreEvents ?? []).OrderByDescending(r => r.TimestampUtc).AsEnumerable();
+        if (_restoreOutcomeFilter.Length > 0 && Enum.TryParse<RestoreOutcome>(_restoreOutcomeFilter, out var o))
+        {
+            items = items.Where(r => r.Outcome == o);
+        }
+        return items;
+    }
+
+    private int RestoreHistoryTotalPages() => Math.Max(1, (int)Math.Ceiling(RestoreHistoryFiltered().Count() / (double)HistoryPageSize));
+    private IEnumerable<RestoreEvent> RestoreHistoryPage() => RestoreHistoryFiltered().Skip((Math.Clamp(_restorePage, 1, RestoreHistoryTotalPages()) - 1) * HistoryPageSize).Take(HistoryPageSize);
+
+    private IEnumerable<InstanceChangeLog> ChangeLogFiltered() =>
+        _changeLogFieldFilter.Length > 0
+            ? _changeLog.Where(c => c.FieldName.Contains(_changeLogFieldFilter, StringComparison.OrdinalIgnoreCase))
+            : _changeLog;
+
+    private int ChangeLogTotalPages() => Math.Max(1, (int)Math.Ceiling(ChangeLogFiltered().Count() / (double)HistoryPageSize));
+    private IEnumerable<InstanceChangeLog> ChangeLogPage() => ChangeLogFiltered().Skip((Math.Clamp(_changeLogPage, 1, ChangeLogTotalPages()) - 1) * HistoryPageSize).Take(HistoryPageSize);
+
+    private async Task AcknowledgeIncident()
+    {
+        if (_openIncident is null) return;
+        await Incidents.AcknowledgeAsync(_openIncident.Id, _userDisplayName ?? "", _ackNote, _ackTicket);
+        Toasts.Success("Incident acknowledged — escalation stopped.");
+        await Load();
+    }
+
+    private async Task AssignIncident()
+    {
+        if (_openIncident is null) return;
+        await Incidents.AssignAsync(_openIncident.Id, _assigneeName);
+        Toasts.Success($"Assigned to {_assigneeName}.");
+        await Load();
     }
 
     private async Task LogBackup()

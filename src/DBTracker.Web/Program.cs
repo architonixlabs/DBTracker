@@ -37,11 +37,14 @@ builder.Services.AddScoped<DBTrackerDbContext>(sp =>
     sp.GetRequiredService<IDbContextFactory<DBTrackerDbContext>>().CreateDbContext());
 
 builder.Services.AddScoped<InstanceOverviewService>();
+builder.Services.AddScoped<SavedViewService>();
 builder.Services.AddScoped<DBTracker.Web.Services.ToastService>();
 builder.Services.AddScoped<BackupFileScanner>();
 builder.Services.AddHostedService<BackupScanHostedService>();
 
 builder.Services.AddScoped<NotificationService>();
+builder.Services.AddScoped<NotificationSubscriptionService>();
+builder.Services.AddScoped<IncidentService>();
 builder.Services.AddHostedService<AlertCheckHostedService>();
 builder.Services.AddScoped<ComplianceReportService>();
 builder.Services.AddHostedService<ReportHostedService>();

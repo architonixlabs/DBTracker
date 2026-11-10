@@ -6,21 +6,26 @@ namespace DBTracker.UnitTests;
 
 public class AlertEvaluatorTests
 {
-    [Theory]
-    [InlineData(BackupHealth.OnTrack)]
-    [InlineData(BackupHealth.NeverBackedUp)]
-    public void HealthyOrUnmonitorable_NeverNotifies(BackupHealth health)
+    [Fact]
+    public void OnTrack_NeverNotifies()
     {
-        Assert.False(AlertEvaluator.ShouldNotify(null, health));
-        Assert.False(AlertEvaluator.ShouldNotify(BackupHealth.Failed, health));
+        Assert.False(AlertEvaluator.ShouldNotify(null, BackupHealth.OnTrack));
+        Assert.False(AlertEvaluator.ShouldNotify(BackupHealth.Failed, BackupHealth.OnTrack));
     }
 
     [Theory]
     [InlineData(BackupHealth.Overdue)]
     [InlineData(BackupHealth.Failed)]
-    public void FirstTimeOverdueOrFailed_Notifies(BackupHealth health)
+    [InlineData(BackupHealth.NeverBackedUp)]
+    public void FirstTimeAlertable_Notifies(BackupHealth health)
     {
         Assert.True(AlertEvaluator.ShouldNotify(null, health));
+    }
+
+    [Fact]
+    public void NeverBackedUp_WithinOnboardingGrace_Suppressed()
+    {
+        Assert.False(AlertEvaluator.ShouldNotify(null, BackupHealth.NeverBackedUp, suppressNeverBackedUp: true));
     }
 
     [Fact]
@@ -28,6 +33,7 @@ public class AlertEvaluatorTests
     {
         Assert.False(AlertEvaluator.ShouldNotify(BackupHealth.Overdue, BackupHealth.Overdue));
         Assert.False(AlertEvaluator.ShouldNotify(BackupHealth.Failed, BackupHealth.Failed));
+        Assert.False(AlertEvaluator.ShouldNotify(BackupHealth.NeverBackedUp, BackupHealth.NeverBackedUp));
     }
 
     [Fact]
@@ -49,17 +55,16 @@ public class AlertEvaluatorTests
         Assert.True(AlertEvaluator.ShouldNotify(afterRecovery, BackupHealth.Failed));
     }
 
-    [Theory]
-    [InlineData(BackupHealth.OnTrack)]
-    [InlineData(BackupHealth.NeverBackedUp)]
-    public void NextNotifiedState_ClearsForHealthyStates(BackupHealth health)
+    [Fact]
+    public void NextNotifiedState_ClearsForOnTrack()
     {
-        Assert.Null(AlertEvaluator.NextNotifiedState(health));
+        Assert.Null(AlertEvaluator.NextNotifiedState(BackupHealth.OnTrack));
     }
 
     [Theory]
     [InlineData(BackupHealth.Overdue)]
     [InlineData(BackupHealth.Failed)]
+    [InlineData(BackupHealth.NeverBackedUp)]
     public void NextNotifiedState_RemembersAlertableStates(BackupHealth health)
     {
         Assert.Equal(health, AlertEvaluator.NextNotifiedState(health));
@@ -83,5 +88,27 @@ public class AlertEvaluatorTests
     {
         var now = new DateTime(2026, 11, 10, 12, 0, 0, DateTimeKind.Utc);
         Assert.False(AlertEvaluator.IsSuppressedByMaintenance(now.AddHours(-1), now));
+    }
+
+    [Fact]
+    public void IsWithinOnboardingGrace_RecentlyCreated_IsTrue()
+    {
+        var created = new DateTime(2026, 11, 10, 12, 0, 0, DateTimeKind.Utc);
+        Assert.True(AlertEvaluator.IsWithinOnboardingGrace(created, created.AddHours(1), graceHours: 24));
+    }
+
+    [Fact]
+    public void IsWithinOnboardingGrace_PastGraceWindow_IsFalse()
+    {
+        var created = new DateTime(2026, 11, 10, 12, 0, 0, DateTimeKind.Utc);
+        Assert.False(AlertEvaluator.IsWithinOnboardingGrace(created, created.AddHours(25), graceHours: 24));
+    }
+
+    [Fact]
+    public void IsWithinOnboardingGrace_ZeroOrNegativeGrace_DisablesGraceEntirely()
+    {
+        var created = DateTime.UtcNow;
+        Assert.False(AlertEvaluator.IsWithinOnboardingGrace(created, created, graceHours: 0));
+        Assert.False(AlertEvaluator.IsWithinOnboardingGrace(created, created, graceHours: -5));
     }
 }

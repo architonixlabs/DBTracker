@@ -183,6 +183,7 @@ public static class SeedData
             {
                 DatabaseInstanceId = instances[3].Id,
                 InstanceName = instances[3].Name,
+                Company = instances[3].Company,
                 Message = $"{instances[3].Name} is now failing backups.",
                 Severity = NotificationSeverity.Critical,
                 CreatedAtUtc = now.AddHours(-2)
@@ -191,6 +192,7 @@ public static class SeedData
             {
                 DatabaseInstanceId = instances[8].Id,
                 InstanceName = instances[8].Name,
+                Company = instances[8].Company,
                 Message = $"{instances[8].Name} is now failing backups.",
                 Severity = NotificationSeverity.Critical,
                 CreatedAtUtc = now.AddHours(-26)
@@ -199,11 +201,23 @@ public static class SeedData
             {
                 DatabaseInstanceId = instances[2].Id,
                 InstanceName = instances[2].Name,
+                Company = instances[2].Company,
                 Message = $"{instances[2].Name} is now overdue for backup.",
                 Severity = NotificationSeverity.Warning,
                 CreatedAtUtc = now.AddDays(-1),
                 IsRead = true
             });
+
+        // An open, unacknowledged incident on the same Failed instance (U08) — the alert sweep
+        // that would normally open this is disabled in the Testing environment
+        // (Alerts:IntervalMinutes: 0), same reason the notifications above are seeded directly
+        // rather than produced by a live sweep.
+        db.Incidents.Add(new Incident
+        {
+            DatabaseInstanceId = instances[3].Id,
+            TriggerHealth = BackupHealth.Failed,
+            OpenedAtUtc = now.AddHours(-2)
+        });
 
         await db.SaveChangesAsync();
     }

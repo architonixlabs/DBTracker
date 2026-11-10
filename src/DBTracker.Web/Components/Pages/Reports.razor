@@ -54,7 +54,8 @@ else
                 <div class="stat-cell NeverBackedUp"><div class="stat-label">Total size</div><div class="stat-value" style="font-size:22px">@FormatMb(summary.TotalSizeMb)</div></div>
             </div>
 
-            <div class="d-flex justify-content-end mb-3">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <span class="small text-muted">Exports all @rowsInRange.Count matching row(s) in the last @_rangeDays day(s) — not limited to what's currently rendered on screen.</span>
                 <button class="btn btn-outline-primary" @onclick="() => ExportBackupActivity(rowsInRange)" disabled="@(rowsInRange.Count == 0)">
                     <i class="bi bi-download"></i> Export CSV
                 </button>
@@ -99,7 +100,8 @@ else
 
             <p class="text-muted mb-3">@untested of @rows.Count instance(s) have never had a <em>successful</em> restore proven — an untested backup is an audit red flag.</p>
 
-            <div class="d-flex justify-content-end mb-3">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <span class="small text-muted">Exports all @rows.Count instance(s) shown — the full result, not a page.</span>
                 <button class="btn btn-outline-primary" @onclick="() => ExportRestoreTesting(rows)" disabled="@(rows.Count == 0)">
                     <i class="bi bi-download"></i> Export CSV
                 </button>
@@ -134,7 +136,8 @@ else
 
             <p class="text-muted mb-3">Instance counts and backup health rolled up by company and department — who owns what, and where risk is concentrated.</p>
 
-            <div class="d-flex justify-content-end mb-3">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <span class="small text-muted">Exports all @rows.Count row(s) shown — the full result, not a page.</span>
                 <button class="btn btn-outline-primary" @onclick="() => ExportOwnershipRollup(rows)" disabled="@(rows.Count == 0)">
                     <i class="bi bi-download"></i> Export CSV
                 </button>
@@ -171,7 +174,8 @@ else
 
             <p class="text-muted mb-3">Shared-drive scan status for every instance with a backup file location configured — evidence the automated scan is actually running. A scan that hasn't succeeded in a while shows as <strong>Stale</strong> even if its last result was a success — the scanner itself may have stopped.</p>
 
-            <div class="d-flex justify-content-end mb-3">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <span class="small text-muted">Exports all @rows.Count row(s) shown — the full result, not a page.</span>
                 <button class="btn btn-outline-primary" @onclick="() => ExportScanActivity(rows)" disabled="@(rows.Count == 0)">
                     <i class="bi bi-download"></i> Export CSV
                 </button>
@@ -246,6 +250,11 @@ else
         ReportType.ScanActivity, ReportType.ComplianceSnapshot, ReportType.ManagementSummary
     ];
 
+    // Lets the dashboard's scan-issue banner (and any other link) open this page directly on a
+    // given report type (U05) — e.g. /reports?type=ScanActivity — instead of landing on the
+    // default tab and making the user click again.
+    [Parameter, SupplyParameterFromQuery(Name = "type")] public string? Type { get; set; }
+
     private List<InstanceOverview>? _overviews;
     private ReportType _selected = ReportType.BackupActivity;
     private int _rangeDays = 7;
@@ -256,6 +265,11 @@ else
 
     protected override async Task OnInitializedAsync()
     {
+        if (Enum.TryParse<ReportType>(Type, true, out var requested))
+        {
+            _selected = requested;
+        }
+
         _overviews = await OverviewService.GetAllAsync();
     }
 
