@@ -216,6 +216,19 @@ needs a record of DR drills and emergency restores, not just backups going out).
   endpoint. Verified both by an automated two-browser-context E2E test (approve and deny paths) and
   by hand with real Playwright screenshots of the whole flow before trusting the automated version.
   Full suite: 46/46 (32 unit + 14 E2E). This closes out every epic from the original ask.
+- 2026-11-10 — Two rounds of visual redesign on user feedback. First pass applied the `/design`
+  artifact's editorial direction (warm paper background, Fraunces serif + Inter, terracotta/teal
+  accents, hairline dividers instead of boxed cards). User then flagged that look as itself a
+  recognizable "AI redesign" cliché and asked for something that reads as human-made for the actual
+  audience. Replaced it with a dark ops-console theme instead: IBM Plex Mono for data/headings/nav,
+  amber/green/red status LEDs with a glow instead of pill badges, a grid-paper texture background,
+  `// eyebrow` comment-style section labels, and a literal terminal-window login card (title bar,
+  `>` prompt-style fields, blinking cursor) replacing the generic split-screen hero. Found and fixed
+  a real CSS bug along the way: Bootstrap's `.table` sets `background-color: var(--bs-table-bg)`
+  (defaults to white) directly on every `td`/`th`, which only showed up on the two backup/restore
+  history tables that had `dbt-table` on the `<table>` itself rather than a wrapping div — explicit
+  `background-color: transparent` override added. Two E2E selectors (`.stat-card`/`.value`) updated
+  to match the renamed `.stat-cell`/`.stat-value` markup. Full suite still 46/46 after both passes.
 
 ## Out of scope (future)
 - Automated backup execution/orchestration (this tracks status, doesn't run backups)

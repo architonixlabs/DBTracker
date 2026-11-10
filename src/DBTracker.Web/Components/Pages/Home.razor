@@ -6,8 +6,9 @@
 
 <div class="app-topbar">
     <div>
+        <div class="eyebrow">Overview</div>
         <h1>Dashboard</h1>
-        <div class="subtitle">Backup health across every tracked database instance</div>
+        <div class="subtitle">Backup health across every tracked database instance, ranked by what needs attention first.</div>
     </div>
 </div>
 
@@ -28,59 +29,33 @@
 }
 else
 {
-    <div class="row g-3 mb-4">
-        <div class="col-6 col-md-3">
-            <div class="stat-card Total @(_filterHealth is null ? "is-active" : "")" @onclick="() => SetFilter(null)">
-                <div class="icon"><i class="bi bi-hdd-stack"></i></div>
-                <div>
-                    <div class="value">@_overviews.Count</div>
-                    <div class="label">Total instances</div>
-                </div>
-            </div>
-        </div>
-        <div class="col-6 col-md-3">
-            <div class="stat-card OnTrack @(_filterHealth == BackupHealth.OnTrack ? "is-active" : "")" @onclick="() => SetFilter(BackupHealth.OnTrack)">
-                <div class="icon"><i class="bi bi-check-circle"></i></div>
-                <div>
-                    <div class="value">@Count(BackupHealth.OnTrack)</div>
-                    <div class="label">On track</div>
-                </div>
-            </div>
-        </div>
-        <div class="col-6 col-md-3">
-            <div class="stat-card Overdue @(_filterHealth == BackupHealth.Overdue ? "is-active" : "")" @onclick="() => SetFilter(BackupHealth.Overdue)">
-                <div class="icon"><i class="bi bi-clock-history"></i></div>
-                <div>
-                    <div class="value">@Count(BackupHealth.Overdue)</div>
-                    <div class="label">Overdue</div>
-                </div>
-            </div>
-        </div>
-        <div class="col-6 col-md-3">
-            <div class="stat-card Failed @(_filterHealth == BackupHealth.Failed ? "is-active" : "")" @onclick="() => SetFilter(BackupHealth.Failed)">
-                <div class="icon"><i class="bi bi-x-circle"></i></div>
-                <div>
-                    <div class="value">@Count(BackupHealth.Failed)</div>
-                    <div class="label">Failed</div>
-                </div>
-            </div>
-        </div>
+    <div class="stat-strip">
+        <button type="button" class="stat-cell Total @(_filterHealth is null ? "is-active" : "")" @onclick="() => SetFilter(null)">
+            <div class="stat-label">Total instances</div>
+            <div class="stat-value">@_overviews.Count</div>
+        </button>
+        <button type="button" class="stat-cell OnTrack @(_filterHealth == BackupHealth.OnTrack ? "is-active" : "")" @onclick="() => SetFilter(BackupHealth.OnTrack)">
+            <div class="stat-label"><span class="stat-dot OnTrack"></span>On track</div>
+            <div class="stat-value">@Count(BackupHealth.OnTrack)</div>
+        </button>
+        <button type="button" class="stat-cell Overdue @(_filterHealth == BackupHealth.Overdue ? "is-active" : "")" @onclick="() => SetFilter(BackupHealth.Overdue)">
+            <div class="stat-label"><span class="stat-dot Overdue"></span>Overdue</div>
+            <div class="stat-value">@Count(BackupHealth.Overdue)</div>
+        </button>
+        <button type="button" class="stat-cell Failed @(_filterHealth == BackupHealth.Failed ? "is-active" : "")" @onclick="() => SetFilter(BackupHealth.Failed)">
+            <div class="stat-label"><span class="stat-dot Failed"></span>Failed</div>
+            <div class="stat-value">@Count(BackupHealth.Failed)</div>
+        </button>
+        @if (Count(BackupHealth.NeverBackedUp) > 0)
+        {
+            <button type="button" class="stat-cell NeverBackedUp @(_filterHealth == BackupHealth.NeverBackedUp ? "is-active" : "")" @onclick="() => SetFilter(BackupHealth.NeverBackedUp)">
+                <div class="stat-label"><span class="stat-dot NeverBackedUp"></span>Never backed up</div>
+                <div class="stat-value">@Count(BackupHealth.NeverBackedUp)</div>
+            </button>
+        }
     </div>
 
-    @if (Count(BackupHealth.NeverBackedUp) > 0)
-    {
-        <div class="col-md-3 mb-4" style="max-width: 260px;">
-            <div class="stat-card NeverBackedUp @(_filterHealth == BackupHealth.NeverBackedUp ? "is-active" : "")" @onclick="() => SetFilter(BackupHealth.NeverBackedUp)">
-                <div class="icon"><i class="bi bi-question-circle"></i></div>
-                <div>
-                    <div class="value">@Count(BackupHealth.NeverBackedUp)</div>
-                    <div class="label">Never backed up</div>
-                </div>
-            </div>
-        </div>
-    }
-
-    <h2 class="h5 mb-3">@(_filterHealth is null ? "All instances, most at risk first" : $"Instances: {FilterLabel(_filterHealth)}")</h2>
+    <h2 class="h5 mb-3" style="font-family:var(--dbt-mono);font-weight:500;color:var(--dbt-sidebar-fg-active);">@(_filterHealth is null ? "All instances, most at risk first" : $"Instances: {FilterLabel(_filterHealth)}")</h2>
 
     <div class="dbt-table">
         <table class="table">

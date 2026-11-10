@@ -43,7 +43,7 @@ public class InstanceLifecycleTests
 
         // >= rather than == 10: other tests in this run may have created additional instances
         // against the same shared Testing database (reset once per suite, not per test).
-        var totalText = await _page.Locator(".stat-card.Total .value").InnerTextAsync();
+        var totalText = await _page.Locator(".stat-cell.Total .stat-value").InnerTextAsync();
         Assert.That(int.Parse(totalText), Is.GreaterThanOrEqualTo(10));
     }
 
@@ -134,10 +134,10 @@ public class InstanceLifecycleTests
     public async Task DashboardStatCard_FiltersTableByHealth()
     {
         await GotoAsync("/");
-        await _page.WaitForSelectorAsync(".stat-card.Failed");
+        await _page.WaitForSelectorAsync(".stat-cell.Failed");
         await WaitForCircuitAsync();
 
-        await _page.ClickAsync(".stat-card.Failed");
+        await _page.ClickAsync(".stat-cell.Failed");
         await _page.WaitForTimeoutAsync(600);
 
         var badges = _page.Locator(".dbt-table tbody .badge-health");

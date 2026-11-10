@@ -17,6 +17,7 @@ else
 
     <div class="app-topbar">
         <div>
+            <div class="eyebrow">Instance detail</div>
             <h1>@instance.Name <HealthBadge Health="_overview.Health" /></h1>
             <div class="subtitle">@instance.Engine @instance.Version · @instance.Environment · <span class="role-pill @instance.Role">@instance.Role</span></div>
         </div>
@@ -37,7 +38,7 @@ else
         </AuthorizeView>
     </div>
 
-    <div class="row g-3 mb-4">
+    <div class="row g-0 mb-4 kv-row">
         <div class="col-md-6">
             <div class="dbt-card h-100">
                 <h2 class="h6 text-muted text-uppercase mb-3">Ownership &amp; contact</h2>
@@ -104,7 +105,7 @@ else
         </div>
     </div>
 
-    <div class="row g-3 mb-4">
+    <div class="row g-0 mb-4 kv-row">
         <AuthorizeView Roles="@Roles.CanEditPolicy" Context="backupAuth">
             <Authorized>
                 <div class="col-md-5">
@@ -161,7 +162,7 @@ else
                 }
                 else
                 {
-                    <table class="table table-sm mb-0">
+                    <table class="table table-sm mb-0 dbt-table">
                         <thead>
                             <tr><th>When</th><th>Type</th><th>Status</th><th>Size</th><th>Duration</th><th>Source</th></tr>
                         </thead>
@@ -184,7 +185,7 @@ else
         </div>
     </div>
 
-    <div class="row g-3">
+    <div class="row g-0 kv-row">
         <AuthorizeView Roles="@Roles.CanEditPolicy" Context="restoreAuth">
             <Authorized>
                 <div class="col-md-5">
@@ -237,7 +238,7 @@ else
                 }
                 else
                 {
-                    <table class="table table-sm mb-0">
+                    <table class="table table-sm mb-0 dbt-table">
                         <thead>
                             <tr><th>When</th><th>By</th><th>Reason</th><th>Outcome</th></tr>
                         </thead>
