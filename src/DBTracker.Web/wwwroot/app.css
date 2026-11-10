@@ -171,12 +171,18 @@ code, .mono {
     display: inline-block;
 }
 
-.app-sidebar .brand::after {
+.app-sidebar .brand .brand-word {
+    position: relative;
+}
+
+.app-sidebar .brand .brand-word::after {
     content: "";
-    width: 8px;
+    position: absolute;
+    top: 1px;
+    right: -9px;
+    width: 7px;
     height: 15px;
     background: var(--dbt-accent);
-    margin-left: 2px;
     animation: blink 1.1s step-end infinite;
 }
 
@@ -1056,7 +1062,7 @@ dl.row > dd {
     .app-sidebar {
         width: 64px;
     }
-    .app-sidebar .brand span:not(.brand-dot), .app-sidebar .brand::after, .app-nav-link span, .user-chip .name, .user-chip .role {
+    .app-sidebar .brand span:not(.brand-dot), .app-nav-link span, .user-chip .name, .user-chip .role {
         display: none;
     }
     .app-main {
@@ -1104,7 +1110,7 @@ dl.row > dd {
 .notif-dropdown {
     position: absolute;
     top: calc(100% + 10px);
-    right: -8px;
+    left: 0;
     width: 320px;
     max-height: 420px;
     overflow-y: auto;
