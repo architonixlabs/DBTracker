@@ -220,5 +220,90 @@ public static class SeedData
         });
 
         await db.SaveChangesAsync();
+
+        // Epic 18 (D01-D06): seed enough structured identity/catalogue/advisory data for the
+        // lifecycle pages to show something real without every E2E test having to build it from
+        // scratch. ARXMAIL-PROD-01 (PostgreSQL) demonstrates an attested identity with a support
+        // deadline approaching inside the default 30-day notice window; CONTOSO-HR-MYSQL
+        // demonstrates a manually-entered, more-precise raw version (D01 layering on top of the
+        // free-text Version field) with a full patch-baseline and advisory story.
+        db.VersionIdentities.AddRange(
+            new VersionIdentity
+            {
+                DatabaseInstanceId = instances[0].Id,
+                RawVersionText = "16.2",
+                ResolutionStatus = VersionResolutionStatus.Resolved,
+                Family = "PostgreSQL",
+                Major = 16,
+                Minor = 2,
+                ObservationSource = VersionObservationSource.Attested,
+                IsAttested = true,
+                AttestedBy = "Priya Nair",
+                AttestedAtUtc = now.AddDays(-5)
+            },
+            new VersionIdentity
+            {
+                DatabaseInstanceId = instances[3].Id,
+                RawVersionText = "8.0.36",
+                ResolutionStatus = VersionResolutionStatus.Resolved,
+                Family = "MySQL",
+                Major = 8,
+                Minor = 0,
+                Build = "36",
+                ObservationSource = VersionObservationSource.ManualEntry,
+                UpdatedBy = "Angela Price"
+            });
+        await db.SaveChangesAsync();
+
+        var pgInstalled = new ReleaseCatalogEntry
+        {
+            Engine = DatabaseEngine.PostgreSql, Family = "PostgreSQL", ReleaseLabel = "PostgreSQL 16.2",
+            Major = 16, Minor = 2, Channel = ReleaseChannel.GA,
+            MainstreamSupportEndUtc = now.AddDays(20), ReviewedAtUtc = now.AddDays(-5), ReviewedBy = "Priya Nair",
+            SourceUrl = "https://www.postgresql.org/support/versioning/"
+        };
+        var mysqlInstalled = new ReleaseCatalogEntry
+        {
+            Engine = DatabaseEngine.MySql, Family = "MySQL", ReleaseLabel = "MySQL 8.0.36",
+            Major = 8, Minor = 0, Build = "36", Channel = ReleaseChannel.GA,
+            ReviewedAtUtc = now.AddDays(-30), ReviewedBy = "Angela Price",
+            SourceUrl = "https://dev.mysql.com/doc/refman/8.0/en/upgrading.html"
+        };
+        var mysqlNewerPatch = new ReleaseCatalogEntry
+        {
+            Engine = DatabaseEngine.MySql, Family = "MySQL", ReleaseLabel = "MySQL 8.0.43",
+            Major = 8, Minor = 0, Build = "43", Channel = ReleaseChannel.GA,
+            ReviewedAtUtc = now.AddDays(-10), ReviewedBy = "Angela Price",
+            SourceUrl = "https://dev.mysql.com/doc/refman/8.0/en/upgrading.html"
+        };
+        var mysqlNewerGa = new ReleaseCatalogEntry
+        {
+            Engine = DatabaseEngine.MySql, Family = "MySQL", ReleaseLabel = "MySQL 8.4 LTS",
+            Major = 8, Minor = 4, Build = "0", Channel = ReleaseChannel.GA,
+            ReviewedAtUtc = now.AddDays(-10), ReviewedBy = "Angela Price",
+            SourceUrl = "https://dev.mysql.com/doc/refman/8.4/en/upgrade-paths.html"
+        };
+        db.ReleaseCatalogEntries.AddRange(pgInstalled, mysqlInstalled, mysqlNewerPatch, mysqlNewerGa);
+        await db.SaveChangesAsync();
+
+        db.ApprovedPatchBaselines.Add(new ApprovedPatchBaseline
+        {
+            Engine = DatabaseEngine.MySql, Family = "MySQL",
+            TargetReleaseCatalogEntryId = mysqlNewerPatch.Id,
+            ReviewedBy = "Angela Price", ReviewedAtUtc = now.AddDays(-10),
+            Notes = "Approved same-branch patch target — not a major-version migration."
+        });
+
+        db.AdvisoryRecords.Add(new AdvisoryRecord
+        {
+            Engine = DatabaseEngine.MySql, Family = "MySQL",
+            VendorAdvisoryId = "CVE-2025-0001", Title = "Example privilege-escalation advisory (seed/demo data)",
+            Severity = AdvisorySeverity.High,
+            AffectedMinBuild = "8.0.0", AffectedMaxBuild = "8.0.40", FixedBuild = "8.0.41",
+            ProvenanceUrl = "https://www.oracle.com/security-alerts/",
+            PublishedAtUtc = now.AddDays(-20), ImportedBy = "Angela Price"
+        });
+
+        await db.SaveChangesAsync();
     }
 }

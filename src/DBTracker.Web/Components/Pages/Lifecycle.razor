@@ -1,0 +1,439 @@
+@page "/lifecycle"
+@attribute [Authorize(Roles = Roles.CanEditPolicy)]
+@using DBTracker.Core.Entities
+@using DBTracker.Core.Enums
+@using DBTracker.Core.Services
+@using DBTracker.Infrastructure.Lifecycle
+@using DBTracker.Infrastructure.Identity
+@using Microsoft.AspNetCore.Components.Authorization
+@inject ReleaseCatalogService Catalog
+@inject PatchBaselineService Baselines
+@inject AdvisoryService Advisories
+@inject AuthenticationStateProvider AuthProvider
+@inject DBTracker.Web.Services.ToastService Toasts
+
+<PageTitle>Release &amp; support lifecycle · DBTracker</PageTitle>
+
+<div class="app-topbar">
+    <div>
+        <div class="eyebrow">DBA lifecycle roadmap · Epic 18</div>
+        <h1>Release &amp; support lifecycle</h1>
+        <div class="subtitle">
+            The curated release/support catalogue, approved patch baselines, and imported security advisories (D02, D04, D05).
+            Facts here are curated/imported, not pulled from any live vendor feed — a failed refresh retains last-known facts with a staleness warning.
+        </div>
+    </div>
+</div>
+
+<div class="filter-bar">
+    @foreach (var tab in TabOrder)
+    {
+        <button type="button" class="btn @(tab == _selected ? "btn-primary" : "btn-outline-secondary")" @onclick="() => _selected = tab">@Label(tab)</button>
+    }
+</div>
+
+@switch (_selected)
+{
+    case Tab.Catalogue:
+    {
+        <div class="row g-3">
+            <div class="col-lg-5">
+                <div class="dbt-card">
+                    <h2 class="h6 text-muted text-uppercase mb-3">Add a release/support fact</h2>
+                    <div class="row g-2 mb-2">
+                        <div class="col-6">
+                            <select class="form-select form-select-sm" @bind="_newEngine">
+                                @foreach (var e in Enum.GetValues<DatabaseEngine>())
+                                {
+                                    <option value="@e">@e</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-6"><input class="form-control form-control-sm" placeholder="Family (e.g. PostgreSQL)" @bind="_newFamily" @bind:event="oninput" /></div>
+                    </div>
+                    <div class="mb-2"><input class="form-control form-control-sm" placeholder="Release label (e.g. PostgreSQL 16)" @bind="_newLabel" @bind:event="oninput" /></div>
+                    <div class="row g-2 mb-2">
+                        <div class="col-4"><input type="number" class="form-control form-control-sm" placeholder="Major" @bind="_newMajor" /></div>
+                        <div class="col-4"><input type="number" class="form-control form-control-sm" placeholder="Minor" @bind="_newMinor" /></div>
+                        <div class="col-4">
+                            <select class="form-select form-select-sm" @bind="_newChannel">
+                                @foreach (var c in Enum.GetValues<ReleaseChannel>())
+                                {
+                                    <option value="@c">@c</option>
+                                }
+                            </select>
+                        </div>
+                    </div>
+                    <div class="row g-2 mb-2">
+                        <div class="col-6">
+                            <label class="form-label small">Mainstream support ends</label>
+                            <input type="date" class="form-control form-control-sm" @bind="_newMainstreamEnd" />
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label small">Extended support ends</label>
+                            <input type="date" class="form-control form-control-sm" @bind="_newExtendedEnd" />
+                        </div>
+                    </div>
+                    <div class="form-check mb-2">
+                        <input class="form-check-input" type="checkbox" @bind="_newDatesAreTbd" id="dates-tbd" />
+                        <label class="form-check-label small" for="dates-tbd">Dates are TBD</label>
+                    </div>
+                    <div class="mb-2"><input class="form-control form-control-sm" placeholder="Source URL" @bind="_newSourceUrl" @bind:event="oninput" /></div>
+                    <button class="btn btn-primary btn-sm" @onclick="CreateEntry" disabled="@(string.IsNullOrWhiteSpace(_newFamily) || string.IsNullOrWhiteSpace(_newLabel))">Add entry</button>
+                </div>
+            </div>
+            <div class="col-lg-7">
+                @if (_entries.Count == 0)
+                {
+                    <div class="empty-state"><i class="bi bi-journal"></i>No release/support facts catalogued yet.</div>
+                }
+                else
+                {
+                    @foreach (var e in _entries)
+                    {
+                        <div class="dbt-card mb-3">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <div>
+                                    <strong>@e.ReleaseLabel</strong>
+                                    <span class="small text-muted"> — @e.Engine / @e.Family · @e.Channel · rev @e.RevisionNumber</span>
+                                    @if (e.IsManualOverride)
+                                    {
+                                        <span class="small" style="color:var(--dbt-overdue);"> · manually overridden (@e.OverrideReviewedBy)</span>
+                                    }
+                                    @if (e.IsStale)
+                                    {
+                                        <span class="small" style="color:var(--dbt-failed);"> · stale — @e.LastRefreshError</span>
+                                    }
+                                </div>
+                                <button class="btn btn-outline-secondary btn-sm" @onclick="() => RefreshEntry(e.Id)">Refresh</button>
+                            </div>
+                            <p class="small text-muted mb-1">
+                                Mainstream ends: @(e.MainstreamSupportEndUtc?.ToString("yyyy-MM-dd") ?? "—") ·
+                                Extended ends: @(e.ExtendedSupportEndUtc?.ToString("yyyy-MM-dd") ?? "—") ·
+                                @(e.DatesAreTbd ? "dates TBD" : "")
+                            </p>
+
+                            @if (_overridingId == e.Id)
+                            {
+                                <div class="mt-2 p-2" style="border:1px dashed var(--dbt-line);">
+                                    <div class="row g-2 mb-2">
+                                        <div class="col-6">
+                                            <label class="form-label small">New mainstream-end date</label>
+                                            <input type="date" class="form-control form-control-sm" @bind="_overrideMainstreamEnd" />
+                                        </div>
+                                        <div class="col-6">
+                                            <label class="form-label small">New extended-end date</label>
+                                            <input type="date" class="form-control form-control-sm" @bind="_overrideExtendedEnd" />
+                                        </div>
+                                    </div>
+                                    <div class="mb-2"><input class="form-control form-control-sm" placeholder="Reason (required)" @bind="_overrideReason" @bind:event="oninput" /></div>
+                                    <div class="mb-2"><input class="form-control form-control-sm" placeholder="Reviewed by (required)" @bind="_overrideReviewedBy" @bind:event="oninput" /></div>
+                                    <div class="mb-2">
+                                        <label class="form-label small">Override expires</label>
+                                        <input type="date" class="form-control form-control-sm" @bind="_overrideExpires" />
+                                    </div>
+                                    <div class="d-flex gap-2">
+                                        <button class="btn btn-primary btn-sm" @onclick="SubmitOverride" disabled="@(string.IsNullOrWhiteSpace(_overrideReason) || string.IsNullOrWhiteSpace(_overrideReviewedBy))">Apply override</button>
+                                        <button class="btn btn-link btn-sm" @onclick="() => _overridingId = null">Cancel</button>
+                                    </div>
+                                </div>
+                            }
+                            else
+                            {
+                                <button class="btn btn-link btn-sm p-0" @onclick="() => OpenOverride(e)">Manual override…</button>
+                            }
+                        </div>
+                    }
+                }
+            </div>
+        </div>
+        break;
+    }
+
+    case Tab.Baselines:
+    {
+        <div class="row g-3">
+            <div class="col-lg-5">
+                <div class="dbt-card">
+                    <h2 class="h6 text-muted text-uppercase mb-3">Set an approved patch baseline</h2>
+                    <div class="row g-2 mb-2">
+                        <div class="col-6">
+                            <select class="form-select form-select-sm" @bind="_baselineEngine">
+                                @foreach (var e in Enum.GetValues<DatabaseEngine>())
+                                {
+                                    <option value="@e">@e</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-6"><input class="form-control form-control-sm" placeholder="Family" @bind="_baselineFamily" @bind:event="oninput" /></div>
+                    </div>
+                    <div class="mb-2">
+                        <select class="form-select form-select-sm" @bind="_baselineTargetEntryId">
+                            <option value="0">Choose target release…</option>
+                            @foreach (var e in _entries)
+                            {
+                                <option value="@e.Id">@e.ReleaseLabel (@e.Channel)</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="mb-2"><input class="form-control form-control-sm" placeholder="Reviewed by (required)" @bind="_baselineReviewedBy" @bind:event="oninput" /></div>
+                    <div class="mb-2">
+                        <label class="form-label small">Expires (optional)</label>
+                        <input type="date" class="form-control form-control-sm" @bind="_baselineExpires" />
+                    </div>
+                    <div class="mb-2"><input class="form-control form-control-sm" placeholder="Notes" @bind="_baselineNotes" @bind:event="oninput" /></div>
+                    <button class="btn btn-primary btn-sm" @onclick="SetBaseline" disabled="@(string.IsNullOrWhiteSpace(_baselineFamily) || _baselineTargetEntryId == 0 || string.IsNullOrWhiteSpace(_baselineReviewedBy))">Set baseline</button>
+                </div>
+            </div>
+            <div class="col-lg-7">
+                @if (_baselinesList.Count == 0)
+                {
+                    <div class="empty-state"><i class="bi bi-flag"></i>No approved baselines set yet — until one is, no target is auto-recommended.</div>
+                }
+                else
+                {
+                    <table class="table table-sm dbt-table">
+                        <thead><tr><th>Engine/family</th><th>Target</th><th>Reviewed by</th><th>Expires</th><th>Active</th></tr></thead>
+                        <tbody>
+                            @foreach (var b in _baselinesList)
+                            {
+                                <tr>
+                                    <td class="small">@b.Engine / @b.Family</td>
+                                    <td class="small">@b.TargetReleaseCatalogEntry?.ReleaseLabel</td>
+                                    <td class="small">@b.ReviewedBy</td>
+                                    <td class="small">@(b.ExpiresAtUtc?.ToString("yyyy-MM-dd") ?? "—")</td>
+                                    <td class="small">@(b.IsActive ? "Yes" : "No")</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                }
+            </div>
+        </div>
+        break;
+    }
+
+    case Tab.Advisories:
+    {
+        <div class="row g-3">
+            <div class="col-lg-5">
+                <div class="dbt-card">
+                    <h2 class="h6 text-muted text-uppercase mb-3">Import an advisory</h2>
+                    <div class="row g-2 mb-2">
+                        <div class="col-6">
+                            <select class="form-select form-select-sm" @bind="_advEngine">
+                                @foreach (var e in Enum.GetValues<DatabaseEngine>())
+                                {
+                                    <option value="@e">@e</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-6"><input class="form-control form-control-sm" placeholder="Family" @bind="_advFamily" @bind:event="oninput" /></div>
+                    </div>
+                    <div class="mb-2"><input class="form-control form-control-sm" placeholder="Vendor advisory ID (e.g. CVE-2025-1234)" @bind="_advVendorId" @bind:event="oninput" /></div>
+                    <div class="mb-2"><input class="form-control form-control-sm" placeholder="Title" @bind="_advTitle" @bind:event="oninput" /></div>
+                    <div class="row g-2 mb-2">
+                        <div class="col-6">
+                            <select class="form-select form-select-sm" @bind="_advSeverity">
+                                @foreach (var s in Enum.GetValues<AdvisorySeverity>())
+                                {
+                                    <option value="@s">@s</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-6"><input class="form-control form-control-sm" placeholder="Fixed build" @bind="_advFixedBuild" @bind:event="oninput" /></div>
+                    </div>
+                    <div class="row g-2 mb-2">
+                        <div class="col-6"><input class="form-control form-control-sm" placeholder="Affected min build" @bind="_advMinBuild" @bind:event="oninput" /></div>
+                        <div class="col-6"><input class="form-control form-control-sm" placeholder="Affected max build" @bind="_advMaxBuild" @bind:event="oninput" /></div>
+                    </div>
+                    <div class="mb-2"><input class="form-control form-control-sm" placeholder="Provenance URL" @bind="_advProvenance" @bind:event="oninput" /></div>
+                    <button class="btn btn-primary btn-sm" @onclick="ImportAdvisory" disabled="@(string.IsNullOrWhiteSpace(_advVendorId) || string.IsNullOrWhiteSpace(_advFamily))">Import advisory</button>
+                </div>
+            </div>
+            <div class="col-lg-7">
+                @if (_advisoriesList.Count == 0)
+                {
+                    <div class="empty-state"><i class="bi bi-shield-exclamation"></i>No advisories imported yet.</div>
+                }
+                else
+                {
+                    <table class="table table-sm dbt-table">
+                        <thead><tr><th>Vendor ID</th><th>Family</th><th>Severity</th><th>Affected range</th><th>Fixed build</th></tr></thead>
+                        <tbody>
+                            @foreach (var a in _advisoriesList)
+                            {
+                                <tr>
+                                    <td class="small">@a.VendorAdvisoryId</td>
+                                    <td class="small">@a.Engine / @a.Family</td>
+                                    <td class="small">@a.Severity</td>
+                                    <td class="small">@a.AffectedMinBuild–@a.AffectedMaxBuild</td>
+                                    <td class="small">@a.FixedBuild</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                }
+                <p class="small text-muted mt-2">
+                    This imports/references advisories; it does not replace a dedicated vulnerability-management platform's own UI
+                    (SonarQube/Dependency-Track/DefectDojo per org standards already cover scanning). Classify applicability per instance
+                    from the instance's Lifecycle page.
+                </p>
+            </div>
+        </div>
+        break;
+    }
+}
+
+@code {
+    private enum Tab { Catalogue, Baselines, Advisories }
+    private static readonly Tab[] TabOrder = [Tab.Catalogue, Tab.Baselines, Tab.Advisories];
+    private Tab _selected = Tab.Catalogue;
+
+    private List<ReleaseCatalogEntry> _entries = new();
+    private List<ApprovedPatchBaseline> _baselinesList = new();
+    private List<AdvisoryRecord> _advisoriesList = new();
+    private string? _userName;
+
+    // New catalogue entry form.
+    private DatabaseEngine _newEngine = DatabaseEngine.PostgreSql;
+    private string _newFamily = "", _newLabel = "", _newSourceUrl = "";
+    private int? _newMajor, _newMinor;
+    private ReleaseChannel _newChannel = ReleaseChannel.GA;
+    private DateTime? _newMainstreamEnd, _newExtendedEnd;
+    private bool _newDatesAreTbd;
+
+    // Manual override form.
+    private int? _overridingId;
+    private DateTime? _overrideMainstreamEnd, _overrideExtendedEnd, _overrideExpires;
+    private string _overrideReason = "", _overrideReviewedBy = "";
+
+    // Approved baseline form.
+    private DatabaseEngine _baselineEngine = DatabaseEngine.PostgreSql;
+    private string _baselineFamily = "", _baselineReviewedBy = "", _baselineNotes = "";
+    private int _baselineTargetEntryId;
+    private DateTime? _baselineExpires;
+
+    // Advisory import form.
+    private DatabaseEngine _advEngine = DatabaseEngine.PostgreSql;
+    private string _advFamily = "", _advVendorId = "", _advTitle = "", _advFixedBuild = "", _advMinBuild = "", _advMaxBuild = "", _advProvenance = "";
+    private AdvisorySeverity _advSeverity = AdvisorySeverity.Unknown;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var state = await AuthProvider.GetAuthenticationStateAsync();
+        _userName = state.User.Identity?.Name ?? "unknown";
+        await LoadAll();
+    }
+
+    private async Task LoadAll()
+    {
+        _entries = await Catalog.ListAsync();
+        _baselinesList = await Baselines.ListAsync();
+        _advisoriesList = await Advisories.ListAsync();
+    }
+
+    private async Task CreateEntry()
+    {
+        var entry = new ReleaseCatalogEntry
+        {
+            Engine = _newEngine,
+            Family = _newFamily,
+            ReleaseLabel = _newLabel,
+            Major = _newMajor,
+            Minor = _newMinor,
+            Channel = _newChannel,
+            MainstreamSupportEndUtc = _newMainstreamEnd,
+            ExtendedSupportEndUtc = _newExtendedEnd,
+            DatesAreTbd = _newDatesAreTbd,
+            SourceUrl = _newSourceUrl
+        };
+        await Catalog.CreateAsync(entry, _userName ?? "unknown");
+        Toasts.Success($"Catalogue entry \"{_newLabel}\" added.");
+        _newFamily = _newLabel = _newSourceUrl = "";
+        _newMajor = _newMinor = null;
+        _newMainstreamEnd = _newExtendedEnd = null;
+        _newDatesAreTbd = false;
+        await LoadAll();
+    }
+
+    private void OpenOverride(ReleaseCatalogEntry entry)
+    {
+        _overridingId = entry.Id;
+        _overrideMainstreamEnd = entry.MainstreamSupportEndUtc;
+        _overrideExtendedEnd = entry.ExtendedSupportEndUtc;
+        _overrideReason = "";
+        _overrideReviewedBy = "";
+        _overrideExpires = null;
+    }
+
+    private async Task SubmitOverride()
+    {
+        if (_overridingId is not { } id)
+        {
+            return;
+        }
+
+        var ok = await Catalog.ApplyManualOverrideAsync(id, _overrideReason, _overrideReviewedBy, _overrideExpires, entry =>
+        {
+            entry.MainstreamSupportEndUtc = _overrideMainstreamEnd;
+            entry.ExtendedSupportEndUtc = _overrideExtendedEnd;
+        }, _userName ?? "unknown");
+
+        Toasts.Success(ok ? "Manual override applied." : "Override failed — reason and reviewer are required.");
+        _overridingId = null;
+        await LoadAll();
+    }
+
+    private async Task RefreshEntry(int id)
+    {
+        var outcome = await Catalog.RefreshAsync(id, _userName ?? "unknown");
+        if (outcome.Succeeded)
+        {
+            Toasts.Success("Entry refreshed — facts confirmed current.");
+        }
+        else
+        {
+            Toasts.Error($"Refresh failed: {outcome.Error} Last-known facts are retained.");
+        }
+        await LoadAll();
+    }
+
+    private async Task SetBaseline()
+    {
+        await Baselines.UpsertAsync(_baselineEngine, _baselineFamily, _baselineTargetEntryId, _baselineReviewedBy, _baselineExpires, _baselineNotes);
+        Toasts.Success("Approved patch baseline set.");
+        _baselineFamily = _baselineReviewedBy = _baselineNotes = "";
+        _baselineTargetEntryId = 0;
+        _baselineExpires = null;
+        await LoadAll();
+    }
+
+    private async Task ImportAdvisory()
+    {
+        var advisory = new AdvisoryRecord
+        {
+            Engine = _advEngine,
+            Family = _advFamily,
+            VendorAdvisoryId = _advVendorId,
+            Title = _advTitle,
+            Severity = _advSeverity,
+            AffectedMinBuild = _advMinBuild,
+            AffectedMaxBuild = _advMaxBuild,
+            FixedBuild = _advFixedBuild,
+            ProvenanceUrl = _advProvenance
+        };
+        await Advisories.ImportAsync(advisory, _userName ?? "unknown");
+        Toasts.Success($"Advisory \"{_advVendorId}\" imported.");
+        _advFamily = _advVendorId = _advTitle = _advFixedBuild = _advMinBuild = _advMaxBuild = _advProvenance = "";
+        await LoadAll();
+    }
+
+    private static string Label(Tab tab) => tab switch
+    {
+        Tab.Catalogue => "Release catalogue",
+        Tab.Baselines => "Approved baselines",
+        Tab.Advisories => "Advisories",
+        _ => tab.ToString()
+    };
+}

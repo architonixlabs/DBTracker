@@ -67,6 +67,15 @@ builder.Services.AddScoped<TeamService>();
 builder.Services.AddScoped<BackupPolicyService>();
 builder.Services.AddScoped<ContactCorrectionService>();
 
+// Epic 18 (D01-D06): database identity, releases and support lifecycle.
+builder.Services.AddScoped<VersionIdentityService>();
+builder.Services.AddScoped<ReleaseCatalogService>();
+builder.Services.AddScoped<SupportRunwayService>();
+builder.Services.AddScoped<PatchBaselineService>();
+builder.Services.AddScoped<AdvisoryService>();
+builder.Services.AddScoped<VersionObservationService>();
+builder.Services.AddHostedService<SupportRunwayCheckHostedService>();
+
 // Process-lifetime record of each background worker's last/next run (U15 setup/diagnostics page).
 builder.Services.AddSingleton<WorkerHeartbeatStore>();
 builder.Services.AddScoped<SetupDiagnosticsService>();

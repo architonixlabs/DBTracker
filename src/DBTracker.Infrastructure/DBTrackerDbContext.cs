@@ -30,6 +30,17 @@ public class DBTrackerDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<BackupPolicy> BackupPolicies => Set<BackupPolicy>();
     public DbSet<ContactCorrectionRequest> ContactCorrectionRequests => Set<ContactCorrectionRequest>();
 
+    // Epic 18 (D01-D06): database identity, releases and support lifecycle.
+    public DbSet<VersionIdentity> VersionIdentities => Set<VersionIdentity>();
+    public DbSet<ClusterNodeVersion> ClusterNodeVersions => Set<ClusterNodeVersion>();
+    public DbSet<ReleaseCatalogEntry> ReleaseCatalogEntries => Set<ReleaseCatalogEntry>();
+    public DbSet<ReleaseCatalogRevision> ReleaseCatalogRevisions => Set<ReleaseCatalogRevision>();
+    public DbSet<ApprovedPatchBaseline> ApprovedPatchBaselines => Set<ApprovedPatchBaseline>();
+    public DbSet<SupportRunwayDecision> SupportRunwayDecisions => Set<SupportRunwayDecision>();
+    public DbSet<AdvisoryRecord> AdvisoryRecords => Set<AdvisoryRecord>();
+    public DbSet<AdvisoryInstanceAssessment> AdvisoryInstanceAssessments => Set<AdvisoryInstanceAssessment>();
+    public DbSet<VersionObservation> VersionObservations => Set<VersionObservation>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -355,6 +366,183 @@ public class DBTrackerDbContext : IdentityDbContext<ApplicationUser>
 
             entity.HasIndex(e => e.TimestampUtc);
             entity.HasIndex(e => new { e.TargetType, e.TargetId });
+        });
+
+        // Epic 18 (D01-D06).
+        modelBuilder.Entity<VersionIdentity>(entity =>
+        {
+            entity.Property(e => e.RawVersionText).HasMaxLength(200);
+            entity.Property(e => e.UnresolvedReason).HasMaxLength(500);
+            entity.Property(e => e.Family).HasMaxLength(100);
+            entity.Property(e => e.Build).HasMaxLength(100);
+            entity.Property(e => e.Edition).HasMaxLength(100);
+            entity.Property(e => e.Distribution).HasMaxLength(100);
+            entity.Property(e => e.PatchTrain).HasMaxLength(100);
+            entity.Property(e => e.HostingProvider).HasMaxLength(200);
+            entity.Property(e => e.HostingContext).HasMaxLength(500);
+            entity.Property(e => e.HostingEngineVersion).HasMaxLength(100);
+            entity.Property(e => e.DatabaseCompatibilityLevel).HasMaxLength(100);
+            entity.Property(e => e.AttestedBy).HasMaxLength(320);
+            entity.Property(e => e.UpdatedBy).HasMaxLength(320);
+
+            entity.HasOne(e => e.DatabaseInstance)
+                .WithOne()
+                .HasForeignKey<VersionIdentity>(e => e.DatabaseInstanceId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(e => e.DatabaseInstanceId).IsUnique();
+            entity.HasIndex(e => e.ResolutionStatus);
+            entity.HasIndex(e => new { e.Family, e.Major, e.Minor });
+        });
+
+        modelBuilder.Entity<ClusterNodeVersion>(entity =>
+        {
+            entity.Property(e => e.NodeName).HasMaxLength(200);
+            entity.Property(e => e.RawVersionText).HasMaxLength(200);
+            entity.Property(e => e.Family).HasMaxLength(100);
+            entity.Property(e => e.Build).HasMaxLength(100);
+            entity.Property(e => e.Notes).HasMaxLength(1000);
+
+            entity.HasOne(e => e.DatabaseInstance)
+                .WithMany()
+                .HasForeignKey(e => e.DatabaseInstanceId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // NoAction, not SetNull: SQL Server rejects a second cascade path to ClusterNodeVersions
+            // (DatabaseInstance already cascades to both VersionIdentities and ClusterNodeVersions
+            // directly). A node row is never deleted on its own anyway — only alongside its whole
+            // instance, which cascades it away regardless of this FK's own action.
+            entity.HasOne(e => e.VersionIdentity)
+                .WithMany(v => v.ClusterNodeVersions)
+                .HasForeignKey(e => e.VersionIdentityId)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            entity.HasIndex(e => e.DatabaseInstanceId);
+        });
+
+        modelBuilder.Entity<ReleaseCatalogEntry>(entity =>
+        {
+            entity.Property(e => e.Family).HasMaxLength(100).IsRequired();
+            entity.Property(e => e.ReleaseLabel).HasMaxLength(200);
+            entity.Property(e => e.Build).HasMaxLength(100);
+            entity.Property(e => e.PatchTrain).HasMaxLength(100);
+            entity.Property(e => e.Edition).HasMaxLength(100);
+            entity.Property(e => e.Distribution).HasMaxLength(100);
+            entity.Property(e => e.ApplicabilityNotes).HasMaxLength(1000);
+            entity.Property(e => e.DateTimezone).HasMaxLength(50);
+            entity.Property(e => e.SourceUrl).HasMaxLength(500);
+            entity.Property(e => e.SourceReference).HasMaxLength(500);
+            entity.Property(e => e.ReviewedBy).HasMaxLength(320);
+            entity.Property(e => e.OverrideReason).HasMaxLength(1000);
+            entity.Property(e => e.OverrideReviewedBy).HasMaxLength(320);
+            entity.Property(e => e.LastRefreshError).HasMaxLength(1000);
+            entity.Property(e => e.UpdatedBy).HasMaxLength(320);
+
+            entity.HasIndex(e => new { e.Engine, e.Family, e.Major, e.Minor });
+        });
+
+        modelBuilder.Entity<ReleaseCatalogRevision>(entity =>
+        {
+            entity.Property(e => e.RevisedBy).HasMaxLength(320);
+            entity.Property(e => e.ChangeSummary).HasMaxLength(500);
+            entity.Property(e => e.SnapshotJson).HasColumnType("nvarchar(max)");
+
+            entity.HasOne(e => e.ReleaseCatalogEntry)
+                .WithMany(c => c.Revisions)
+                .HasForeignKey(e => e.ReleaseCatalogEntryId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(e => e.ReleaseCatalogEntryId);
+        });
+
+        modelBuilder.Entity<ApprovedPatchBaseline>(entity =>
+        {
+            entity.Property(e => e.Family).HasMaxLength(100).IsRequired();
+            entity.Property(e => e.ReviewedBy).HasMaxLength(320);
+            entity.Property(e => e.Notes).HasMaxLength(1000);
+
+            entity.HasOne(e => e.TargetReleaseCatalogEntry)
+                .WithMany()
+                .HasForeignKey(e => e.TargetReleaseCatalogEntryId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(e => new { e.Engine, e.Family, e.IsActive });
+        });
+
+        modelBuilder.Entity<SupportRunwayDecision>(entity =>
+        {
+            entity.Property(e => e.ActionReference).HasMaxLength(500);
+            entity.Property(e => e.Notes).HasMaxLength(1000);
+            entity.Property(e => e.DecidedBy).HasMaxLength(320);
+
+            entity.HasOne(e => e.DatabaseInstance)
+                .WithMany()
+                .HasForeignKey(e => e.DatabaseInstanceId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(e => e.ReleaseCatalogEntry)
+                .WithMany()
+                .HasForeignKey(e => e.ReleaseCatalogEntryId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasIndex(e => new { e.DatabaseInstanceId, e.DecidedAtUtc });
+        });
+
+        modelBuilder.Entity<AdvisoryRecord>(entity =>
+        {
+            entity.Property(e => e.Family).HasMaxLength(100).IsRequired();
+            entity.Property(e => e.VendorAdvisoryId).HasMaxLength(100);
+            entity.Property(e => e.Title).HasMaxLength(300);
+            entity.Property(e => e.Description).HasMaxLength(2000);
+            entity.Property(e => e.AffectedMinBuild).HasMaxLength(100);
+            entity.Property(e => e.AffectedMaxBuild).HasMaxLength(100);
+            entity.Property(e => e.AffectedConfiguration).HasMaxLength(500);
+            entity.Property(e => e.FixedBuild).HasMaxLength(100);
+            entity.Property(e => e.ProvenanceUrl).HasMaxLength(500);
+            entity.Property(e => e.ImportedBy).HasMaxLength(320);
+
+            entity.HasIndex(e => new { e.Engine, e.Family });
+            entity.HasIndex(e => e.VendorAdvisoryId);
+        });
+
+        modelBuilder.Entity<AdvisoryInstanceAssessment>(entity =>
+        {
+            entity.Property(e => e.ClassificationReasoning).HasMaxLength(1000);
+            entity.Property(e => e.ManagedServiceResponsibility).HasMaxLength(500);
+            entity.Property(e => e.ReviewerEvidence).HasMaxLength(1000);
+            entity.Property(e => e.ReviewedBy).HasMaxLength(320);
+            entity.Property(e => e.Owner).HasMaxLength(320);
+            entity.Property(e => e.TargetPatch).HasMaxLength(200);
+            entity.Property(e => e.VerificationNotes).HasMaxLength(1000);
+
+            entity.HasOne(e => e.AdvisoryRecord)
+                .WithMany(a => a.Assessments)
+                .HasForeignKey(e => e.AdvisoryRecordId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(e => e.DatabaseInstance)
+                .WithMany()
+                .HasForeignKey(e => e.DatabaseInstanceId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(e => new { e.AdvisoryRecordId, e.DatabaseInstanceId }).IsUnique();
+            entity.HasIndex(e => e.DatabaseInstanceId);
+        });
+
+        modelBuilder.Entity<VersionObservation>(entity =>
+        {
+            entity.Property(e => e.RawVersionText).HasMaxLength(200);
+            entity.Property(e => e.FailureDetail).HasMaxLength(500);
+            entity.Property(e => e.ObservedBy).HasMaxLength(320);
+            entity.Property(e => e.DriftDetail).HasMaxLength(500);
+            entity.Property(e => e.Notes).HasMaxLength(1000);
+
+            entity.HasOne(e => e.DatabaseInstance)
+                .WithMany()
+                .HasForeignKey(e => e.DatabaseInstanceId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(e => new { e.DatabaseInstanceId, e.ObservedAtUtc });
         });
     }
 }

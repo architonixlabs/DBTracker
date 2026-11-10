@@ -579,6 +579,66 @@ authenticated role already, same as the rest of the app, so no separate "my apps
       `WebhookPayloadBuilder` with a top-level "text" field so Slack incoming webhooks (and most
       other generic receivers) work without platform-specific code. Disabled (logs instead) when no
       URL is configured, same pattern as the email sender.
+- 2026-11-10 — Built Epic 18 (D01-D06), the first epic of the DBA lifecycle roadmap. **D01** — a new
+  `VersionIdentity` (one per instance, layered on `DatabaseInstance.Version`, which is left untouched)
+  holds normalized family/major/minor/build, edition/distribution/patch-train, hosting provider/
+  context, and explicitly separates HostingEngineVersion from DatabaseCompatibilityLevel per the
+  review's distinction; a new `ClusterNodeVersion` list tracks per-node versions within a cluster,
+  deliberately kept apart from Epic 17's Region/Cluster/ReplicaSet topology facets rather than
+  duplicating them. `VersionIdentityParser` (pure, engine-specific — PostgreSQL, SQL Server's
+  marketing-year and internal-build forms, MySQL including a MariaDB-mislabel-as-NeedsReview case,
+  MongoDB, Oracle's "19c" and legacy dotted forms) normalizes a raw string or marks it Unresolved/
+  NeedsReview; an unrecognized string is never silently treated as a known, compliant product.
+  **D02** — `ReleaseCatalogEntry`/`ReleaseCatalogRevision` curate GA/preview/channel/patch releases
+  with source reference, date precision/timezone, TBD/conflicting flags, and append-only revision
+  history; manual overrides require a reason, reviewer and optional expiry. `ReleaseCatalogService`
+  never calls a live vendor feed — `RefreshAsync` only re-confirms a configured source and, on
+  failure, leaves every existing fact untouched and sets only `IsStale`/`LastRefreshError`. **D03** —
+  `SupportRunwayCalculator` (pure) walks Mainstream/Extended/ESU milestones to a phase and
+  days-to-next-milestone, going negative (overdue) rather than disappearing once a milestone passes,
+  and returns an explicit Unknown for TBD/conflicting/missing data; `SupportRunwayNoticeEvaluator`
+  (pure) dedupes/escalates configurable 365/180/90/30-day notices so a sweep only re-notifies on a
+  *more* urgent threshold, with overdue always counting as more urgent than any positive one.
+  `SupportRunwayService.EvaluateAndNotifyAsync` routes notices through the existing U07 notification/
+  subscription plumbing and is reachable both from a new disabled-by-default
+  `SupportRunwayCheckHostedService` (`SupportRunway:IntervalMinutes`, matching the AlertCheckHostedService
+  pattern) and an explicit "Evaluate now" admin action, so the same dedupe state and routing logic is
+  exercised either way; `SupportRunwayDecision` links a kept action (Upgrade/Patch/Replace/Retire/
+  Exception) with a text/reference field, full workflow entities being later-epic scope. **D04** —
+  `PatchBaselineComparer` (pure) reports Installed, latest applicable same-branch patch, newest
+  relevant GA and the approved organizational target as four separate facts; previews are excluded
+  by default, and the approved target only ever comes from an explicit, reviewed, non-expired
+  `ApprovedPatchBaseline` — it is never derived from "newest GA" automatically — with
+  `IsMajorUpgradeFromApproved` distinguishing a same-branch patch from a major migration.
+  **D05** — `AdvisoryRecord`/`AdvisoryInstanceAssessment` track imported advisories and their
+  per-instance applicability; `AdvisoryApplicabilityClassifier` (pure) can only ever suggest
+  Potential/NotApplicable/Unknown from a build-range match — Confirmed requires a human reviewer
+  with evidence, since version matching alone cannot confirm vulnerability (distribution backports
+  and managed-service patching both complicate it). **D06** — manual attestation
+  (`VersionIdentityService.AttestAsync`) and a documented observation-import path
+  (`VersionObservationService`) are the shipped first-class routes; `VersionDriftDetector` (pure)
+  compares a declared identity against an observation and is always Unknown (never Drift) on a
+  failed/denied observation attempt, and a failure is recorded without ever touching the declared
+  identity or the instance's archived state. `VersionObservationSource.FutureCollector` exists only
+  as a labelled extension point — no real network/credentialed collector was built. A new
+  per-instance `/instances/{id}/lifecycle` page (linked from instance detail) covers identity entry/
+  attestation, support runway, patch-baseline comparison and advisory review; a new admin
+  `/lifecycle` hub (Admin/DBA) covers the catalogue, approved baselines and advisory import. One new
+  EF migration (`AddDbaLifecycleEpic18`) for the nine new tables. Found and fixed one real migration
+  bug while generating it: `ClusterNodeVersion`'s FK to `VersionIdentity` defaulted to `SetNull`,
+  which SQL Server rejected ("may cause cycles or multiple cascade paths") because
+  `DatabaseInstance` already cascades to both `VersionIdentities` and `ClusterNodeVersions` directly
+  — fixed to `NoAction`, the same resolution already used elsewhere in this schema for an identical
+  shape (`RestoreEvent.LinkedBackupRecord`). 82 new unit tests (`VersionIdentityParserTests`,
+  `VersionBuildComparerTests`, `SupportRunwayCalculatorTests`, `SupportRunwayNoticeEvaluatorTests`,
+  `PatchBaselineComparerTests`, `AdvisoryApplicabilityClassifierTests`, `VersionDriftDetectorTests`,
+  `ReleaseCatalogRefreshEvaluatorTests`) and 7 new E2E tests (`Epic18LifecycleTests`) covering
+  entering/viewing an unresolved version string, resolving-and-attesting a recognized one, a seeded
+  approaching-deadline support-runway notice (and its downstream notification), the four-fact patch-
+  baseline comparison, an advisory classification-then-review flow, and a catalogue manual-
+  override/refresh-failure pair. Full suite: 397/397 (326 unit + 71 E2E). This completes Epic 18
+  (D01-D06) in full; PLAN-001's lifecycle-only D15 is Epic 20 scope and was not touched here. Epics
+  19-22 (D07-D22) remain proposed and unimplemented.
 
 ## Out of scope (future)
 - Automated backup execution/orchestration (this tracks status, doesn't run backups)
@@ -845,7 +905,7 @@ A newer release alone does not make migration required. No automatic upgrade exe
 
 ### Epic 18 - Database identity, releases and support lifecycle
 
-- [ ] **2026-11-10 | D01 | NEW | P1 | M - Structured installed-version identity.**
+- [x] **2026-11-10 | D01 | NEW | P1 | M - Structured installed-version identity.**
   DBA/platform/security personas need an exact product match before evaluating support or patches.
   **Acceptance:** retain raw Version text while adding normalized family/major/minor/build,
   edition/distribution, patch train and hosting/provider context. Record observation source/time,
@@ -853,7 +913,7 @@ A newer release alone does not make migration required. No automatic upgrade exe
   hosting engine, database compatibility state and cluster-node versions. Preserve IDs and current
   imports; changing a text field alone never proves an upgrade occurred. Foundation for D02-D09.
 
-- [ ] **2026-11-10 | D02 | NEW | P1 | L - Reviewed release and support catalogue.**
+- [x] **2026-11-10 | D02 | NEW | P1 | L - Reviewed release and support catalogue.**
   DBA/auditor/platform personas need current, attributable facts, including offline installations.
   **Acceptance:** curate/import official product releases, GA/preview/channel, patch/build branches,
   support phases and milestones with source references, applicability, date precision/timezone,
@@ -862,7 +922,7 @@ A newer release alone does not make migration required. No automatic upgrade exe
   override with reason, review and expiry. Conflicts/TBD dates stay explicit; refresh failure retains
   last-known facts with a staleness warning. No fixed universal EOL formula. Depends on D01.
 
-- [ ] **2026-11-10 | D03 | NEW | P1 | M - Support runway and deadline notifications.**
+- [x] **2026-11-10 | D03 | NEW | P1 | M - Support runway and deadline notifications.**
   DBA/security/service-owner personas need enough lead time to act; auditor rejects implied paid
   coverage or suppressed risk.
   **Acceptance:** show standard support phases, applicable extended/ESU coverage evidence, days to
@@ -871,7 +931,7 @@ A newer release alone does not make migration required. No automatic upgrade exe
   and contract expiry trigger reevaluation. Planned maintenance does not erase lifecycle risk.
   Link each decision to upgrade/patch/replace/retire/exception action. Depends on D01-D02; uses U07/U08.
 
-- [ ] **2026-11-10 | D04 | NEW | P1 | M - Release availability and approved patch baselines.**
+- [x] **2026-11-10 | D04 | NEW | P1 | M - Release availability and approved patch baselines.**
   DBA wants relevant patch options; application owner wants certified targets instead of forced
   adoption of the newest version.
   **Acceptance:** display installed, latest applicable branch patch, newest relevant GA and approved
@@ -881,7 +941,7 @@ A newer release alone does not make migration required. No automatic upgrade exe
   not recommended automatically; a patch within a supported branch is distinct from major migration.
   Depends on D01-D02; policy ownership integrates with U21.
 
-- [ ] **2026-11-10 | D05 | NEW | P2 | L - Advisory applicability and patch remediation.**
+- [x] **2026-11-10 | D05 | NEW | P2 | L - Advisory applicability and patch remediation.**
   Security/DBA personas need exposure assessment; auditor needs uncertainty and exceptions visible.
   **Acceptance:** ingest/reference official advisories with vendor IDs, affected builds/configurations,
   fixed builds and provenance. Classify Potential/Confirmed/Not applicable/Unknown with reviewer
@@ -890,7 +950,7 @@ A newer release alone does not make migration required. No automatic upgrade exe
   Track owner, remediation deadline, target patch and verification; use D14 for temporary exceptions.
   Support imported results and shared vulnerability-service references without duplicating that platform.
 
-- [ ] **2026-11-10 | D06 | NEW | P2 | L - Version attestation and optional metadata collection.**
+- [x] **2026-11-10 | D06 | NEW | P2 | L - Version attestation and optional metadata collection.**
   DBA/platform personas want trustworthy inventory without mandatory credentials in the tracker.
   **Acceptance:** manual attestation and documented metadata import work first; optional read-only
   engine/provider collectors are explicitly configured later. Record actual build/edition/node and
