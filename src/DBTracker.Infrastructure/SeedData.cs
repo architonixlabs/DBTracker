@@ -22,7 +22,9 @@ public static class SeedData
                 Application = "ArxMail Gateway", Company = "Architonix Labs", Department = "Platform Engineering",
                 ContactName = "Priya Nair", ContactEmail = "priya.nair@architonixlabs.com", ContactPhone = "+1-555-0101",
                 Role = InstanceRole.Active, Environment = EnvironmentTier.Production,
-                DatabaseIp = "192.168.1.8", ServerIp = "192.168.1.8", ExpectedBackupIntervalHours = 24
+                DatabaseIp = "192.168.1.8", ServerIp = "192.168.1.8", ExpectedBackupIntervalHours = 24,
+                BackupFileLocation = @"\\192.168.1.8\backups\arxmail-prod",
+                LastScanStatus = ScanStatus.Success, LastScanUtc = now.AddMinutes(-40)
             },
             new()
             {
@@ -46,7 +48,10 @@ public static class SeedData
                 Application = "Contoso HR", Company = "Contoso", Department = "Human Resources",
                 ContactName = "Angela Price", ContactEmail = "angela.price@contoso.com", ContactPhone = "+1-555-0120",
                 Role = InstanceRole.Active, Environment = EnvironmentTier.Production,
-                DatabaseIp = "192.168.1.8", ServerIp = "192.168.1.8", ExpectedBackupIntervalHours = 24
+                DatabaseIp = "192.168.1.8", ServerIp = "192.168.1.8", ExpectedBackupIntervalHours = 24,
+                BackupFileLocation = @"\\192.168.1.8\backups\contoso-hr",
+                LastScanStatus = ScanStatus.Error, LastScanUtc = now.AddHours(-26),
+                LastScanError = "Network path not found — \\\\192.168.1.8\\backups\\contoso-hr unreachable"
             },
             new()
             {

@@ -46,6 +46,7 @@ builder.Services.AddHostedService<AlertCheckHostedService>();
 builder.Services.AddScoped<ComplianceReportService>();
 builder.Services.AddHostedService<ReportHostedService>();
 builder.Services.AddScoped<DeviceLinkService>();
+builder.Services.AddScoped<DBTracker.Infrastructure.Scanning.ConnectivityChecker>();
 builder.Services.Configure<SmtpOptions>(builder.Configuration.GetSection("Email:Smtp"));
 builder.Services.Configure<ArxMailOptions>(builder.Configuration.GetSection("Email:ArxMail"));
 builder.Services.AddHttpClient<ArxMailEmailSender>();
@@ -60,6 +61,19 @@ switch (builder.Configuration["Email:Provider"])
     default:
         builder.Services.AddScoped<IEmailSender, NullEmailSender>();
         break;
+}
+
+// Generic outbound webhook (Slack/Teams/PagerDuty-style, via a plain JSON HTTP POST) alongside
+// email for Overdue/Failed alerts — disabled (NullWebhookSender) unless a URL is configured.
+builder.Services.Configure<WebhookOptions>(builder.Configuration.GetSection("Alerts:Webhook"));
+builder.Services.AddHttpClient<HttpWebhookSender>();
+if (!string.IsNullOrWhiteSpace(builder.Configuration["Alerts:Webhook:Url"]))
+{
+    builder.Services.AddScoped<IWebhookSender>(sp => sp.GetRequiredService<HttpWebhookSender>());
+}
+else
+{
+    builder.Services.AddScoped<IWebhookSender, NullWebhookSender>();
 }
 
 builder.Services.AddCascadingAuthenticationState();

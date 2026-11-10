@@ -9,7 +9,7 @@ actually happening on schedule.
 ## Stack
 - .NET 10, Blazor Web App (interactive server)
 - EF Core 10 + SQL Server
-- Bootstrap 5 UI
+- Bootstrap 5 (layout/forms) + a custom dark ops-console theme
 - xUnit (unit tests), Playwright + NUnit (end-to-end tests)
 
 ## Running locally

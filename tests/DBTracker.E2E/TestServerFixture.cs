@@ -21,6 +21,9 @@ public class TestServerFixture : IAsyncDisposable
     public IPlaywright Playwright { get; private set; } = null!;
     public IBrowser Browser { get; private set; } = null!;
 
+    /// <summary>Captured stdout/stderr of the server process, for diagnosing a test failure that isn't visible from the browser side alone.</summary>
+    public string CapturedOutput { get { lock (_output) return _output.ToString(); } }
+
     public async Task InitializeAsync()
     {
         var webProjectDir = FindWebProjectDirectory();

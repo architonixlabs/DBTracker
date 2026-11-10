@@ -17,3 +17,12 @@ public class ArxMailOptions
     public string FromAddress { get; set; } = string.Empty;
     public string ApiKey { get; set; } = string.Empty;
 }
+
+/// <summary>Outbound webhook for alerts — generic HTTP POST, not tied to one platform. Empty Url = disabled (NullWebhookSender logs instead).</summary>
+public class WebhookOptions
+{
+    public string Url { get; set; } = string.Empty;
+
+    /// <summary>Optional shared secret, sent as the "X-DBTracker-Signature" header so the receiver can verify the request came from this app.</summary>
+    public string Secret { get; set; } = string.Empty;
+}

@@ -4,6 +4,7 @@
 @inject DBTrackerDbContext Db
 @inject NavigationManager Nav
 @inject ToastService Toasts
+@inject AuthenticationStateProvider AuthProvider
 
 <PageTitle>@(Id is null ? "Add instance" : "Edit instance") · DBTracker</PageTitle>
 
@@ -176,7 +177,8 @@ else
 
     private async Task Save()
     {
-        _model.UpdatedAtUtc = DateTime.UtcNow;
+        var now = DateTime.UtcNow;
+        _model.UpdatedAtUtc = now;
 
         if (Id is null)
         {
@@ -184,10 +186,30 @@ else
         }
         else
         {
+            // Diff against the untouched row still in the database — not the in-memory _model,
+            // which already carries the edited values the form just bound — so the change log
+            // records actual before/after, not after/after.
+            var before = await Db.DatabaseInstances.AsNoTracking().FirstOrDefaultAsync(i => i.Id == Id.Value);
+            if (before is not null)
+            {
+                var changedBy = (await AuthProvider.GetAuthenticationStateAsync()).User.Identity?.Name ?? "unknown";
+                var changes = InstanceChangeLogBuilder.Diff(before, _model, changedBy, now);
+                if (changes.Count > 0)
+                {
+                    Db.InstanceChangeLogs.AddRange(changes);
+                }
+            }
+
             Db.DatabaseInstances.Update(_model);
         }
 
         await Db.SaveChangesAsync();
+        // The scoped DbContext persists across navigation within a circuit (see NotificationBell's
+        // factory-context comment elsewhere in this app for the same root cause). Without this, an
+        // instance saved here stays tracked as Unchanged; editing that same instance again later in
+        // the same session then throws "another instance with the same key is already being
+        // tracked" when Update() tries to attach the freshly-loaded _model.
+        Db.ChangeTracker.Clear();
         Toasts.Success(Id is null ? $"{_model.Name} created." : $"{_model.Name} updated.");
         Nav.NavigateTo($"/instances/{_model.Id}");
     }

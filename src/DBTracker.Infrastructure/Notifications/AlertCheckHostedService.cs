@@ -55,6 +55,7 @@ public class AlertCheckHostedService(
         using var scope = scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<DBTrackerDbContext>();
         var emailSender = scope.ServiceProvider.GetRequiredService<IEmailSender>();
+        var webhookSender = scope.ServiceProvider.GetRequiredService<IWebhookSender>();
         var notifications = scope.ServiceProvider.GetRequiredService<NotificationService>();
 
         var instances = await db.DatabaseInstances
@@ -68,6 +69,15 @@ public class AlertCheckHostedService(
         foreach (var instance in instances)
         {
             var health = BackupHealthCalculator.Compute(instance, instance.BackupRecords.ToList(), now);
+
+            // A planned maintenance window suppresses the alert entirely — including the state
+            // update — so a still-bad health correctly re-alerts once the window ends instead of
+            // being remembered as already-notified.
+            if (AlertEvaluator.IsSuppressedByMaintenance(instance.MaintenanceUntilUtc, now))
+            {
+                continue;
+            }
+
             var shouldNotify = AlertEvaluator.ShouldNotify(instance.LastNotifiedHealth, health);
 
             if (shouldNotify)
@@ -85,6 +95,8 @@ public class AlertCheckHostedService(
                         $"{message}\n\nApplication: {instance.Application}\nCompany: {instance.Company}\n\nOpen DBTracker to view backup history and log a fix.",
                         ct);
                 }
+
+                await webhookSender.SendAsync(WebhookPayloadBuilder.BuildAlertPayload(instance, health, now), ct);
 
                 instance.LastNotifiedUtc = now;
             }

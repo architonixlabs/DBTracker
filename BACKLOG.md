@@ -81,7 +81,7 @@ proof it's real file evidence, not a self-reported checkbox).*
 - [x] Scheduled recurring scan (`BackupScan:IntervalMinutes`, default 15; 0 disables it) plus a
       manual "Scan now" button on the instance page for an on-demand check
 - [x] Last-scanned time and scan errors (path unreachable etc.) surfaced on the instance detail page
-- [ ] Surface staleness on the dashboard too (currently detail-page only)
+- [x] Surface staleness on the dashboard too (Epic 12 — banner when a scan is erroring or never completed)
 
 ### Epic 6b — Restore tracking
 *Serves Angela (Auditor — "has this backup ever actually been proven restorable?") and Priya (DBA —
@@ -96,7 +96,7 @@ needs a record of DR drills and emergency restores, not just backups going out).
 - [x] Retention policy field (days backups should be retained — informational)
 - [x] Tags field and a runbook/monitoring link field
 - [ ] Custom/extensible environment tags beyond the fixed tier (region, cluster, replica set)
-- [ ] Audit trail of who changed what on an instance record
+- [x] Audit trail of who changed what on an instance record (Epic 12 — "Change history" on the instance detail page)
 
 ### Epic 8 — Notifications
 - [x] Configurable email sender (SMTP — Gmail, Office365, any relay — or the ArxMail Gateway's HTTP
@@ -284,6 +284,51 @@ authenticated role already, same as the rest of the app, so no separate "my apps
   Design section still described the original indigo/violet gradient look two redesigns later —
   rewritten to describe the current dark ops-console theme and its two predecessors. Full suite:
   65/65 (45 unit + 20 E2E).
+- 2026-11-10 — Asked the user to evaluate further features; proposed a shortlist validated against
+  all four personas and let the user pick rather than building everything unprompted. User selected
+  seven: "My instances" view, instance change-log audit trail, dashboard scan-staleness indicator,
+  maintenance windows/snoozed alerts, a TCP connectivity check, bulk CSV import, and generic webhook
+  alerts. All seven shipped as Epic 12 (below). Along the way, found and fixed a real pre-existing
+  bug the new audit-trail feature happened to be the first thing to exercise: `InstanceEditor.Save()`
+  never called `Db.ChangeTracker.Clear()` after `SaveChangesAsync()` (every other mutating handler in
+  the app does). Since the scoped DbContext persists across navigation within a Blazor Server
+  circuit, creating an instance left it tracked as Unchanged; editing that same instance later in the
+  same session then threw "another instance with the same key is already being tracked" when
+  `Update()` tried to attach the freshly-loaded model — caught by `EditingInstance_RecordsChangeHistory`,
+  diagnosed from the actual server-side exception log (not guessed), fixed, and the same `Clear()`
+  added to the CSV import save path too. Full suite: 98/98 (70 unit + 28 E2E).
+
+### Epic 12 — Handiness features (user-prioritized)
+*Every item below was proposed as a shortlist and picked by the user, not decided unilaterally.*
+- [x] "My instances" view — a "My instances only" checkbox on the Instances list, scoped to the
+      logged-in user's contact email; only shown at all if they're actually the contact on at least
+      one instance (Admin/leadership roles that own nothing don't see a dead-end filter). Closes the
+      original Dev/app-owner persona's "simple view scoped to my applications" ask from Epic 1 that
+      nothing had actually delivered yet.
+- [x] Instance change-log audit trail — every edit through the instance form diffs the before/after
+      state field-by-field (`InstanceChangeLogBuilder`, pure/unit-tested) and records who/when/what
+      changed; shown as a "Change history" table on the instance detail page. Serves Angela
+      (Auditor) — who changed what, not just that a backup ran.
+- [x] Dashboard scan-staleness indicator — a banner on the dashboard when any shared-drive scan is
+      erroring or has never completed, linking to the Scan Activity report. Closes the Epic 6 gap
+      ("surface staleness on the dashboard too") from a session ago.
+- [x] Maintenance windows — start a 1h/4h/24h window (with a reason) from the instance detail page;
+      Overdue/Failed email and webhook alerts are suppressed for the duration (`AlertEvaluator.
+      IsSuppressedByMaintenance`), but the health badge itself stays truthful and a small wrench icon
+      on the dashboard/list rows explains why a Failed instance isn't alerting.
+- [x] Connectivity check — a "Test connection" button on the instance detail page does a plain TCP
+      reachability probe (`ConnectivityChecker`) against the server/database IP on the engine's
+      conventional default port (`DefaultPortMapper`); proves the host:port accepts a connection, not
+      that the database itself is healthy — deliberately no per-engine driver dependency.
+- [x] Bulk CSV import — `/instances/import` (Admin/DBA, same policy as Add instance): upload a CSV,
+      preview valid rows and per-row errors before committing, download a template. Parsing/
+      validation is a pure, unit-tested builder (`InstanceCsvImporter`), only Name and Engine
+      required.
+- [x] Generic webhook alerts — `Alerts:Webhook:Url` (+ optional `:Secret` header) sends the same
+      Overdue/Failed alert as a plain JSON HTTP POST alongside email, payload built by
+      `WebhookPayloadBuilder` with a top-level "text" field so Slack incoming webhooks (and most
+      other generic receivers) work without platform-specific code. Disabled (logs instead) when no
+      URL is configured, same pattern as the email sender.
 
 ## Out of scope (future)
 - Automated backup execution/orchestration (this tracks status, doesn't run backups)

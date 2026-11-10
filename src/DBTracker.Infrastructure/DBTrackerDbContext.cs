@@ -16,6 +16,7 @@ public class DBTrackerDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<RestoreEvent> RestoreEvents => Set<RestoreEvent>();
     public DbSet<Notification> Notifications => Set<Notification>();
     public DbSet<DeviceLinkToken> DeviceLinkTokens => Set<DeviceLinkToken>();
+    public DbSet<InstanceChangeLog> InstanceChangeLogs => Set<InstanceChangeLog>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -38,6 +39,7 @@ public class DBTrackerDbContext : IdentityDbContext<ApplicationUser>
             entity.Property(e => e.LastScanError).HasMaxLength(1000);
             entity.Property(e => e.Tags).HasMaxLength(300);
             entity.Property(e => e.RunbookUrl).HasMaxLength(500);
+            entity.Property(e => e.MaintenanceReason).HasMaxLength(500);
 
             entity.HasIndex(e => e.Application);
             entity.HasIndex(e => e.Company);
@@ -91,6 +93,21 @@ public class DBTrackerDbContext : IdentityDbContext<ApplicationUser>
 
             entity.HasIndex(e => e.Token).IsUnique();
             entity.HasIndex(e => e.ExpiresAtUtc);
+        });
+
+        modelBuilder.Entity<InstanceChangeLog>(entity =>
+        {
+            entity.Property(e => e.ChangedBy).HasMaxLength(320);
+            entity.Property(e => e.FieldName).HasMaxLength(100);
+            entity.Property(e => e.OldValue).HasMaxLength(2000);
+            entity.Property(e => e.NewValue).HasMaxLength(2000);
+
+            entity.HasOne(c => c.DatabaseInstance)
+                .WithMany()
+                .HasForeignKey(c => c.DatabaseInstanceId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(e => new { e.DatabaseInstanceId, e.ChangedAtUtc });
         });
     }
 }

@@ -64,4 +64,24 @@ public class AlertEvaluatorTests
     {
         Assert.Equal(health, AlertEvaluator.NextNotifiedState(health));
     }
+
+    [Fact]
+    public void IsSuppressedByMaintenance_NullWindow_NeverSuppresses()
+    {
+        Assert.False(AlertEvaluator.IsSuppressedByMaintenance(null, DateTime.UtcNow));
+    }
+
+    [Fact]
+    public void IsSuppressedByMaintenance_FutureWindow_Suppresses()
+    {
+        var now = new DateTime(2026, 11, 10, 12, 0, 0, DateTimeKind.Utc);
+        Assert.True(AlertEvaluator.IsSuppressedByMaintenance(now.AddHours(1), now));
+    }
+
+    [Fact]
+    public void IsSuppressedByMaintenance_ExpiredWindow_DoesNotSuppress()
+    {
+        var now = new DateTime(2026, 11, 10, 12, 0, 0, DateTimeKind.Utc);
+        Assert.False(AlertEvaluator.IsSuppressedByMaintenance(now.AddHours(-1), now));
+    }
 }

@@ -571,6 +571,25 @@ dl.row > dd {
     color: #4F565F;
 }
 
+.form-control::file-selector-button {
+    font-family: var(--dbt-mono);
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--dbt-text);
+    background: var(--dbt-bg-raised);
+    border: 1px solid var(--dbt-border-bright);
+    border-radius: var(--dbt-radius);
+    padding: 6px 12px;
+    margin-right: 12px;
+    cursor: pointer;
+    transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.form-control::file-selector-button:hover {
+    border-color: var(--dbt-accent);
+    color: var(--dbt-accent);
+}
+
 .form-text {
     font-size: 11.5px;
     color: var(--dbt-muted);

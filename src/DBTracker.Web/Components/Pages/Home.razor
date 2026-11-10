@@ -29,6 +29,14 @@
 }
 else
 {
+    @if (_scanIssueCount > 0)
+    {
+        <div class="alert alert-danger mb-4 d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <span><i class="bi bi-exclamation-triangle"></i> @_scanIssueCount shared-drive scan(s) erroring or never completed.</span>
+            <a class="btn btn-outline-secondary btn-sm" href="/reports">View scan activity</a>
+        </div>
+    }
+
     <div class="stat-strip">
         <button type="button" class="stat-cell Total @(_filterHealth is null ? "is-active" : "")" @onclick="() => SetFilter(null)">
             <div class="stat-label">Total instances</div>
@@ -83,7 +91,13 @@ else
                             <div class="text-muted small">@o.Instance.Company · @o.Instance.Department</div>
                         </td>
                         <td><span class="role-pill @o.Instance.Role">@o.Instance.Role</span></td>
-                        <td><HealthBadge Health="o.Health" /></td>
+                        <td>
+                            <HealthBadge Health="o.Health" />
+                            @if (o.Instance.MaintenanceUntilUtc > DateTime.UtcNow)
+                            {
+                                <i class="bi bi-cone-striped text-muted ms-1" title="Under maintenance — alerts suppressed"></i>
+                            }
+                        </td>
                         <td>@(o.LastBackupUtc is null ? "—" : o.LastBackupUtc.Value.ToLocalTime().ToString("MMM d, h:mm tt"))</td>
                     </tr>
                 }
@@ -103,10 +117,15 @@ else
 @code {
     private List<InstanceOverview>? _overviews;
     private BackupHealth? _filterHealth;
+    private int _scanIssueCount;
 
     protected override async Task OnInitializedAsync()
     {
         _overviews = await OverviewService.GetAllAsync();
+
+        var scanRows = ScanActivityReportBuilder.Build(_overviews.Select(o => new ScanActivityInput(
+            o.Instance.Name, o.Instance.BackupFileLocation, o.Instance.LastScanUtc, o.Instance.LastScanStatus, o.Instance.LastScanError)));
+        _scanIssueCount = scanRows.Count(r => r.LastScanStatus is ScanStatus.Error or ScanStatus.NeverScanned);
     }
 
     private int Count(BackupHealth health) => _overviews?.Count(o => o.Health == health) ?? 0;

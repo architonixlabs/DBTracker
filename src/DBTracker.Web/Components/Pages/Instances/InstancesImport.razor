@@ -1,0 +1,138 @@
+@page "/instances/import"
+@attribute [Authorize(Roles = Roles.CanEditPolicy)]
+@inject DBTrackerDbContext Db
+@inject NavigationManager Nav
+@inject ToastService Toasts
+@inject IJSRuntime JS
+
+<PageTitle>Import instances · DBTracker</PageTitle>
+
+<div class="app-topbar">
+    <div>
+        <div class="eyebrow">Instance record</div>
+        <h1>Import database instances</h1>
+        <div class="subtitle">Bulk-onboard many databases from a CSV instead of one at a time through the form.</div>
+    </div>
+    <button class="btn btn-outline-secondary" @onclick="DownloadTemplate">
+        <i class="bi bi-download"></i> Download CSV template
+    </button>
+</div>
+
+<div class="dbt-card" style="max-width: 900px;">
+    <h2 class="h6 text-muted text-uppercase mb-3">File</h2>
+    <p class="text-muted small mb-3">
+        Header row required — only <strong>Name</strong> and <strong>Engine</strong> are mandatory columns.
+        Everything else is optional and defaults the same way the "Add instance" form does.
+    </p>
+    <InputFile OnChange="OnFileSelected" class="form-control" accept=".csv" />
+
+    @if (_fileName is not null)
+    {
+        <p class="text-muted small mt-2 mb-0">@_fileName</p>
+    }
+</div>
+
+@if (_result is not null)
+{
+    <div class="dbt-card mt-4">
+        <h2 class="h6 text-muted text-uppercase mb-3">Preview</h2>
+
+        <p class="mb-3">
+            <span style="color:var(--dbt-ontrack)">@_result.Valid.Count valid</span>
+            @if (_result.Errors.Count > 0)
+            {
+                <span>, <span style="color:var(--dbt-failed)">@_result.Errors.Count row(s) with errors (skipped)</span></span>
+            }
+        </p>
+
+        @if (_result.Errors.Count > 0)
+        {
+            <div class="dbt-table mb-4">
+                <table class="table">
+                    <thead><tr><th>Row</th><th>Error</th></tr></thead>
+                    <tbody>
+                        @foreach (var e in _result.Errors)
+                        {
+                            <tr><td>@e.RowNumber</td><td class="text-danger">@e.Message</td></tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+
+        @if (_result.Valid.Count > 0)
+        {
+            <div class="dbt-table mb-4">
+                <table class="table">
+                    <thead><tr><th>Name</th><th>Engine</th><th>Application</th><th>Company / Dept</th><th>Role</th><th>Env</th></tr></thead>
+                    <tbody>
+                        @foreach (var row in _result.Valid.Take(50))
+                        {
+                            <tr>
+                                <td class="fw-semibold">@row.Name</td>
+                                <td>@row.Engine</td>
+                                <td>@row.Application</td>
+                                <td>@row.Company / @row.Department</td>
+                                <td><span class="role-pill @row.Role">@row.Role</span></td>
+                                <td>@row.Environment</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+            @if (_result.Valid.Count > 50)
+            {
+                <p class="text-muted small">…and @(_result.Valid.Count - 50) more.</p>
+            }
+
+            <button class="btn btn-primary" @onclick="Import" disabled="@_importing">
+                <i class="bi bi-upload"></i> @(_importing ? "Importing…" : $"Import {_result.Valid.Count} instance(s)")
+            </button>
+        }
+    </div>
+}
+
+@code {
+    private string? _fileName;
+    private ImportResult? _result;
+    private bool _importing;
+
+    private async Task OnFileSelected(InputFileChangeEventArgs e)
+    {
+        _result = null;
+        _fileName = e.File.Name;
+
+        using var stream = e.File.OpenReadStream(maxAllowedSize: 2 * 1024 * 1024);
+        using var reader = new StreamReader(stream);
+        var content = await reader.ReadToEndAsync();
+
+        _result = InstanceCsvImporter.Parse(content);
+    }
+
+    private async Task Import()
+    {
+        if (_result is null || _result.Valid.Count == 0)
+        {
+            return;
+        }
+
+        _importing = true;
+        var now = DateTime.UtcNow;
+        foreach (var row in _result.Valid)
+        {
+            row.CreatedAtUtc = now;
+            row.UpdatedAtUtc = now;
+        }
+
+        Db.DatabaseInstances.AddRange(_result.Valid);
+        await Db.SaveChangesAsync();
+        Db.ChangeTracker.Clear();
+        _importing = false;
+
+        Toasts.Success($"Imported {_result.Valid.Count} instance(s).");
+        Nav.NavigateTo("/instances");
+    }
+
+    private async Task DownloadTemplate() =>
+        await JS.InvokeVoidAsync("dbtracker.downloadCsv", "dbtracker-import-template.csv", InstanceCsvImporter.TemplateCsv());
+}

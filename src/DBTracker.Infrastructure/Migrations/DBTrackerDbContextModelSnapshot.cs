@@ -151,6 +151,14 @@ namespace DBTracker.Infrastructure.Migrations
                     b.Property<DateTime?>("LastScanUtc")
                         .HasColumnType("datetime2");
 
+                    b.Property<string>("MaintenanceReason")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<DateTime?>("MaintenanceUntilUtc")
+                        .HasColumnType("datetime2");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(200)
@@ -238,6 +246,47 @@ namespace DBTracker.Infrastructure.Migrations
                         .IsUnique();
 
                     b.ToTable("DeviceLinkTokens");
+                });
+
+            modelBuilder.Entity("DBTracker.Core.Entities.InstanceChangeLog", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("ChangedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("ChangedBy")
+                        .IsRequired()
+                        .HasMaxLength(320)
+                        .HasColumnType("nvarchar(320)");
+
+                    b.Property<int>("DatabaseInstanceId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("FieldName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("NewValue")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<string>("OldValue")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DatabaseInstanceId", "ChangedAtUtc");
+
+                    b.ToTable("InstanceChangeLogs");
                 });
 
             modelBuilder.Entity("DBTracker.Core.Entities.Notification", b =>
@@ -527,6 +576,17 @@ namespace DBTracker.Infrastructure.Migrations
                 {
                     b.HasOne("DBTracker.Core.Entities.DatabaseInstance", "DatabaseInstance")
                         .WithMany("BackupRecords")
+                        .HasForeignKey("DatabaseInstanceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("DatabaseInstance");
+                });
+
+            modelBuilder.Entity("DBTracker.Core.Entities.InstanceChangeLog", b =>
+                {
+                    b.HasOne("DBTracker.Core.Entities.DatabaseInstance", "DatabaseInstance")
+                        .WithMany()
                         .HasForeignKey("DatabaseInstanceId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();

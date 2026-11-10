@@ -2,6 +2,7 @@
 @inject InstanceOverviewService OverviewService
 @inject DBTrackerDbContext Db
 @inject BackupFileScanner Scanner
+@inject ConnectivityChecker Connectivity
 @inject NavigationManager Nav
 @inject ToastService Toasts
 
@@ -18,25 +19,47 @@ else
     <div class="app-topbar">
         <div>
             <div class="eyebrow">Instance detail</div>
-            <h1>@instance.Name <HealthBadge Health="_overview.Health" /></h1>
+            <h1>
+                @instance.Name <HealthBadge Health="_overview.Health" />
+                @if (instance.MaintenanceUntilUtc is { } maintUtc && maintUtc > DateTime.UtcNow)
+                {
+                    <span class="badge-health dot Overdue" title="Overdue/Failed alerts are suppressed until this window ends">
+                        <i class="bi bi-cone-striped"></i> Maintenance until @maintUtc.ToLocalTime().ToString("MMM d, h:mm tt")
+                    </span>
+                }
+            </h1>
             <div class="subtitle">@instance.Engine @instance.Version · @instance.Environment · <span class="role-pill @instance.Role">@instance.Role</span></div>
         </div>
-        <AuthorizeView Roles="@Roles.CanEditPolicy">
-            <div class="d-flex gap-2">
-                @if (!string.IsNullOrWhiteSpace(instance.BackupFileLocation))
-                {
-                    <button class="btn btn-outline-secondary" @onclick="ScanNow" disabled="@_scanning">
-                        <i class="bi bi-arrow-repeat"></i> @(_scanning ? "Scanning…" : "Scan now")
-                    </button>
-                }
-                <a class="btn btn-outline-secondary" href="/instances/@Id/edit"><i class="bi bi-pencil"></i> Edit</a>
-                @if (!instance.IsArchived)
-                {
-                    <button class="btn btn-outline-danger" @onclick="Archive"><i class="bi bi-archive"></i> Archive</button>
-                }
-            </div>
-        </AuthorizeView>
+        <div class="d-flex gap-2">
+            <button class="btn btn-outline-secondary" @onclick="TestConnection" disabled="@_testingConnection">
+                <i class="bi bi-ethernet"></i> @(_testingConnection ? "Testing…" : "Test connection")
+            </button>
+            <AuthorizeView Roles="@Roles.CanEditPolicy">
+                <div class="d-flex gap-2">
+                    @if (!string.IsNullOrWhiteSpace(instance.BackupFileLocation))
+                    {
+                        <button class="btn btn-outline-secondary" @onclick="ScanNow" disabled="@_scanning">
+                            <i class="bi bi-arrow-repeat"></i> @(_scanning ? "Scanning…" : "Scan now")
+                        </button>
+                    }
+                    <a class="btn btn-outline-secondary" href="/instances/@Id/edit"><i class="bi bi-pencil"></i> Edit</a>
+                    @if (!instance.IsArchived)
+                    {
+                        <button class="btn btn-outline-danger" @onclick="Archive"><i class="bi bi-archive"></i> Archive</button>
+                    }
+                </div>
+            </AuthorizeView>
+        </div>
     </div>
+
+    @if (_connectivityResult is not null)
+    {
+        <p class="small mb-4" style="margin-top:-20px;color:@(_connectivityResult.Success ? "var(--dbt-ontrack)" : "var(--dbt-failed)")">
+            @(_connectivityResult.Success
+                ? $"Reachable — connected in {_connectivityResult.Elapsed.TotalMilliseconds:N0} ms."
+                : $"Not reachable — {_connectivityResult.Error}")
+        </p>
+    }
 
     <div class="row g-0 mb-4 kv-row">
         <div class="col-md-6">
@@ -101,6 +124,45 @@ else
                         </dd>
                     }
                 </dl>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-0 mb-4" style="border-top:1px solid var(--dbt-line);padding-top:28px;">
+        <div class="col-12">
+            <div class="dbt-card">
+                <h2 class="h6 text-muted text-uppercase mb-3">Maintenance window</h2>
+                @if (instance.MaintenanceUntilUtc is { } activeUntil && activeUntil > DateTime.UtcNow)
+                {
+                    <p class="mb-2"><span class="badge-health dot Overdue">Under maintenance</span> until @activeUntil.ToLocalTime().ToString("MMM d, yyyy h:mm tt") — Overdue/Failed email and webhook alerts are suppressed.</p>
+                    @if (!string.IsNullOrWhiteSpace(instance.MaintenanceReason))
+                    {
+                        <p class="text-muted small mb-2">@instance.MaintenanceReason</p>
+                    }
+                    <AuthorizeView Roles="@Roles.CanEditPolicy">
+                        <button class="btn btn-outline-secondary btn-sm" @onclick="EndMaintenance">End maintenance now</button>
+                    </AuthorizeView>
+                }
+                else
+                {
+                    <AuthorizeView Roles="@Roles.CanEditPolicy">
+                        <Authorized>
+                            <div class="d-flex gap-2 align-items-end flex-wrap mb-2">
+                                <div class="field" style="min-width:240px">
+                                    <label class="form-label small">Reason</label>
+                                    <input class="form-control form-control-sm" @bind="_maintenanceReason" placeholder="Planned patching, migration, …" />
+                                </div>
+                                <button class="btn btn-outline-secondary btn-sm" @onclick="() => StartMaintenance(1)">1 h</button>
+                                <button class="btn btn-outline-secondary btn-sm" @onclick="() => StartMaintenance(4)">4 h</button>
+                                <button class="btn btn-outline-secondary btn-sm" @onclick="() => StartMaintenance(24)">24 h</button>
+                            </div>
+                            <div class="form-text">Suppresses Overdue/Failed alerts for the chosen window — the health badge above stays truthful.</div>
+                        </Authorized>
+                        <NotAuthorized>
+                            <p class="text-muted small mb-0">No maintenance window active.</p>
+                        </NotAuthorized>
+                    </AuthorizeView>
+                }
             </div>
         </div>
     </div>
@@ -258,6 +320,41 @@ else
             </div>
         </div>
     </div>
+
+    <div class="row g-0" style="border-top:1px solid var(--dbt-line);padding-top:28px;margin-top:28px;">
+        <div class="col-12">
+            <div class="dbt-card">
+                <h2 class="h6 text-muted text-uppercase mb-3">Change history</h2>
+                @if (_changeLog.Count == 0)
+                {
+                    <div class="empty-state py-3">
+                        <i class="bi bi-journal-text"></i>
+                        No changes recorded yet.
+                    </div>
+                }
+                else
+                {
+                    <table class="table table-sm mb-0 dbt-table">
+                        <thead>
+                            <tr><th>When</th><th>By</th><th>Field</th><th>From</th><th>To</th></tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var c in _changeLog)
+                            {
+                                <tr>
+                                    <td class="small">@c.ChangedAtUtc.ToLocalTime().ToString("MMM d, h:mm tt")</td>
+                                    <td class="small">@c.ChangedBy</td>
+                                    <td class="small">@c.FieldName</td>
+                                    <td class="small text-muted">@(string.IsNullOrEmpty(c.OldValue) ? "—" : c.OldValue)</td>
+                                    <td class="small">@(string.IsNullOrEmpty(c.NewValue) ? "—" : c.NewValue)</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                }
+            </div>
+        </div>
+    </div>
 }
 
 @code {
@@ -266,7 +363,11 @@ else
     private InstanceOverview? _overview;
     private BackupRecord _newRecord = new();
     private RestoreEvent _newRestore = new();
+    private List<InstanceChangeLog> _changeLog = new();
+    private string _maintenanceReason = "";
     private bool _scanning;
+    private bool _testingConnection;
+    private ConnectivityResult? _connectivityResult;
 
     protected override async Task OnInitializedAsync() => await Load();
 
@@ -275,6 +376,10 @@ else
         _overview = await OverviewService.GetByIdAsync(Id);
         _newRecord = new BackupRecord { TimestampUtc = DateTime.UtcNow };
         _newRestore = new RestoreEvent { TimestampUtc = DateTime.UtcNow };
+        _changeLog = await Db.InstanceChangeLogs.AsNoTracking()
+            .Where(c => c.DatabaseInstanceId == Id)
+            .OrderByDescending(c => c.ChangedAtUtc)
+            .ToListAsync();
     }
 
     private async Task LogBackup()
@@ -334,6 +439,62 @@ else
             Toasts.Success($"{entity.Name} archived.");
         }
         Nav.NavigateTo("/instances");
+    }
+
+    private async Task StartMaintenance(int hours)
+    {
+        var entity = await Db.DatabaseInstances.FindAsync(Id);
+        if (entity is not null)
+        {
+            entity.MaintenanceUntilUtc = DateTime.UtcNow.AddHours(hours);
+            entity.MaintenanceReason = _maintenanceReason;
+            entity.UpdatedAtUtc = DateTime.UtcNow;
+            await Db.SaveChangesAsync();
+            Toasts.Success($"Maintenance window started for {hours}h — Overdue/Failed alerts suppressed.");
+        }
+        Db.ChangeTracker.Clear();
+        _maintenanceReason = "";
+        await Load();
+    }
+
+    private async Task EndMaintenance()
+    {
+        var entity = await Db.DatabaseInstances.FindAsync(Id);
+        if (entity is not null)
+        {
+            entity.MaintenanceUntilUtc = null;
+            entity.MaintenanceReason = "";
+            entity.UpdatedAtUtc = DateTime.UtcNow;
+            await Db.SaveChangesAsync();
+            Toasts.Success("Maintenance window ended.");
+        }
+        Db.ChangeTracker.Clear();
+        await Load();
+    }
+
+    private async Task TestConnection()
+    {
+        if (_overview is null)
+        {
+            return;
+        }
+
+        _testingConnection = true;
+        _connectivityResult = null;
+
+        var host = !string.IsNullOrWhiteSpace(_overview.Instance.ServerIp) ? _overview.Instance.ServerIp : _overview.Instance.DatabaseIp;
+        var port = DefaultPortMapper.GetDefaultPort(_overview.Instance.Engine);
+        _connectivityResult = await Connectivity.CheckAsync(host, port, TimeSpan.FromSeconds(4));
+        _testingConnection = false;
+
+        if (_connectivityResult.Success)
+        {
+            Toasts.Success($"Connected to {host}:{port} in {_connectivityResult.Elapsed.TotalMilliseconds:N0} ms.");
+        }
+        else
+        {
+            Toasts.Error($"Could not reach {host}:{port} — {_connectivityResult.Error}");
+        }
     }
 
     private static string StatusClass(BackupStatus status) => status switch

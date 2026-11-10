@@ -47,6 +47,10 @@ public class DatabaseInstance
     public BackupHealth? LastNotifiedHealth { get; set; }
     public DateTime? LastNotifiedUtc { get; set; }
 
+    /// <summary>Planned maintenance window — while now is before this, Overdue/Failed alerts (email + webhook) are suppressed. The dashboard/detail health badge itself stays truthful.</summary>
+    public DateTime? MaintenanceUntilUtc { get; set; }
+    public string MaintenanceReason { get; set; } = string.Empty;
+
     public string Notes { get; set; } = string.Empty;
     public bool IsArchived { get; set; }
 
