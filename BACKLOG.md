@@ -67,7 +67,10 @@ Just wants to confirm their app's DB is backed up and update contact info when s
 - [x] Route/action guards: DBA+Admin can create/edit instances and log backups; Auditor/ITManager/
       Viewer are read-only; enforced at both UI (AuthorizeView) and route level ([Authorize])
 - [x] Nav reflects current user + role; hide actions the role can't perform rather than just erroring
-- [ ] Admin "Users" management page (create/deactivate users, assign roles) — currently seed-only
+- [x] Admin "Users" management page — list users + roles, create a new user with a role (delivered
+      under Epic 8, see below)
+- [ ] Deactivate an existing user / change an existing user's role from the Users page — currently
+      create-only; changing a role today means editing seed data or the database directly
 
 ### Epic 6 — Backup evidence from shared drive
 *Serves Priya (DBA, who shouldn't have to hand-log every backup) and Angela (Auditor, who needs
@@ -124,15 +127,46 @@ needs a record of DR drills and emergency restores, not just backups going out).
 - [x] On-demand "Send report" button on Compliance (Admin/IT Manager/Auditor — Marcus and Angela's
       roles, not DBA-gated) for ad-hoc requests before a review
 
+### Epic 11 — Reports center
+*User asked for "a report section with different types of reports." Validated per-persona before
+building: Priya (DBA) wanted activity over time, not just current state, to spot a flaky job or
+duration creep — Backup Activity did that. Marcus (IT Manager) wanted risk rolled up by who owns
+it, not a flat grid — Ownership Roll-up did that; Compliance Snapshot and Management Summary
+already covered his leadership-report need from Epic 10. Angela (Auditor) wanted Restore Testing
+broken out as its own report (an untested backup is a known audit finding, and it was previously
+just one column buried in Compliance) plus evidence the shared-drive scanner itself is healthy —
+Scan Activity did that. Dev (Viewer) needed nothing new — reports are view-only to every
+authenticated role already, same as the rest of the app, so no separate "my apps" cut was added.*
+- [x] New `/reports` page, linked from the sidebar nav, with a report-type switcher
+- [x] Backup Activity report — runs in a selectable window (7/30/90 days), success/failed/missed
+      counts, total size, and the full run list; CSV export
+- [x] Restore Testing report — every instance's tested/untested status, last successful restore,
+      and total attempts, untested instances sorted first; CSV export
+- [x] Ownership Roll-up report — instance counts and health breakdown grouped by company/department
+      with primary contacts; CSV export
+- [x] Scan Activity report — shared-drive scan status (last run, errors) for every instance with a
+      backup file location configured, errored scans sorted first; CSV export
+- [x] Compliance Snapshot and Management Summary surfaced in the same hub (link out / inline
+      preview + the existing "Send now") rather than duplicating Epic 3/10's logic
+- [x] Report math (date filtering, aggregation, grouping) factored into pure, unit-tested builders
+      in `DBTracker.Core.Services`, same pattern as `BackupHealthCalculator`/`ComplianceReportBuilder`
+
 ## Design
-- [x] Visual redesign: indigo/violet gradient accent system, Inter typeface, gradient sidebar,
-      glowing branded login screen, refined health-badge/pill styling
-- [x] Motion: page fade-in, staggered card/row entrance, hover lift on cards/buttons, pulsing
-      indicator on Failed badges/stat card (draws the eye to what needs attention first),
-      toast slide-in, skeleton shimmer loading states in place of plain "Loading…" text
+- [x] ~~Visual redesign: indigo/violet gradient accent system~~ — superseded, see below
+- [x] ~~Editorial redesign: warm paper background, Fraunces serif + Inter, terracotta/teal accents~~
+      — applied from the `/design` artifact, then superseded (see Progress log, 2026-11-10): user
+      flagged it as itself a recognizable "AI redesign" look
+- [x] Current: dark ops-console theme — IBM Plex Mono for data/nav/headings, Inter for body prose,
+      amber/green/red status LEDs with a glow instead of pill badges, hairline dividers instead of
+      boxed cards, grid-paper texture background, `// eyebrow` comment-style section labels, a
+      terminal-window login card (title bar, `>` prompt fields, blinking cursor)
+- [x] Motion: page fade-in, toast slide-in, skeleton shimmer loading states, blinking terminal
+      cursor on the brand wordmark, pulsing glow on Failed indicators (draws the eye to what needs
+      attention first)
 - [x] Toast notifications on create/update/log-backup/archive actions
-- [ ] Further polish: empty/zero-state illustrations, dark mode, responsive mobile pass beyond the
-      basic sidebar collapse
+- [ ] Further polish: empty/zero-state illustrations, a light-theme toggle (dark is currently the
+      only theme, by design — not a gap, but a toggle isn't built), responsive mobile pass beyond
+      the basic sidebar collapse
 
 ## Progress log
 - 2026-11-09 — Repo initialized; solution scaffolded (Web/Core/Infrastructure/UnitTests/E2E); domain
@@ -229,7 +263,35 @@ needs a record of DR drills and emergency restores, not just backups going out).
   history tables that had `dbt-table` on the `<table>` itself rather than a wrapping div — explicit
   `background-color: transparent` override added. Two E2E selectors (`.stat-card`/`.value`) updated
   to match the renamed `.stat-cell`/`.stat-value` markup. Full suite still 46/46 after both passes.
+- 2026-11-10 — Fixed two real notification-bell alignment bugs the user reported: the blinking
+  terminal cursor was attached to the whole sidebar brand row instead of the wordmark span, so it
+  rendered after the bell icon instead of right after "DBTracker"; and the notification dropdown
+  was positioned `right: -8px` relative to a bell sitting near the edge of the 240px sidebar, so the
+  320px panel computed to `x: -114px` — over a third of it clipped off the left edge of the browser
+  entirely. Confirmed both with Playwright bounding-box checks before and after, not just visual
+  inspection (a full-page screenshot downscale artifact earlier in the session had looked like a
+  bug — a white table-row background — when it wasn't; this time the bounding box proved it was real).
+- 2026-11-10 — Added Epic 11 (Reports center): a `/reports` hub with four new report types
+  (Backup Activity, Restore Testing, Ownership Roll-up, Scan Activity), each with CSV export, plus
+  the existing Compliance Snapshot and Management Summary surfaced in the same place rather than
+  duplicated. Validated against all four personas before building (see Epic 11's note) rather than
+  guessing at report types. Aggregation logic factored into four new pure builders in
+  `DBTracker.Core.Services` (`BackupActivityReportBuilder`, `RestoreTestingReportBuilder`,
+  `OwnershipRollupBuilder`, `ScanActivityReportBuilder`) with 13 new unit tests. Also audited the
+  whole backlog for staleness while in there: the Epic 5 "Users management page" item was marked
+  undone though it had actually shipped (under Epic 8) — split into what's done (create + assign
+  role) vs. what's genuinely still missing (deactivate / change an existing user's role); and the
+  Design section still described the original indigo/violet gradient look two redesigns later —
+  rewritten to describe the current dark ops-console theme and its two predecessors. Full suite:
+  65/65 (45 unit + 20 E2E).
 
 ## Out of scope (future)
 - Automated backup execution/orchestration (this tracks status, doesn't run backups)
 - Full SSO/enterprise IdP integration (local Identity accounts for now)
+- Email delivery for the four new Epic 11 reports (Backup Activity, Restore Testing, Ownership
+  Roll-up, Scan Activity) — deliberately scoped to view + CSV export; only Management Summary emails
+  (it reuses Epic 10's existing sender/distribution-list plumbing). Add if a persona asks for one
+  scheduled/emailed on its own.
+- Scheduled/recurring exports (e.g. Backup Activity auto-emailed weekly) — today every Epic 11
+  report is generated on demand when the page is opened
+- Report date-range beyond 7/30/90-day presets (custom from/to picker) on Backup Activity

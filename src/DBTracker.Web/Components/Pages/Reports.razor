@@ -1,0 +1,367 @@
+@page "/reports"
+@inject InstanceOverviewService OverviewService
+@inject ComplianceReportService ReportService
+@inject ToastService Toasts
+@inject IJSRuntime JS
+
+<PageTitle>Reports · DBTracker</PageTitle>
+
+<div class="app-topbar">
+    <div>
+        <div class="eyebrow">Reporting</div>
+        <h1>Reports</h1>
+        <div class="subtitle">Generate and export operational, ownership and compliance reports from the same tracked data — no spreadsheet wrangling.</div>
+    </div>
+</div>
+
+@if (_overviews is null)
+{
+    <div class="spinner-ring"></div>
+}
+else
+{
+    <div class="filter-bar">
+        @foreach (var type in ReportTypeOrder)
+        {
+            <button type="button" class="btn @(type == _selected ? "btn-primary" : "btn-outline-secondary")" @onclick="() => _selected = type">
+                @Label(type)
+            </button>
+        }
+    </div>
+
+    @switch (_selected)
+    {
+        case ReportType.BackupActivity:
+        {
+            <div class="filter-bar" style="padding-top:0;border-top:none;border-bottom:none;margin-bottom:18px;gap:12px;">
+                @foreach (var days in new[] { 7, 30, 90 })
+                {
+                    <button type="button" class="btn btn-sm @(days == _rangeDays ? "btn-primary" : "btn-outline-secondary")" @onclick="() => _rangeDays = days">
+                        Last @days d
+                    </button>
+                }
+            </div>
+
+            var rowsInRange = BackupActivityReportBuilder.InRange(AllBackupActivityRows(), DateTime.UtcNow.AddDays(-_rangeDays), DateTime.UtcNow);
+            var summary = BackupActivityReportBuilder.Summarize(rowsInRange);
+
+            <div class="stat-strip">
+                <div class="stat-cell Total"><div class="stat-label">Total runs</div><div class="stat-value">@summary.TotalRuns</div></div>
+                <div class="stat-cell OnTrack"><div class="stat-label"><span class="stat-dot OnTrack"></span>Success</div><div class="stat-value">@summary.SuccessCount</div></div>
+                <div class="stat-cell Failed"><div class="stat-label"><span class="stat-dot Failed"></span>Failed</div><div class="stat-value">@summary.FailedCount</div></div>
+                <div class="stat-cell Overdue"><div class="stat-label"><span class="stat-dot Overdue"></span>Missed</div><div class="stat-value">@summary.MissedCount</div></div>
+                <div class="stat-cell NeverBackedUp"><div class="stat-label">Total size</div><div class="stat-value" style="font-size:22px">@FormatMb(summary.TotalSizeMb)</div></div>
+            </div>
+
+            <div class="d-flex justify-content-end mb-3">
+                <button class="btn btn-outline-primary" @onclick="() => ExportBackupActivity(rowsInRange)" disabled="@(rowsInRange.Count == 0)">
+                    <i class="bi bi-download"></i> Export CSV
+                </button>
+            </div>
+
+            @if (rowsInRange.Count == 0)
+            {
+                <div class="empty-state"><i class="bi bi-inbox"></i>No backup runs in this window.</div>
+            }
+            else
+            {
+                <div class="dbt-table">
+                    <table class="table">
+                        <thead><tr><th>When</th><th>Instance</th><th>Company / Dept</th><th>Engine</th><th>Type</th><th>Status</th><th>Size</th><th>Duration</th><th>Source</th></tr></thead>
+                        <tbody>
+                            @foreach (var r in rowsInRange)
+                            {
+                                <tr>
+                                    <td>@r.TimestampUtc.ToLocalTime().ToString("MMM d, h:mm tt")</td>
+                                    <td class="fw-semibold">@r.InstanceName</td>
+                                    <td>@r.Company / @r.Department</td>
+                                    <td>@r.Engine</td>
+                                    <td>@r.Type</td>
+                                    <td><span class="badge-health dot @StatusClass(r.Status)">@r.Status</span></td>
+                                    <td>@(r.SizeMb is null ? "—" : $"{r.SizeMb:N0} MB")</td>
+                                    <td>@(r.DurationMinutes is null ? "—" : $"{r.DurationMinutes:N0} min")</td>
+                                    <td class="text-muted">@(r.Source == BackupSource.Discovered ? "Discovered" : "Logged")</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+            break;
+        }
+
+        case ReportType.RestoreTesting:
+        {
+            var rows = RestoreTestingReportBuilder.Build(_overviews.Select(o => new RestoreTestingInput(
+                o.Instance.Name, o.Instance.Company, o.Instance.Department, o.Instance.Role, o.Instance.Environment, o.Instance.RestoreEvents.ToList())));
+            var untested = rows.Count(r => !r.RestoreTested);
+
+            <p class="text-muted mb-3">@untested of @rows.Count instance(s) have never had a <em>successful</em> restore proven — an untested backup is an audit red flag.</p>
+
+            <div class="d-flex justify-content-end mb-3">
+                <button class="btn btn-outline-primary" @onclick="() => ExportRestoreTesting(rows)" disabled="@(rows.Count == 0)">
+                    <i class="bi bi-download"></i> Export CSV
+                </button>
+            </div>
+
+            <div class="dbt-table">
+                <table class="table">
+                    <thead><tr><th>Instance</th><th>Company / Dept</th><th>Role</th><th>Env</th><th>Restore tested</th><th>Last successful restore</th><th>Total attempts</th></tr></thead>
+                    <tbody>
+                        @foreach (var r in rows)
+                        {
+                            <tr>
+                                <td class="fw-semibold">@r.InstanceName</td>
+                                <td>@r.Company / @r.Department</td>
+                                <td><span class="role-pill @r.Role">@r.Role</span></td>
+                                <td>@r.Environment</td>
+                                <td><span class="badge-health dot @(r.RestoreTested ? "OnTrack" : "Overdue")">@(r.RestoreTested ? "Yes" : "No")</span></td>
+                                <td>@(r.LastSuccessfulRestoreUtc is null ? "—" : r.LastSuccessfulRestoreUtc.Value.ToLocalTime().ToString("MMM d, yyyy h:mm tt"))</td>
+                                <td>@r.TotalAttempts</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+            break;
+        }
+
+        case ReportType.OwnershipRollup:
+        {
+            var rows = OwnershipRollupBuilder.Build(_overviews.Select(o =>
+                new OwnershipRollupInput(o.Instance.Company, o.Instance.Department, o.Health, o.Instance.ContactName)));
+
+            <p class="text-muted mb-3">Instance counts and backup health rolled up by company and department — who owns what, and where risk is concentrated.</p>
+
+            <div class="d-flex justify-content-end mb-3">
+                <button class="btn btn-outline-primary" @onclick="() => ExportOwnershipRollup(rows)" disabled="@(rows.Count == 0)">
+                    <i class="bi bi-download"></i> Export CSV
+                </button>
+            </div>
+
+            <div class="dbt-table">
+                <table class="table">
+                    <thead><tr><th>Company</th><th>Department</th><th>Instances</th><th>On track</th><th>Overdue</th><th>Failed</th><th>Never backed up</th><th>Primary contact(s)</th></tr></thead>
+                    <tbody>
+                        @foreach (var r in rows)
+                        {
+                            <tr>
+                                <td class="fw-semibold">@r.Company</td>
+                                <td>@r.Department</td>
+                                <td>@r.InstanceCount</td>
+                                <td style="color:var(--dbt-ontrack)">@r.OnTrack</td>
+                                <td style="color:var(--dbt-overdue)">@r.Overdue</td>
+                                <td style="color:var(--dbt-failed)">@r.Failed</td>
+                                <td style="color:var(--dbt-never)">@r.NeverBackedUp</td>
+                                <td class="text-muted">@r.PrimaryContacts</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+            break;
+        }
+
+        case ReportType.ScanActivity:
+        {
+            var rows = ScanActivityReportBuilder.Build(_overviews.Select(o =>
+                new ScanActivityInput(o.Instance.Name, o.Instance.BackupFileLocation, o.Instance.LastScanUtc, o.Instance.LastScanStatus, o.Instance.LastScanError)));
+
+            <p class="text-muted mb-3">Shared-drive scan status for every instance with a backup file location configured — evidence the automated scan is actually running.</p>
+
+            <div class="d-flex justify-content-end mb-3">
+                <button class="btn btn-outline-primary" @onclick="() => ExportScanActivity(rows)" disabled="@(rows.Count == 0)">
+                    <i class="bi bi-download"></i> Export CSV
+                </button>
+            </div>
+
+            @if (rows.Count == 0)
+            {
+                <div class="empty-state"><i class="bi bi-inbox"></i>No instance has a backup file location configured yet.</div>
+            }
+            else
+            {
+                <div class="dbt-table">
+                    <table class="table">
+                        <thead><tr><th>Instance</th><th>Backup file location</th><th>Last scanned</th><th>Status</th><th>Error</th></tr></thead>
+                        <tbody>
+                            @foreach (var r in rows)
+                            {
+                                <tr>
+                                    <td class="fw-semibold">@r.InstanceName</td>
+                                    <td class="text-muted">@r.BackupFileLocation</td>
+                                    <td>@(r.LastScanUtc is null ? "Never" : r.LastScanUtc.Value.ToLocalTime().ToString("MMM d, h:mm tt"))</td>
+                                    <td><span class="badge-health dot @(r.LastScanStatus == ScanStatus.Error ? "Failed" : r.LastScanStatus == ScanStatus.Success ? "OnTrack" : "NeverBackedUp")">@r.LastScanStatus</span></td>
+                                    <td class="text-danger">@r.LastScanError</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+            break;
+        }
+
+        case ReportType.ComplianceSnapshot:
+        {
+            <p class="text-muted mb-3">Point-in-time snapshot of last-backup age, health and restore-test status per instance — the detailed audit view, filterable by role and environment.</p>
+            <a class="btn btn-outline-secondary" href="/compliance">
+                <i class="bi bi-clipboard-check"></i> Open Compliance snapshot
+            </a>
+            break;
+        }
+
+        case ReportType.ManagementSummary:
+        {
+            <p class="text-muted mb-3">The same leadership-ready roll-up sent on schedule (<code>Reports:IntervalDays</code>) or on demand — plain-text, ready to paste into an email or ticket.</p>
+
+            <div class="d-flex gap-2 mb-3">
+                <AuthorizeView Roles="@Roles.ReportingPolicy">
+                    <Authorized>
+                        <button class="btn btn-primary" @onclick="SendSummary" disabled="@_sendingReport">
+                            <i class="bi bi-envelope"></i> @(_sendingReport ? "Sending…" : "Send now")
+                        </button>
+                    </Authorized>
+                </AuthorizeView>
+                <button class="btn btn-outline-secondary" @onclick="CopySummary">
+                    <i class="bi bi-clipboard"></i> Copy to clipboard
+                </button>
+            </div>
+
+            <pre style="background:var(--dbt-bg-raised);border:1px solid var(--dbt-border);padding:20px 24px;font-size:12.5px;line-height:1.6;white-space:pre-wrap;color:var(--dbt-text);">@SummaryPreview()</pre>
+            break;
+        }
+    }
+}
+
+@code {
+    private enum ReportType { BackupActivity, RestoreTesting, OwnershipRollup, ScanActivity, ComplianceSnapshot, ManagementSummary }
+
+    private static readonly ReportType[] ReportTypeOrder =
+    [
+        ReportType.BackupActivity, ReportType.RestoreTesting, ReportType.OwnershipRollup,
+        ReportType.ScanActivity, ReportType.ComplianceSnapshot, ReportType.ManagementSummary
+    ];
+
+    private List<InstanceOverview>? _overviews;
+    private ReportType _selected = ReportType.BackupActivity;
+    private int _rangeDays = 7;
+    private bool _sendingReport;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _overviews = await OverviewService.GetAllAsync();
+    }
+
+    private static string Label(ReportType type) => type switch
+    {
+        ReportType.BackupActivity => "Backup activity",
+        ReportType.RestoreTesting => "Restore testing",
+        ReportType.OwnershipRollup => "Ownership roll-up",
+        ReportType.ScanActivity => "Scan activity",
+        ReportType.ComplianceSnapshot => "Compliance snapshot",
+        ReportType.ManagementSummary => "Management summary",
+        _ => type.ToString()
+    };
+
+    private IEnumerable<BackupActivityRow> AllBackupActivityRows() =>
+        (_overviews ?? []).SelectMany(o => o.Instance.BackupRecords.Select(r => new BackupActivityRow(
+            o.Instance.Name, o.Instance.Company, o.Instance.Department, o.Instance.Engine,
+            r.TimestampUtc, r.Type, r.Status, r.SizeMb, r.DurationMinutes, r.Source)));
+
+    private static string FormatMb(double totalMb) =>
+        totalMb >= 1024 ? $"{totalMb / 1024:N1} GB" : $"{totalMb:N0} MB";
+
+    private static string StatusClass(BackupStatus status) => status switch
+    {
+        BackupStatus.Success => "OnTrack",
+        BackupStatus.Failed => "Failed",
+        BackupStatus.Missed => "Failed",
+        _ => "NeverBackedUp"
+    };
+
+    private string SummaryPreview()
+    {
+        var rows = (_overviews ?? []).Select(o => new ComplianceReportRow(
+            o.Instance, o.Health, o.LastBackupUtc, o.Instance.RestoreEvents.Any(r => r.Outcome == RestoreOutcome.Success))).ToList();
+        return ComplianceReportBuilder.BuildPlainTextBody(rows, DateTime.UtcNow);
+    }
+
+    private async Task SendSummary()
+    {
+        _sendingReport = true;
+        var count = await ReportService.SendNowAsync();
+        _sendingReport = false;
+
+        if (count > 0)
+        {
+            Toasts.Success(count == 1 ? "Report sent to 1 recipient." : $"Report sent to {count} recipients.");
+        }
+        else
+        {
+            Toasts.Error("No distribution list configured (Reports:DistributionList).");
+        }
+    }
+
+    private async Task CopySummary()
+    {
+        await JS.InvokeVoidAsync("navigator.clipboard.writeText", SummaryPreview());
+        Toasts.Success("Report body copied to clipboard.");
+    }
+
+    private static string Csv(string value) =>
+        value.Contains(',') || value.Contains('"')
+            ? $"\"{value.Replace("\"", "\"\"")}\""
+            : value;
+
+    private async Task DownloadCsv(string fileName, string content) =>
+        await JS.InvokeVoidAsync("dbtracker.downloadCsv", fileName, content);
+
+    private Task ExportBackupActivity(IReadOnlyList<BackupActivityRow> rows)
+    {
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("TimestampUtc,Instance,Company,Department,Engine,Type,Status,SizeMb,DurationMinutes,Source");
+        foreach (var r in rows)
+        {
+            sb.AppendLine(string.Join(",", Csv(r.TimestampUtc.ToString("O")), Csv(r.InstanceName), Csv(r.Company), Csv(r.Department),
+                Csv(r.Engine.ToString()), Csv(r.Type.ToString()), Csv(r.Status.ToString()),
+                Csv(r.SizeMb?.ToString("N1") ?? ""), Csv(r.DurationMinutes?.ToString("N1") ?? ""), Csv(r.Source.ToString())));
+        }
+        return DownloadCsv($"dbtracker-backup-activity-{DateTime.UtcNow:yyyyMMdd-HHmm}.csv", sb.ToString());
+    }
+
+    private Task ExportRestoreTesting(IReadOnlyList<RestoreTestingRow> rows)
+    {
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("Instance,Company,Department,Role,Environment,RestoreTested,LastSuccessfulRestoreUtc,TotalAttempts");
+        foreach (var r in rows)
+        {
+            sb.AppendLine(string.Join(",", Csv(r.InstanceName), Csv(r.Company), Csv(r.Department), Csv(r.Role.ToString()), Csv(r.Environment.ToString()),
+                Csv(r.RestoreTested ? "Yes" : "No"), Csv(r.LastSuccessfulRestoreUtc?.ToString("O") ?? ""), Csv(r.TotalAttempts.ToString())));
+        }
+        return DownloadCsv($"dbtracker-restore-testing-{DateTime.UtcNow:yyyyMMdd-HHmm}.csv", sb.ToString());
+    }
+
+    private Task ExportOwnershipRollup(IReadOnlyList<OwnershipRollupRow> rows)
+    {
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("Company,Department,Instances,OnTrack,Overdue,Failed,NeverBackedUp,PrimaryContacts");
+        foreach (var r in rows)
+        {
+            sb.AppendLine(string.Join(",", Csv(r.Company), Csv(r.Department), Csv(r.InstanceCount.ToString()), Csv(r.OnTrack.ToString()),
+                Csv(r.Overdue.ToString()), Csv(r.Failed.ToString()), Csv(r.NeverBackedUp.ToString()), Csv(r.PrimaryContacts)));
+        }
+        return DownloadCsv($"dbtracker-ownership-rollup-{DateTime.UtcNow:yyyyMMdd-HHmm}.csv", sb.ToString());
+    }
+
+    private Task ExportScanActivity(IReadOnlyList<ScanActivityRow> rows)
+    {
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("Instance,BackupFileLocation,LastScanUtc,Status,Error");
+        foreach (var r in rows)
+        {
+            sb.AppendLine(string.Join(",", Csv(r.InstanceName), Csv(r.BackupFileLocation), Csv(r.LastScanUtc?.ToString("O") ?? ""), Csv(r.LastScanStatus.ToString()), Csv(r.LastScanError)));
+        }
+        return DownloadCsv($"dbtracker-scan-activity-{DateTime.UtcNow:yyyyMMdd-HHmm}.csv", sb.ToString());
+    }
+}
