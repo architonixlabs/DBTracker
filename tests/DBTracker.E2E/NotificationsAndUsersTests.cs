@@ -84,8 +84,11 @@ public class NotificationsAndUsersTests
     }
 
     [Test]
-    public async Task SendReport_WithDistributionListConfigured_ShowsSuccessToast()
+    public async Task SendReport_OpensPreviewBeforeSending_AndNeverClaimsSuccessWithNoEmailProvider()
     {
+        // U09: preview (recipients, generation time, scope) before send, and a disabled email
+        // provider (Testing env's Email:Provider=None) must never produce a false "sent" message —
+        // even though a distribution list IS configured, nothing was actually delivered.
         _page = await GlobalSetup.Server.Browser.NewPageAsync();
         // Auditor is in Roles.ReportingPolicy and read-only otherwise — proves the button isn't DBA-gated.
         await LoginAsync("angela.price@contoso.com");
@@ -95,9 +98,18 @@ public class NotificationsAndUsersTests
         await WaitForCircuitAsync();
 
         await _page.ClickAsync("button:has-text('Send report')");
-        await _page.WaitForTimeoutAsync(1000);
+        await _page.WaitForTimeoutAsync(500);
 
-        await Assertions.Expect(_page.Locator(".dbt-toast")).ToContainTextAsync("Report sent to 1 recipient");
+        // The preview panel shows generation time and the configured recipient before anything is sent.
+        await Assertions.Expect(_page.Locator("text=Generation time")).ToBeVisibleAsync();
+        await Assertions.Expect(_page.Locator("text=leadership@architonixlabs.com")).ToBeVisibleAsync();
+
+        await _page.ClickAsync("button:has-text('Confirm & send')");
+        await _page.WaitForTimeoutAsync(800);
+
+        // Never claims success (e.g. "accepted"/"Report sent to") when nothing was actually delivered.
+        await Assertions.Expect(_page.Locator(".dbt-toast")).Not.ToContainTextAsync("accepted");
+        await Assertions.Expect(_page.Locator(".dbt-toast")).ToContainTextAsync("no email provider configured");
     }
 
     private async Task LoginAsync(string email)

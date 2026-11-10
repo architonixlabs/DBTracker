@@ -17,6 +17,9 @@ public class DBTrackerDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<Notification> Notifications => Set<Notification>();
     public DbSet<DeviceLinkToken> DeviceLinkTokens => Set<DeviceLinkToken>();
     public DbSet<InstanceChangeLog> InstanceChangeLogs => Set<InstanceChangeLog>();
+    public DbSet<BackupRecordCorrection> BackupRecordCorrections => Set<BackupRecordCorrection>();
+    public DbSet<RestoreEventCorrection> RestoreEventCorrections => Set<RestoreEventCorrection>();
+    public DbSet<ComplianceSnapshot> ComplianceSnapshots => Set<ComplianceSnapshot>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -67,17 +70,73 @@ public class DBTrackerDbContext : IdentityDbContext<ApplicationUser>
                 .HasFilter("[Source] = 1 AND [ObservedFileBytes] IS NOT NULL");
         });
 
+        modelBuilder.Entity<BackupRecord>(entity =>
+        {
+            entity.Property(e => e.RecordedByUserName).HasMaxLength(320);
+        });
+
         modelBuilder.Entity<RestoreEvent>(entity =>
         {
             entity.Property(e => e.PerformedBy).HasMaxLength(200);
             entity.Property(e => e.Notes).HasMaxLength(2000);
+            entity.Property(e => e.RecordedByUserName).HasMaxLength(320);
 
             entity.HasOne(r => r.DatabaseInstance)
                 .WithMany(i => i.RestoreEvents)
                 .HasForeignKey(r => r.DatabaseInstanceId)
                 .OnDelete(DeleteBehavior.Cascade);
 
+            // NoAction, not SetNull: SQL Server rejects a second cascade path to BackupRecords
+            // (DatabaseInstance already cascades to both BackupRecords and RestoreEvents). A
+            // backup record referenced by a restore test is never deleted by itself anyway —
+            // only alongside its whole instance, which cascades RestoreEvents away first.
+            entity.HasOne(r => r.LinkedBackupRecord)
+                .WithMany()
+                .HasForeignKey(r => r.LinkedBackupRecordId)
+                .OnDelete(DeleteBehavior.NoAction);
+
             entity.HasIndex(e => new { e.DatabaseInstanceId, e.TimestampUtc });
+        });
+
+        modelBuilder.Entity<BackupRecordCorrection>(entity =>
+        {
+            entity.Property(e => e.CorrectedByUserName).HasMaxLength(320);
+            entity.Property(e => e.Reason).HasMaxLength(1000).IsRequired();
+            entity.Property(e => e.PreviousNotes).HasMaxLength(2000);
+            entity.Property(e => e.NewNotes).HasMaxLength(2000);
+
+            entity.HasOne(c => c.BackupRecord)
+                .WithMany(r => r.Corrections)
+                .HasForeignKey(c => c.BackupRecordId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(e => e.BackupRecordId);
+        });
+
+        modelBuilder.Entity<RestoreEventCorrection>(entity =>
+        {
+            entity.Property(e => e.CorrectedByUserName).HasMaxLength(320);
+            entity.Property(e => e.Reason).HasMaxLength(1000).IsRequired();
+            entity.Property(e => e.PreviousNotes).HasMaxLength(2000);
+            entity.Property(e => e.NewNotes).HasMaxLength(2000);
+
+            entity.HasOne(c => c.RestoreEvent)
+                .WithMany(r => r.Corrections)
+                .HasForeignKey(c => c.RestoreEventId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(e => e.RestoreEventId);
+        });
+
+        modelBuilder.Entity<ComplianceSnapshot>(entity =>
+        {
+            entity.Property(e => e.GeneratedByUserName).HasMaxLength(320);
+            entity.Property(e => e.ScopeDescription).HasMaxLength(500);
+            entity.Property(e => e.PolicyVersion).HasMaxLength(50);
+            entity.Property(e => e.EvidenceProvenance).HasMaxLength(500);
+            entity.Property(e => e.RowsJson).HasColumnType("nvarchar(max)");
+
+            entity.HasIndex(e => e.GeneratedAtUtc);
         });
 
         modelBuilder.Entity<Notification>(entity =>

@@ -43,6 +43,9 @@ public class DatabaseInstance
 
     /// <summary>Expected days/copies backups for this instance should be retained — informational, not enforced.</summary>
     public int? RetentionPolicyDays { get; set; }
+
+    /// <summary>Per-instance override of the global restore-test interval (RestoreTest:IntervalDays), in days. Null = use the global default (U12).</summary>
+    public int? RestoreTestIntervalDaysOverride { get; set; }
     public string Tags { get; set; } = string.Empty;
     public string RunbookUrl { get; set; } = string.Empty;
 

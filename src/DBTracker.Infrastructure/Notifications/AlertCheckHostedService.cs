@@ -89,11 +89,16 @@ public class AlertCheckHostedService(
 
                 if (!string.IsNullOrWhiteSpace(instance.ContactEmail))
                 {
-                    await emailSender.SendAsync(
+                    var emailResult = await emailSender.SendAsync(
                         instance.ContactEmail,
                         $"DBTracker alert: {instance.Name} is {DescribeHealth(health)}",
                         $"{message}\n\nApplication: {instance.Application}\nCompany: {instance.Company}\n\nOpen DBTracker to view backup history and log a fix.",
                         ct);
+
+                    if (emailResult.Outcome == Core.Enums.EmailSendOutcome.Failed)
+                    {
+                        logger.LogWarning("Alert email to {Email} for {Instance} failed: {Detail}", instance.ContactEmail, instance.Name, emailResult.Detail);
+                    }
                 }
 
                 await webhookSender.SendAsync(WebhookPayloadBuilder.BuildAlertPayload(instance, health, now), ct);

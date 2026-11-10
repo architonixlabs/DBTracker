@@ -69,7 +69,8 @@ public class InstanceLifecycleTests
         // Should land on the detail page, with Never backed up health.
         await _page.WaitForURLAsync(url => url.Contains("/instances/"));
         await Assertions.Expect(_page.Locator("h1")).ToContainTextAsync(instanceName);
-        await Assertions.Expect(_page.Locator(".badge-health")).ToContainTextAsync("Never backed up");
+        // .First: the page also shows a separate restore-test-coverage badge (U12), independent of backup health.
+        await Assertions.Expect(_page.Locator(".badge-health").First).ToContainTextAsync("Never backed up");
 
         // Log a successful backup.
         await SelectByLabel("Status", "Success");
