@@ -20,11 +20,8 @@ public class InstanceLifecycleTests
         await _page.FillAsync("input[autocomplete=username]", email);
         await _page.FillAsync("input[autocomplete=current-password]", "ArxDemo#2026!");
 
-        // Click-then-wait races if the form navigation completes before WaitForURLAsync starts
-        // listening; wrapping both in WaitForNavigationAsync avoids that.
-        await _page.RunAndWaitForNavigationAsync(
-            () => _page.ClickAsync("button[type=submit]"),
-            new PageRunAndWaitForNavigationOptions { WaitUntil = WaitUntilState.NetworkIdle, Timeout = 15000 });
+        await _page.ClickAsync("button[type=submit]");
+        await _page.WaitForURLAsync(url => !url.Contains("/Account/Login"), new PageWaitForURLOptions { Timeout = 15000 });
 
         await WaitForCircuitAsync();
     }

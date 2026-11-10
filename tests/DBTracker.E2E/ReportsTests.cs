@@ -20,9 +20,8 @@ public class ReportsTests
         await _page.FillAsync("input[autocomplete=username]", email);
         await _page.FillAsync("input[autocomplete=current-password]", "ArxDemo#2026!");
 
-        await _page.RunAndWaitForNavigationAsync(
-            () => _page.ClickAsync("button[type=submit]"),
-            new PageRunAndWaitForNavigationOptions { WaitUntil = WaitUntilState.NetworkIdle, Timeout = 15000 });
+        await _page.ClickAsync("button[type=submit]");
+        await _page.WaitForURLAsync(url => !url.Contains("/Account/Login"), new PageWaitForURLOptions { Timeout = 15000 });
 
         await WaitForCircuitAsync();
     }

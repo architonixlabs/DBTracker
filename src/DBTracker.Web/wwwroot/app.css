@@ -560,6 +560,16 @@ dl.row > dd {
     color-scheme: dark;
 }
 
+/* color-scheme alone doesn't reliably theme the native option popup across
+   browsers — some render it with the OS's light-mode white background while
+   still inheriting .form-select's light text color, making options unreadable.
+   Styling <option> directly is honored cross-browser even though the rest of
+   the popup is a UA widget. */
+.form-select option {
+    background-color: var(--dbt-bg-raised);
+    color: var(--dbt-text);
+}
+
 .form-control:focus, .form-select:focus {
     border-color: var(--dbt-accent);
     box-shadow: none;
