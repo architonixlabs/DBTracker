@@ -3,6 +3,7 @@ using DBTracker.Infrastructure.Audit;
 using DBTracker.Infrastructure.Diagnostics;
 using DBTracker.Infrastructure.Identity;
 using DBTracker.Infrastructure.Lifecycle;
+using DBTracker.Infrastructure.MigrationPlanning;
 using DBTracker.Infrastructure.Notifications;
 using DBTracker.Infrastructure.Ownership;
 using DBTracker.Infrastructure.Queries;
@@ -75,6 +76,14 @@ builder.Services.AddScoped<PatchBaselineService>();
 builder.Services.AddScoped<AdvisoryService>();
 builder.Services.AddScoped<VersionObservationService>();
 builder.Services.AddHostedService<SupportRunwayCheckHostedService>();
+
+// Epic 19 (D07-D10): technical dependencies, source-to-target path assessment, upgrade-readiness
+// checklists and migration campaigns. Manual mapping/evaluation only — no auto-discovery or
+// executable migration-script generation anywhere in this epic.
+builder.Services.AddScoped<DependencyService>();
+builder.Services.AddScoped<PathAssessmentService>();
+builder.Services.AddScoped<ReadinessChecklistService>();
+builder.Services.AddScoped<CampaignService>();
 
 // Process-lifetime record of each background worker's last/next run (U15 setup/diagnostics page).
 builder.Services.AddSingleton<WorkerHeartbeatStore>();

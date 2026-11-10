@@ -4,11 +4,13 @@
 @using DBTracker.Core.Enums
 @using DBTracker.Core.Services
 @using DBTracker.Infrastructure.Lifecycle
+@using DBTracker.Infrastructure.MigrationPlanning
 @using DBTracker.Infrastructure.Identity
 @using Microsoft.AspNetCore.Components.Authorization
 @inject ReleaseCatalogService Catalog
 @inject PatchBaselineService Baselines
 @inject AdvisoryService Advisories
+@inject PathAssessmentService PathRules
 @inject AuthenticationStateProvider AuthProvider
 @inject DBTracker.Web.Services.ToastService Toasts
 
@@ -16,10 +18,11 @@
 
 <div class="app-topbar">
     <div>
-        <div class="eyebrow">DBA lifecycle roadmap · Epic 18</div>
+        <div class="eyebrow">DBA lifecycle roadmap · Epic 18-19</div>
         <h1>Release &amp; support lifecycle</h1>
         <div class="subtitle">
-            The curated release/support catalogue, approved patch baselines, and imported security advisories (D02, D04, D05).
+            The curated release/support catalogue, approved patch baselines, imported security advisories (D02, D04, D05),
+            and the reviewed source-to-target path rules (D08) instance migration pages are evaluated against.
             Facts here are curated/imported, not pulled from any live vendor feed — a failed refresh retains last-known facts with a staleness warning.
         </div>
     </div>
@@ -283,16 +286,101 @@
         </div>
         break;
     }
+
+    case Tab.PathRules:
+    {
+        <div class="row g-3">
+            <div class="col-lg-5">
+                <div class="dbt-card">
+                    <h2 class="h6 text-muted text-uppercase mb-3">Add a reviewed path rule (D08)</h2>
+                    <div class="row g-2 mb-2">
+                        <div class="col-4">
+                            <select class="form-select form-select-sm" @bind="_ruleEngine">
+                                @foreach (var e in Enum.GetValues<DatabaseEngine>())
+                                {
+                                    <option value="@e">@e</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-4">
+                            <select class="form-select form-select-sm" @bind="_ruleAssessmentType">
+                                @foreach (var t in Enum.GetValues<MigrationAssessmentType>())
+                                {
+                                    <option value="@t">@t</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-4">
+                            <select class="form-select form-select-sm" @bind="_ruleMethod">
+                                @foreach (var m in Enum.GetValues<MigrationMethod>())
+                                {
+                                    <option value="@m">@m</option>
+                                }
+                            </select>
+                        </div>
+                    </div>
+                    <div class="row g-2 mb-2">
+                        <div class="col-6"><input class="form-control form-control-sm" placeholder="Source family" @bind="_ruleSourceFamily" @bind:event="oninput" /></div>
+                        <div class="col-6"><input class="form-control form-control-sm" placeholder="Target family" @bind="_ruleTargetFamily" @bind:event="oninput" /></div>
+                    </div>
+                    <div class="row g-2 mb-2">
+                        <div class="col-3"><input class="form-control form-control-sm" placeholder="Src build min" @bind="_ruleSourceMin" @bind:event="oninput" /></div>
+                        <div class="col-3"><input class="form-control form-control-sm" placeholder="Src build max" @bind="_ruleSourceMax" @bind:event="oninput" /></div>
+                        <div class="col-3"><input class="form-control form-control-sm" placeholder="Tgt build min" @bind="_ruleTargetMin" @bind:event="oninput" /></div>
+                        <div class="col-3"><input class="form-control form-control-sm" placeholder="Tgt build max" @bind="_ruleTargetMax" @bind:event="oninput" /></div>
+                    </div>
+                    <div class="row g-2 mb-2">
+                        <div class="col-6">
+                            <select class="form-select form-select-sm" @bind="_ruleStatus">
+                                <option value="@PathSupportStatus.Supported">Supported</option>
+                                <option value="@PathSupportStatus.Blocked">Blocked</option>
+                            </select>
+                        </div>
+                        <div class="col-6"><input class="form-control form-control-sm" placeholder="Reviewed by (required)" @bind="_ruleReviewedBy" @bind:event="oninput" /></div>
+                    </div>
+                    <div class="mb-2"><input class="form-control form-control-sm" placeholder="Vendor guidance URL" @bind="_ruleGuidanceUrl" @bind:event="oninput" /></div>
+                    <button class="btn btn-primary btn-sm" @onclick="CreateRule" disabled="@(string.IsNullOrWhiteSpace(_ruleSourceFamily) || string.IsNullOrWhiteSpace(_ruleTargetFamily) || string.IsNullOrWhiteSpace(_ruleReviewedBy))">Add rule</button>
+                    <p class="small text-muted mt-2 mb-0">A pairing with no matching rule below is always evaluated as Unknown on an instance's Migration page — never assumed Supported.</p>
+                </div>
+            </div>
+            <div class="col-lg-7">
+                @if (_pathRulesList.Count == 0)
+                {
+                    <div class="empty-state"><i class="bi bi-signpost-2"></i>No path rules reviewed yet — every pairing evaluates as Unknown until one is added.</div>
+                }
+                else
+                {
+                    <table class="table table-sm dbt-table" data-testid="path-rule-table">
+                        <thead><tr><th>Engine</th><th>Type/Method</th><th>Source → target</th><th>Status</th><th>Reviewed by</th></tr></thead>
+                        <tbody>
+                            @foreach (var r in _pathRulesList)
+                            {
+                                <tr>
+                                    <td class="small">@r.Engine</td>
+                                    <td class="small">@r.AssessmentType / @r.Method</td>
+                                    <td class="small">@r.SourceFamily (@r.SourceBuildMin–@r.SourceBuildMax) → @r.TargetFamily (@r.TargetBuildMin–@r.TargetBuildMax)</td>
+                                    <td class="small">@r.Status</td>
+                                    <td class="small">@r.ReviewedBy</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                }
+            </div>
+        </div>
+        break;
+    }
 }
 
 @code {
-    private enum Tab { Catalogue, Baselines, Advisories }
-    private static readonly Tab[] TabOrder = [Tab.Catalogue, Tab.Baselines, Tab.Advisories];
+    private enum Tab { Catalogue, Baselines, Advisories, PathRules }
+    private static readonly Tab[] TabOrder = [Tab.Catalogue, Tab.Baselines, Tab.Advisories, Tab.PathRules];
     private Tab _selected = Tab.Catalogue;
 
     private List<ReleaseCatalogEntry> _entries = new();
     private List<ApprovedPatchBaseline> _baselinesList = new();
     private List<AdvisoryRecord> _advisoriesList = new();
+    private List<PathSupportRule> _pathRulesList = new();
     private string? _userName;
 
     // New catalogue entry form.
@@ -319,6 +407,13 @@
     private string _advFamily = "", _advVendorId = "", _advTitle = "", _advFixedBuild = "", _advMinBuild = "", _advMaxBuild = "", _advProvenance = "";
     private AdvisorySeverity _advSeverity = AdvisorySeverity.Unknown;
 
+    // Path rule form (D08).
+    private DatabaseEngine _ruleEngine = DatabaseEngine.MySql;
+    private MigrationAssessmentType _ruleAssessmentType = MigrationAssessmentType.VersionUpgrade;
+    private MigrationMethod _ruleMethod = MigrationMethod.InPlaceUpgrade;
+    private string _ruleSourceFamily = "", _ruleTargetFamily = "", _ruleSourceMin = "", _ruleSourceMax = "", _ruleTargetMin = "", _ruleTargetMax = "", _ruleReviewedBy = "", _ruleGuidanceUrl = "";
+    private PathSupportStatus _ruleStatus = PathSupportStatus.Supported;
+
     protected override async Task OnInitializedAsync()
     {
         var state = await AuthProvider.GetAuthenticationStateAsync();
@@ -331,6 +426,7 @@
         _entries = await Catalog.ListAsync();
         _baselinesList = await Baselines.ListAsync();
         _advisoriesList = await Advisories.ListAsync();
+        _pathRulesList = await PathRules.ListRulesAsync();
     }
 
     private async Task CreateEntry()
@@ -429,11 +525,36 @@
         await LoadAll();
     }
 
+    private async Task CreateRule()
+    {
+        var rule = new PathSupportRule
+        {
+            Engine = _ruleEngine,
+            AssessmentType = _ruleAssessmentType,
+            Method = _ruleMethod,
+            SourceFamily = _ruleSourceFamily,
+            SourceBuildMin = _ruleSourceMin,
+            SourceBuildMax = _ruleSourceMax,
+            TargetFamily = _ruleTargetFamily,
+            TargetBuildMin = _ruleTargetMin,
+            TargetBuildMax = _ruleTargetMax,
+            Status = _ruleStatus,
+            VendorGuidanceUrl = _ruleGuidanceUrl,
+            ReviewedBy = _ruleReviewedBy,
+            ReviewedAtUtc = DateTime.UtcNow
+        };
+        await PathRules.CreateRuleAsync(rule, _userName ?? "unknown");
+        Toasts.Success($"Path rule {_ruleSourceFamily} -> {_ruleTargetFamily} added ({_ruleStatus}).");
+        _ruleSourceFamily = _ruleTargetFamily = _ruleSourceMin = _ruleSourceMax = _ruleTargetMin = _ruleTargetMax = _ruleReviewedBy = _ruleGuidanceUrl = "";
+        await LoadAll();
+    }
+
     private static string Label(Tab tab) => tab switch
     {
         Tab.Catalogue => "Release catalogue",
         Tab.Baselines => "Approved baselines",
         Tab.Advisories => "Advisories",
+        Tab.PathRules => "Path rules",
         _ => tab.ToString()
     };
 }

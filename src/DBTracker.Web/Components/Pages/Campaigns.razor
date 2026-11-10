@@ -1,0 +1,181 @@
+@page "/campaigns"
+@attribute [Authorize(Roles = Roles.CanEditPolicy)]
+@using DBTracker.Core.Entities
+@using DBTracker.Core.Enums
+@using DBTracker.Core.Services
+@using DBTracker.Infrastructure.Identity
+@using DBTracker.Infrastructure.MigrationPlanning
+@using DBTracker.Infrastructure.Ownership
+@using DBTracker.Infrastructure.Queries
+@using Microsoft.AspNetCore.Components.Authorization
+@inject CampaignService CampaignSvc
+@inject TeamService Teams
+@inject InstanceOverviewService OverviewService
+@inject AuthenticationStateProvider AuthProvider
+@inject DBTracker.Web.Services.ToastService Toasts
+@inject NavigationManager Nav
+
+<PageTitle>Migration campaigns · DBTracker</PageTitle>
+
+<div class="app-topbar">
+    <div>
+        <div class="eyebrow">Migration planning · Epic 19 (D10)</div>
+        <h1>Migration campaigns</h1>
+        <div class="subtitle">
+            Waves of affected deployments with accountable owners, recorded alternatives, blockers and a state-transition history.
+            Scheduling a campaign is a planning fact only — it never changes or implies reduced risk/readiness status recorded elsewhere.
+        </div>
+    </div>
+</div>
+
+<div class="row g-3">
+    <div class="col-lg-5">
+        <div class="dbt-card">
+            <h2 class="h6 text-muted text-uppercase mb-3">New campaign</h2>
+            <div class="mb-2"><input class="form-control form-control-sm" placeholder="Campaign name" @bind="_name" @bind:event="oninput" /></div>
+            <div class="row g-2 mb-2">
+                <div class="col-6"><input class="form-control form-control-sm" placeholder="Source label" @bind="_sourceLabel" @bind:event="oninput" /></div>
+                <div class="col-6"><input class="form-control form-control-sm" placeholder="Target label" @bind="_targetLabel" @bind:event="oninput" /></div>
+            </div>
+            <div class="mb-2"><input class="form-control form-control-sm" placeholder="Reason" @bind="_reason" @bind:event="oninput" /></div>
+            <div class="row g-2 mb-2">
+                <div class="col-6">
+                    <select class="form-select form-select-sm" @bind="_method">
+                        @foreach (var m in Enum.GetValues<MigrationMethod>())
+                        {
+                            <option value="@m">@m</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-6"><input class="form-control form-control-sm" placeholder="Change-ticket reference" @bind="_changeTicketReference" @bind:event="oninput" /></div>
+            </div>
+            <div class="row g-2 mb-2">
+                <div class="col-4">
+                    <label class="form-label small">DBA team</label>
+                    <select class="form-select form-select-sm" @bind="_dbaTeamId">
+                        <option value="0">None</option>
+                        @foreach (var t in _teams)
+                        {
+                            <option value="@t.Id">@t.Name</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-4">
+                    <label class="form-label small">App team</label>
+                    <select class="form-select form-select-sm" @bind="_appTeamId">
+                        <option value="0">None</option>
+                        @foreach (var t in _teams)
+                        {
+                            <option value="@t.Id">@t.Name</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-4">
+                    <label class="form-label small">Platform team</label>
+                    <select class="form-select form-select-sm" @bind="_platformTeamId">
+                        <option value="0">None</option>
+                        @foreach (var t in _teams)
+                        {
+                            <option value="@t.Id">@t.Name</option>
+                        }
+                    </select>
+                </div>
+            </div>
+
+            <p class="small text-muted mb-1">Affected deployments:</p>
+            <div class="mb-2" style="max-height:160px;overflow-y:auto;border:1px solid var(--dbt-line);padding:6px;" role="region" aria-label="Choose affected instances">
+                @foreach (var i in _instances)
+                {
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="@($"inst-{i.Id}")" checked="@_selectedInstanceIds.Contains(i.Id)" @onchange="e => ToggleInstance(i.Id, (bool)e.Value!)" />
+                        <label class="form-check-label small" for="@($"inst-{i.Id}")">@i.Name</label>
+                    </div>
+                }
+            </div>
+
+            <button class="btn btn-primary btn-sm" @onclick="CreateCampaign" disabled="@(string.IsNullOrWhiteSpace(_name) || string.IsNullOrWhiteSpace(_sourceLabel) || string.IsNullOrWhiteSpace(_targetLabel))">Create campaign</button>
+        </div>
+    </div>
+
+    <div class="col-lg-7">
+        @if (_campaigns.Count == 0)
+        {
+            <div class="empty-state"><i class="bi bi-signpost-2"></i> No migration campaigns yet.</div>
+        }
+        else
+        {
+            <table class="table table-sm dbt-table" data-testid="campaign-table">
+                <thead><tr><th>Name</th><th>Source → target</th><th>State</th><th>Instances</th><th></th></tr></thead>
+                <tbody>
+                    @foreach (var c in _campaigns)
+                    {
+                        <tr data-testid="campaign-row">
+                            <td class="small">@c.Name</td>
+                            <td class="small">@c.SourceLabel → @c.TargetLabel</td>
+                            <td class="small"><span class="badge-health dot Overdue" data-testid="campaign-state">@c.State</span></td>
+                            <td class="small">@c.InstanceLinks.Count</td>
+                            <td class="small"><a class="btn btn-outline-secondary btn-sm" href="/campaigns/@c.Id">Open</a></td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+    </div>
+</div>
+
+@code {
+    private List<MigrationCampaign> _campaigns = new();
+    private List<Team> _teams = new();
+    private List<InstanceListRow> _instances = new();
+    private string? _userName;
+
+    private string _name = "", _sourceLabel = "", _targetLabel = "", _reason = "", _changeTicketReference = "";
+    private MigrationMethod _method = MigrationMethod.InPlaceUpgrade;
+    private int _dbaTeamId, _appTeamId, _platformTeamId;
+    private readonly HashSet<int> _selectedInstanceIds = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var state = await AuthProvider.GetAuthenticationStateAsync();
+        _userName = state.User.Identity?.Name ?? "unknown";
+        await LoadAll();
+    }
+
+    private async Task LoadAll()
+    {
+        _campaigns = await CampaignSvc.ListAsync();
+        _teams = (await Teams.ListAsync()).Select(s => s.Team).ToList();
+        _instances = await OverviewService.GetAllSummariesAsync();
+    }
+
+    private void ToggleInstance(int instanceId, bool isChecked)
+    {
+        if (isChecked)
+        {
+            _selectedInstanceIds.Add(instanceId);
+        }
+        else
+        {
+            _selectedInstanceIds.Remove(instanceId);
+        }
+    }
+
+    private async Task CreateCampaign()
+    {
+        var campaign = new MigrationCampaign
+        {
+            Name = _name,
+            SourceLabel = _sourceLabel,
+            TargetLabel = _targetLabel,
+            Reason = _reason,
+            ChosenMethod = _method,
+            ChangeTicketReference = _changeTicketReference,
+            AccountableDbaTeamId = _dbaTeamId == 0 ? null : _dbaTeamId,
+            AccountableAppTeamId = _appTeamId == 0 ? null : _appTeamId,
+            AccountablePlatformTeamId = _platformTeamId == 0 ? null : _platformTeamId
+        };
+        var created = await CampaignSvc.CreateAsync(campaign, _selectedInstanceIds, _userName ?? "unknown");
+        Toasts.Success($"Campaign \"{_name}\" created (Proposed).");
+        Nav.NavigateTo($"/campaigns/{created.Id}");
+    }
+}

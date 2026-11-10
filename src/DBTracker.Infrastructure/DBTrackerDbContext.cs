@@ -41,6 +41,18 @@ public class DBTrackerDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<AdvisoryInstanceAssessment> AdvisoryInstanceAssessments => Set<AdvisoryInstanceAssessment>();
     public DbSet<VersionObservation> VersionObservations => Set<VersionObservation>();
 
+    // Epic 19 (D07-D10): dependency assessment and migration planning.
+    public DbSet<InstanceDependency> InstanceDependencies => Set<InstanceDependency>();
+    public DbSet<PathSupportRule> PathSupportRules => Set<PathSupportRule>();
+    public DbSet<PathAssessment> PathAssessments => Set<PathAssessment>();
+    public DbSet<ReadinessChecklist> ReadinessChecklists => Set<ReadinessChecklist>();
+    public DbSet<ReadinessCheckItem> ReadinessCheckItems => Set<ReadinessCheckItem>();
+    public DbSet<MigrationCampaign> MigrationCampaigns => Set<MigrationCampaign>();
+    public DbSet<CampaignInstanceLink> CampaignInstanceLinks => Set<CampaignInstanceLink>();
+    public DbSet<CampaignAlternative> CampaignAlternatives => Set<CampaignAlternative>();
+    public DbSet<CampaignStateTransition> CampaignStateTransitions => Set<CampaignStateTransition>();
+    public DbSet<CampaignApproval> CampaignApprovals => Set<CampaignApproval>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -543,6 +555,230 @@ public class DBTrackerDbContext : IdentityDbContext<ApplicationUser>
                 .OnDelete(DeleteBehavior.Cascade);
 
             entity.HasIndex(e => new { e.DatabaseInstanceId, e.ObservedAtUtc });
+        });
+
+        // Epic 19 (D07-D10).
+        modelBuilder.Entity<InstanceDependency>(entity =>
+        {
+            entity.Property(e => e.Name).HasMaxLength(200).IsRequired();
+            entity.Property(e => e.Description).HasMaxLength(1000);
+            entity.Property(e => e.RecordedVersionText).HasMaxLength(100);
+            entity.Property(e => e.OsRuntimeConstraint).HasMaxLength(500);
+            entity.Property(e => e.ManagedProviderConstraint).HasMaxLength(500);
+            entity.Property(e => e.EvidenceUrl).HasMaxLength(500);
+            entity.Property(e => e.EvidenceNotes).HasMaxLength(1000);
+            entity.Property(e => e.ResolutionNotes).HasMaxLength(1000);
+            entity.Property(e => e.LastReviewedBy).HasMaxLength(320);
+            entity.Property(e => e.UpdatedBy).HasMaxLength(320);
+
+            entity.HasOne(e => e.DatabaseInstance)
+                .WithMany()
+                .HasForeignKey(e => e.DatabaseInstanceId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(e => e.OwnerTeam)
+                .WithMany()
+                .HasForeignKey(e => e.OwnerTeamId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasIndex(e => new { e.DatabaseInstanceId, e.IsResolved });
+            entity.HasIndex(e => e.Direction);
+        });
+
+        modelBuilder.Entity<PathSupportRule>(entity =>
+        {
+            entity.Property(e => e.SourceFamily).HasMaxLength(100);
+            entity.Property(e => e.SourceBuildMin).HasMaxLength(100);
+            entity.Property(e => e.SourceBuildMax).HasMaxLength(100);
+            entity.Property(e => e.SourceEdition).HasMaxLength(100);
+            entity.Property(e => e.SourcePlatform).HasMaxLength(100);
+            entity.Property(e => e.SourceTopology).HasMaxLength(100);
+            entity.Property(e => e.TargetFamily).HasMaxLength(100);
+            entity.Property(e => e.TargetBuildMin).HasMaxLength(100);
+            entity.Property(e => e.TargetBuildMax).HasMaxLength(100);
+            entity.Property(e => e.TargetEdition).HasMaxLength(100);
+            entity.Property(e => e.TargetPlatform).HasMaxLength(100);
+            entity.Property(e => e.TargetTopology).HasMaxLength(100);
+            entity.Property(e => e.RequiredIntermediateVersions).HasMaxLength(500);
+            entity.Property(e => e.DowngradeConstraints).HasMaxLength(500);
+            entity.Property(e => e.VendorGuidanceUrl).HasMaxLength(500);
+            entity.Property(e => e.VendorGuidanceNotes).HasMaxLength(1000);
+            entity.Property(e => e.ReviewedBy).HasMaxLength(320);
+
+            entity.HasIndex(e => new { e.Engine, e.AssessmentType, e.Method });
+        });
+
+        modelBuilder.Entity<PathAssessment>(entity =>
+        {
+            entity.Property(e => e.SourceProduct).HasMaxLength(200);
+            entity.Property(e => e.SourceBuild).HasMaxLength(100);
+            entity.Property(e => e.SourceEdition).HasMaxLength(100);
+            entity.Property(e => e.SourcePlatform).HasMaxLength(100);
+            entity.Property(e => e.SourceTopology).HasMaxLength(100);
+            entity.Property(e => e.TargetProduct).HasMaxLength(200);
+            entity.Property(e => e.TargetBuild).HasMaxLength(100);
+            entity.Property(e => e.TargetEdition).HasMaxLength(100);
+            entity.Property(e => e.TargetPlatform).HasMaxLength(100);
+            entity.Property(e => e.TargetTopology).HasMaxLength(100);
+            entity.Property(e => e.StatusReasoning).HasMaxLength(1000);
+            entity.Property(e => e.VendorGuidanceUrl).HasMaxLength(500);
+            entity.Property(e => e.VendorGuidanceNotes).HasMaxLength(1000);
+            entity.Property(e => e.RequiredIntermediateVersions).HasMaxLength(500);
+            entity.Property(e => e.DowngradeConstraints).HasMaxLength(500);
+            entity.Property(e => e.EvaluatedBy).HasMaxLength(320);
+
+            entity.HasOne(e => e.DatabaseInstance)
+                .WithMany()
+                .HasForeignKey(e => e.DatabaseInstanceId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(e => e.MatchedRule)
+                .WithMany()
+                .HasForeignKey(e => e.MatchedRuleId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasIndex(e => new { e.DatabaseInstanceId, e.EvaluatedAtUtc });
+        });
+
+        modelBuilder.Entity<ReadinessChecklist>(entity =>
+        {
+            entity.Property(e => e.SourceLabel).HasMaxLength(300);
+            entity.Property(e => e.TargetLabel).HasMaxLength(300);
+            entity.Property(e => e.CreatedBy).HasMaxLength(320);
+
+            entity.HasOne(e => e.DatabaseInstance)
+                .WithMany()
+                .HasForeignKey(e => e.DatabaseInstanceId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // NoAction, not Cascade: SQL Server rejects a second cascade path to ReadinessChecklist
+            // (DatabaseInstance already cascades to it directly, and also to PathAssessment, which
+            // this FK also points at). A checklist is never deleted on its own via this FK anyway —
+            // only alongside its whole instance, which cascades it away regardless of this FK's own
+            // action. Same resolution already used for ClusterNodeVersion.VersionIdentityId and
+            // RestoreEvent.LinkedBackupRecordId.
+            entity.HasOne(e => e.PathAssessment)
+                .WithMany()
+                .HasForeignKey(e => e.PathAssessmentId)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            entity.HasIndex(e => e.DatabaseInstanceId);
+        });
+
+        modelBuilder.Entity<ReadinessCheckItem>(entity =>
+        {
+            entity.Property(e => e.Label).HasMaxLength(200);
+            entity.Property(e => e.Findings).HasMaxLength(2000);
+            entity.Property(e => e.Reviewer).HasMaxLength(320);
+            entity.Property(e => e.SourceReference).HasMaxLength(500);
+            entity.Property(e => e.TargetReference).HasMaxLength(500);
+            entity.Property(e => e.RemediationOwner).HasMaxLength(320);
+            entity.Property(e => e.RemediationNotes).HasMaxLength(1000);
+            entity.Property(e => e.InvalidationReason).HasMaxLength(500);
+
+            entity.HasOne(e => e.ReadinessChecklist)
+                .WithMany(c => c.Items)
+                .HasForeignKey(e => e.ReadinessChecklistId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(e => e.ReadinessChecklistId);
+        });
+
+        modelBuilder.Entity<MigrationCampaign>(entity =>
+        {
+            entity.Property(e => e.Name).HasMaxLength(200).IsRequired();
+            entity.Property(e => e.SourceLabel).HasMaxLength(300);
+            entity.Property(e => e.TargetLabel).HasMaxLength(300);
+            entity.Property(e => e.Reason).HasMaxLength(1000);
+            entity.Property(e => e.Blockers).HasMaxLength(1000);
+            entity.Property(e => e.Milestones).HasMaxLength(2000);
+            entity.Property(e => e.ChangeTicketReference).HasMaxLength(200);
+            entity.Property(e => e.CreatedBy).HasMaxLength(320);
+            entity.Property(e => e.EstimatedEffortHours).HasColumnType("decimal(10,2)");
+            entity.Property(e => e.EstimatedCost).HasColumnType("decimal(14,2)");
+
+            // NoAction on all three, not SetNull: three separate FK columns on one table all
+            // referencing the same Teams table hits the same SQL Server restriction as a single
+            // table reachable via two cascade paths ("may cause cycles or multiple cascade paths"),
+            // even though these three don't chain through each other. There is no team-delete
+            // feature in this app (TeamService has no delete/remove-team method) so this never
+            // blocks a real operation; same resolution already used elsewhere in this schema for an
+            // identical shape (RestoreEvent.LinkedBackupRecord, ClusterNodeVersion.VersionIdentity).
+            entity.HasOne(e => e.AccountableDbaTeam)
+                .WithMany()
+                .HasForeignKey(e => e.AccountableDbaTeamId)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            entity.HasOne(e => e.AccountableAppTeam)
+                .WithMany()
+                .HasForeignKey(e => e.AccountableAppTeamId)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            entity.HasOne(e => e.AccountablePlatformTeam)
+                .WithMany()
+                .HasForeignKey(e => e.AccountablePlatformTeamId)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            entity.HasIndex(e => e.State);
+        });
+
+        modelBuilder.Entity<CampaignInstanceLink>(entity =>
+        {
+            entity.HasOne(e => e.MigrationCampaign)
+                .WithMany(c => c.InstanceLinks)
+                .HasForeignKey(e => e.MigrationCampaignId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(e => e.DatabaseInstance)
+                .WithMany()
+                .HasForeignKey(e => e.DatabaseInstanceId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(e => new { e.MigrationCampaignId, e.DatabaseInstanceId }).IsUnique();
+            entity.HasIndex(e => e.DatabaseInstanceId);
+        });
+
+        modelBuilder.Entity<CampaignAlternative>(entity =>
+        {
+            entity.Property(e => e.Description).HasMaxLength(1000);
+            entity.Property(e => e.RiskNotes).HasMaxLength(1000);
+            entity.Property(e => e.CreatedBy).HasMaxLength(320);
+            entity.Property(e => e.EstimatedEffortHours).HasColumnType("decimal(10,2)");
+            entity.Property(e => e.EstimatedCost).HasColumnType("decimal(14,2)");
+
+            entity.HasOne(e => e.MigrationCampaign)
+                .WithMany(c => c.Alternatives)
+                .HasForeignKey(e => e.MigrationCampaignId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(e => e.MigrationCampaignId);
+        });
+
+        modelBuilder.Entity<CampaignStateTransition>(entity =>
+        {
+            entity.Property(e => e.Reason).HasMaxLength(1000);
+            entity.Property(e => e.TransitionedBy).HasMaxLength(320);
+
+            entity.HasOne(e => e.MigrationCampaign)
+                .WithMany(c => c.StateTransitions)
+                .HasForeignKey(e => e.MigrationCampaignId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(e => new { e.MigrationCampaignId, e.TransitionedAtUtc });
+        });
+
+        modelBuilder.Entity<CampaignApproval>(entity =>
+        {
+            entity.Property(e => e.Scope).HasMaxLength(200);
+            entity.Property(e => e.ApproverName).HasMaxLength(320);
+            entity.Property(e => e.Notes).HasMaxLength(1000);
+
+            entity.HasOne(e => e.MigrationCampaign)
+                .WithMany(c => c.Approvals)
+                .HasForeignKey(e => e.MigrationCampaignId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(e => e.MigrationCampaignId);
         });
     }
 }

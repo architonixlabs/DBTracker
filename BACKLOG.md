@@ -639,6 +639,56 @@ authenticated role already, same as the rest of the app, so no separate "my apps
   override/refresh-failure pair. Full suite: 397/397 (326 unit + 71 E2E). This completes Epic 18
   (D01-D06) in full; PLAN-001's lifecycle-only D15 is Epic 20 scope and was not touched here. Epics
   19-22 (D07-D22) remain proposed and unimplemented.
+- 2026-11-10 — Built Epic 19 (D07-D10), the second epic of the DBA lifecycle roadmap, per PLAN-001's
+  sequencing ("Then D07-D14 migration readiness..."). **D07** — a new `InstanceDependency` records
+  what an instance relies on or who relies on it (drivers, extensions/plugins, jobs, linked services,
+  replicas/HA groups, backup tooling, OS/runtime and managed-provider constraints), reusing Epic 17's
+  `Team` for ownership rather than a new model; `DependencyImpactAssessor` (pure) summarizes unresolved
+  dependencies and downstream consumers, surfaced as a banner on a new per-instance `/instances/{id}/
+  migration` page before a shared-engine change — manual mapping only, no auto-discovery. **D08** — a
+  curated, reviewed `PathSupportRule` set (managed from a new "Path rules" tab on the existing
+  `/lifecycle` hub) and per-instance `PathAssessment` records; `PathSupportClassifier` (pure) matches
+  source/target product+build+edition+platform+topology plus assessment type (version upgrade /
+  relocation / cross-engine conversion, kept as distinct types) and method against the rule set,
+  reusing Epic 18's `VersionBuildComparer` for build-range matching — the absence of a matching rule
+  is always Unknown, never Supported, and conflicting rules also resolve to Unknown rather than an
+  arbitrary pick. No executable migration scripts are generated and no downtime-free assumption is
+  made anywhere. **D09** — `ReadinessChecklist`/`ReadinessCheckItem` cover driver/ORM, application-
+  vendor certification, extensions, deprecated features, collation/encoding, OS, edition features,
+  backup tooling and engine compatibility state (reusing D01's `DatabaseCompatibilityLevel` field, not
+  a new rule); every check starts Unknown and `ReadinessChecklistAggregator` (pure) summarizes
+  passed/failed/unknown/n-a counts plus the full blocking-finding detail rather than hiding it behind
+  a count. A changed migration target (`ReadinessChecklistService.UpdateTargetAsync`) explicitly
+  invalidates every already-recorded check back to Unknown, and expired evidence
+  (`EvidenceExpiresAtUtc`) does the same purely by comparison against "now" — neither ever promotes a
+  check to Passed. **D10** — `MigrationCampaign` groups affected deployments (`CampaignInstanceLink`)
+  with accountable DBA/app/platform `Team` owners, blockers, milestones, effort/cost estimates and a
+  change-ticket reference; `CampaignAlternative` records and compares upgrade/patch/replace/retire/
+  support-extension-or-exception options side by side rather than assuming upgrade is the only path,
+  and `CampaignApproval` is an append-only approval history. State only ever moves through
+  `CampaignStateTransitionValidator`'s (pure) allowed graph — Proposed → Assessing → Ready → Scheduled
+  → In progress → Validating → Completed, with Blocked/Rolled back/Cancelled as explicit exits — and
+  `CampaignService.TransitionAsync` refuses an invalid jump with a reason rather than writing it;
+  reaching any state, including Scheduled, never touches `PathAssessment`/`ReadinessChecklist`/
+  `SupportRunwayDecision`, so scheduling a campaign cannot itself change or imply a reduced risk/
+  readiness status recorded elsewhere, by construction. All four items' mutations go through the
+  existing U19 `AuditRecorder`. Found and fixed one real migration bug while generating the EF Core
+  migration: giving `MigrationCampaign`'s three separate team-owner foreign keys (`AccountableDbaTeam`/
+  `AccountableAppTeam`/`AccountablePlatformTeam`) `SetNull` each triggered the same SQL Server "multiple
+  cascade paths" restriction (error 1785) as the already-known shared-table case from Epic 18, just
+  from three distinct columns on one table referencing the same `Teams` table rather than two tables
+  chaining through each other — fixed to `NoAction` on all three (there is no team-delete feature in
+  this app, so this never blocks a real operation), the same resolution already used for
+  `RestoreEvent.LinkedBackupRecord` and `ClusterNodeVersion.VersionIdentity`. One new EF migration
+  (`AddDependencyAssessmentEpic19`) for the ten new tables. 53 new unit tests
+  (`DependencyImpactAssessorTests`, `PathSupportClassifierTests`, `ReadinessChecklistAggregatorTests`,
+  `CampaignStateTransitionValidatorTests`) and 4 new E2E tests (`Epic19MigrationPlanningTests`)
+  covering recording an unresolved dependency and seeing it flag before a shared-engine change, a
+  path assessment showing Unknown with no matching rule and then Supported once a reviewed rule is
+  added, a readiness checklist with a recorded Failed/blocking check alongside untouched Unknown ones,
+  and a migration campaign comparing two alternatives, choosing one, transitioning state and recording
+  an approval. Full suite: 454/454 (379 unit + 75 E2E). This completes Epic 19 (D07-D10) in full;
+  Epics 20-22 (D11-D22) remain proposed and unimplemented.
 
 ## Out of scope (future)
 - Automated backup execution/orchestration (this tracks status, doesn't run backups)
@@ -961,7 +1011,7 @@ A newer release alone does not make migration required. No automatic upgrade exe
 
 ### Epic 19 - Dependency assessment and migration planning
 
-- [ ] **2026-11-10 | D07 | NEW | P1 | L - Technical dependencies and migration impact.**
+- [x] **2026-11-10 | D07 | NEW | P1 | L - Technical dependencies and migration impact.**
   DBA/app-owner/SRE personas need the whole service boundary, beyond an active/passive label.
   **Acceptance:** link deployments, nodes and hosted databases to applications, owners, drivers,
   extensions/plugins, jobs, linked services, replicas/HA groups and backup tooling. Record OS/runtime
@@ -969,7 +1019,7 @@ A newer release alone does not make migration required. No automatic upgrade exe
   unresolved dependencies before changing a shared engine; allow mixed-version transition states.
   Use U21 for teams/facets rather than rebuilding ownership; manual mapping is sufficient initially.
 
-- [ ] **2026-11-10 | D08 | NEW | P1 | L - Supported source-to-target path assessment.**
+- [x] **2026-11-10 | D08 | NEW | P1 | L - Supported source-to-target path assessment.**
   DBA/platform personas need vendor-supported methods; app owner rejects a generic version jump.
   **Acceptance:** record source/target product, exact builds, edition, platform, topology and method
   (patch, in-place, side-by-side, dump/load or replication where supported). Link reviewed vendor
@@ -978,7 +1028,7 @@ A newer release alone does not make migration required. No automatic upgrade exe
   as distinct change types needing their own assessment. Depends on D01/D02/D07; no generated
   executable migration scripts or assumption of zero downtime.
 
-- [ ] **2026-11-10 | D09 | NEW | P1 | L - Upgrade readiness and application certification.**
+- [x] **2026-11-10 | D09 | NEW | P1 | L - Upgrade readiness and application certification.**
   DBA/app-owner/security personas need specific blockers and accountable approvals.
   **Acceptance:** check driver/ORM, application-vendor certification, extensions, deprecated features,
   collation/encoding, OS, edition features, backup tooling and engine compatibility state as applicable.
@@ -987,7 +1037,7 @@ A newer release alone does not make migration required. No automatic upgrade exe
   Expired evidence and changed targets invalidate affected checks. Depends on D07-D08; initial delivery
   accepts reviewed evidence without promising automated compatibility analysis.
 
-- [ ] **2026-11-10 | D10 | NEW | P2 | L - Migration campaigns, owners and alternatives.**
+- [x] **2026-11-10 | D10 | NEW | P2 | L - Migration campaigns, owners and alternatives.**
   DBA/service-owner/procurement personas need a plan that can meet a real deadline.
   **Acceptance:** group affected deployments into waves with source/target, reason, chosen method,
   accountable DBA/app/platform owners, blockers, milestones, effort/cost estimates and change-ticket

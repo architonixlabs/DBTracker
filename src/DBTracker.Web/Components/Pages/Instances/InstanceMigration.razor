@@ -1,0 +1,448 @@
+@page "/instances/{Id:int}/migration"
+@attribute [Authorize]
+@using DBTracker.Core.Entities
+@using DBTracker.Core.Enums
+@using DBTracker.Core.Services
+@using DBTracker.Infrastructure.Identity
+@using DBTracker.Infrastructure.MigrationPlanning
+@using DBTracker.Infrastructure.Ownership
+@using DBTracker.Infrastructure.Queries
+@using Microsoft.AspNetCore.Components.Authorization
+@inject InstanceOverviewService OverviewService
+@inject DependencyService Dependencies
+@inject PathAssessmentService PathAssessments
+@inject ReadinessChecklistService Readiness
+@inject TeamService Teams
+@inject AuthenticationStateProvider AuthProvider
+@inject DBTracker.Web.Services.ToastService Toasts
+
+<PageTitle>@(_instance?.Name ?? "Instance") migration planning · DBTracker</PageTitle>
+
+@if (!_loaded)
+{
+    <div class="spinner-ring"></div>
+}
+else if (_instance is null)
+{
+    <div class="dbt-card" style="max-width:600px;">
+        <div class="empty-state py-4"><i class="bi bi-question-diamond"></i> Instance #@Id doesn't exist.</div>
+        <a class="btn btn-outline-secondary" href="/instances">Back to instances</a>
+    </div>
+}
+else
+{
+    <div class="app-topbar">
+        <div>
+            <div class="eyebrow">Dependency assessment and migration planning</div>
+            <h1>@_instance.Name</h1>
+            <div class="subtitle">
+                @_instance.Engine · <a href="/instances/@Id">Back to instance detail</a> · <a href="/instances/@Id/lifecycle">Lifecycle (D01-D06)</a> ·
+                Manual mapping/evaluation only — no auto-discovery and no generated executable migration scripts.
+            </div>
+        </div>
+    </div>
+
+    @if (_impact is { HasUnresolvedConcerns: true } or { DownstreamConsumerCount: > 0 })
+    {
+        <div class="dbt-card mb-3" data-testid="dependency-impact-banner" style="border-color:var(--dbt-overdue);">
+            <strong style="color:var(--dbt-overdue);"><i class="bi bi-exclamation-triangle"></i> Before changing this shared engine:</strong>
+            <span class="small"> @_impact!.UnresolvedCount unresolved dependenc@(_impact.UnresolvedCount == 1 ? "y" : "ies"), @_impact.DownstreamConsumerCount downstream consumer(s) recorded. Review the Dependencies section below.</span>
+        </div>
+    }
+
+    <div class="row g-3">
+        <div class="col-12">
+            <div class="dbt-card">
+                <h2 class="h6 text-muted text-uppercase mb-3">Technical dependencies (D07)</h2>
+                <p class="small text-muted">Deployments, nodes, hosted databases, drivers, extensions/plugins, jobs, linked services, replicas/HA groups and backup tooling this instance relies on — or that rely on it. Manual entry; no auto-discovery.</p>
+
+                @if (_dependencies.Count == 0)
+                {
+                    <div class="empty-state py-3"><i class="bi bi-diagram-3"></i> No dependencies recorded yet.</div>
+                }
+                else
+                {
+                    <div class="table-responsive" role="region" aria-label="Technical dependencies">
+                        <table class="table table-sm dbt-table mb-0" data-testid="dependency-table">
+                            <thead><tr><th>Kind</th><th>Direction</th><th>Name</th><th>Version state</th><th>Owner team</th><th>Resolved</th><th></th></tr></thead>
+                            <tbody>
+                                @foreach (var d in _dependencies)
+                                {
+                                    <tr data-testid="dependency-row">
+                                        <td class="small">@d.Kind</td>
+                                        <td class="small">@d.Direction</td>
+                                        <td class="small">@d.Name @(string.IsNullOrWhiteSpace(d.RecordedVersionText) ? "" : $"({d.RecordedVersionText})")</td>
+                                        <td class="small">@d.VersionState</td>
+                                        <td class="small">@(d.OwnerTeam?.Name ?? "—")</td>
+                                        <td class="small">
+                                            @if (d.IsResolved)
+                                            {
+                                                <span class="badge-health dot OnTrack">Resolved</span>
+                                            }
+                                            else
+                                            {
+                                                <span class="badge-health dot Overdue">Unresolved</span>
+                                            }
+                                        </td>
+                                        <td class="small">
+                                            <AuthorizeView Roles="@Roles.CanEditPolicy">
+                                                <button class="btn btn-link btn-sm p-0" @onclick="() => ToggleResolved(d)">@(d.IsResolved ? "Mark unresolved" : "Mark resolved")</button>
+                                            </AuthorizeView>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+
+                <AuthorizeView Roles="@Roles.CanEditPolicy">
+                    <hr />
+                    <div class="row g-2 mb-2">
+                        <div class="col-md-2">
+                            <select class="form-select form-select-sm" @bind="_depKind">
+                                @foreach (var k in Enum.GetValues<DependencyKind>())
+                                {
+                                    <option value="@k">@k</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <select class="form-select form-select-sm" @bind="_depDirection">
+                                @foreach (var dir in Enum.GetValues<DependencyDirection>())
+                                {
+                                    <option value="@dir">@dir</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-md-3"><input class="form-control form-control-sm" placeholder="Name" @bind="_depName" @bind:event="oninput" /></div>
+                        <div class="col-md-2">
+                            <select class="form-select form-select-sm" @bind="_depVersionState">
+                                @foreach (var vs in Enum.GetValues<DependencyVersionState>())
+                                {
+                                    <option value="@vs">@vs</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <select class="form-select form-select-sm" @bind="_depOwnerTeamId">
+                                <option value="0">No owner team</option>
+                                @foreach (var t in _teams)
+                                {
+                                    <option value="@t.Id">@t.Name</option>
+                                }
+                            </select>
+                        </div>
+                    </div>
+                    <div class="row g-2 mb-2">
+                        <div class="col-md-3"><input class="form-control form-control-sm" placeholder="Recorded version (e.g. driver 4.2.1)" @bind="_depVersionText" @bind:event="oninput" /></div>
+                        <div class="col-md-3"><input class="form-control form-control-sm" placeholder="OS/runtime constraint" @bind="_depOsConstraint" @bind:event="oninput" /></div>
+                        <div class="col-md-3"><input class="form-control form-control-sm" placeholder="Managed-provider constraint" @bind="_depProviderConstraint" @bind:event="oninput" /></div>
+                        <div class="col-md-3"><input class="form-control form-control-sm" placeholder="Evidence URL/reference" @bind="_depEvidenceUrl" @bind:event="oninput" /></div>
+                    </div>
+                    <button class="btn btn-primary btn-sm" @onclick="AddDependency" disabled="@string.IsNullOrWhiteSpace(_depName)">Record dependency</button>
+                </AuthorizeView>
+            </div>
+        </div>
+
+        <div class="col-lg-6">
+            <div class="dbt-card h-100">
+                <h2 class="h6 text-muted text-uppercase mb-3">Source-to-target path assessment (D08)</h2>
+                <p class="small text-muted">Classified Supported / Blocked / Unknown against a curated, reviewed rule set — the absence of a matching rule is always Unknown, never Supported.</p>
+
+                @if (_pathAssessments.Count > 0)
+                {
+                    <div class="table-responsive mb-3" role="region" aria-label="Path assessments">
+                        <table class="table table-sm dbt-table mb-0" data-testid="path-assessment-table">
+                            <thead><tr><th>Type</th><th>Method</th><th>Source → Target</th><th>Status</th></tr></thead>
+                            <tbody>
+                                @foreach (var a in _pathAssessments)
+                                {
+                                    <tr data-testid="path-assessment-row">
+                                        <td class="small">@a.AssessmentType</td>
+                                        <td class="small">@a.Method</td>
+                                        <td class="small">@a.SourceProduct @a.SourceBuild → @a.TargetProduct @a.TargetBuild</td>
+                                        <td class="small"><span class="badge-health dot @PathStatusCssClass(a.Status)" data-testid="path-status">@a.Status</span></td>
+                                    </tr>
+                                    <tr>
+                                        <td colspan="4" class="small text-muted" data-testid="path-reasoning">@a.StatusReasoning</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+
+                <AuthorizeView Roles="@Roles.CanEditPolicy">
+                    <div class="row g-2 mb-2">
+                        <div class="col-6">
+                            <select class="form-select form-select-sm" @bind="_pathAssessmentType">
+                                @foreach (var t in Enum.GetValues<MigrationAssessmentType>())
+                                {
+                                    <option value="@t">@t</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-6">
+                            <select class="form-select form-select-sm" @bind="_pathMethod">
+                                @foreach (var m in Enum.GetValues<MigrationMethod>())
+                                {
+                                    <option value="@m">@m</option>
+                                }
+                            </select>
+                        </div>
+                    </div>
+                    <div class="row g-2 mb-2">
+                        <div class="col-6"><input class="form-control form-control-sm" placeholder="Source product/family" @bind="_pathSourceProduct" @bind:event="oninput" /></div>
+                        <div class="col-6"><input class="form-control form-control-sm" placeholder="Source build" @bind="_pathSourceBuild" @bind:event="oninput" /></div>
+                    </div>
+                    <div class="row g-2 mb-2">
+                        <div class="col-6"><input class="form-control form-control-sm" placeholder="Target product/family" @bind="_pathTargetProduct" @bind:event="oninput" /></div>
+                        <div class="col-6"><input class="form-control form-control-sm" placeholder="Target build" @bind="_pathTargetBuild" @bind:event="oninput" /></div>
+                    </div>
+                    <button class="btn btn-primary btn-sm" @onclick="EvaluatePath" disabled="@(string.IsNullOrWhiteSpace(_pathSourceProduct) || string.IsNullOrWhiteSpace(_pathTargetProduct))">Evaluate path</button>
+                </AuthorizeView>
+            </div>
+        </div>
+
+        <div class="col-lg-6">
+            <div class="dbt-card h-100">
+                <h2 class="h6 text-muted text-uppercase mb-3">Upgrade-readiness checklist (D09)</h2>
+
+                @if (_checklist is null)
+                {
+                    <div class="empty-state py-3"><i class="bi bi-list-check"></i> No checklist started yet.</div>
+                    <AuthorizeView Roles="@Roles.CanEditPolicy">
+                        <div class="d-flex gap-2 mt-2">
+                            <input class="form-control form-control-sm" placeholder="Source label" @bind="_checklistSourceLabel" @bind:event="oninput" />
+                            <input class="form-control form-control-sm" placeholder="Target label" @bind="_checklistTargetLabel" @bind:event="oninput" />
+                            <button class="btn btn-outline-secondary btn-sm" @onclick="CreateChecklist" disabled="@(string.IsNullOrWhiteSpace(_checklistSourceLabel) || string.IsNullOrWhiteSpace(_checklistTargetLabel))">New checklist</button>
+                        </div>
+                    </AuthorizeView>
+                }
+                else
+                {
+                    var summary = ReadinessChecklistAggregator.Summarize(_checklist.Items.ToList(), DateTime.UtcNow);
+                    <p class="small mb-1">@_checklist.SourceLabel → <strong>@_checklist.TargetLabel</strong></p>
+                    <p class="small mb-2" data-testid="readiness-summary">
+                        @summary.PassedCount passed · @summary.FailedCount failed · @summary.UnknownCount unknown · @summary.NotApplicableCount n/a
+                        @if (summary.HasBlockingFindings)
+                        {
+                            <span style="color:var(--dbt-failed);"> — @summary.FailedCount blocking finding(s)</span>
+                        }
+                    </p>
+
+                    @foreach (var item in _checklist.Items.OrderBy(i => i.Id))
+                    {
+                        var effective = ReadinessChecklistAggregator.EffectiveStatus(item, DateTime.UtcNow);
+                        <div class="mb-2 pb-2" style="border-bottom:1px solid var(--dbt-line);" data-testid="readiness-item">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <strong class="small">@item.Label</strong>
+                                <span class="badge-health dot @ReadinessCssClass(effective)" data-testid="readiness-status">@effective</span>
+                            </div>
+                            @if (effective != item.Status)
+                            {
+                                <p class="small mb-1" style="color:var(--dbt-overdue);">@(item.IsInvalidated ? item.InvalidationReason : "Evidence expired — treated as Unknown until re-reviewed.")</p>
+                            }
+                            @if (!string.IsNullOrWhiteSpace(item.Findings))
+                            {
+                                <p class="small text-muted mb-1">@item.Findings</p>
+                            }
+
+                            <AuthorizeView Roles="@Roles.CanEditPolicy">
+                                @if (_editingItemId == item.Id)
+                                {
+                                    <div class="row g-2 mb-1">
+                                        <div class="col-3">
+                                            <select class="form-select form-select-sm" @bind="_itemStatus">
+                                                @foreach (var s in Enum.GetValues<ReadinessCheckStatus>())
+                                                {
+                                                    <option value="@s">@s</option>
+                                                }
+                                            </select>
+                                        </div>
+                                        <div class="col-3"><input class="form-control form-control-sm" placeholder="Reviewer" @bind="_itemReviewer" @bind:event="oninput" /></div>
+                                        <div class="col-6"><input class="form-control form-control-sm" placeholder="Findings" @bind="_itemFindings" @bind:event="oninput" /></div>
+                                    </div>
+                                    <div class="row g-2 mb-1">
+                                        <div class="col-6"><input class="form-control form-control-sm" placeholder="Remediation owner" @bind="_itemRemediationOwner" @bind:event="oninput" /></div>
+                                        <div class="col-6">
+                                            <input type="date" class="form-control form-control-sm" @bind="_itemEvidenceExpires" title="Evidence expires" />
+                                        </div>
+                                    </div>
+                                    <button class="btn btn-primary btn-sm" @onclick="() => SaveItem(item.Id)">Save check</button>
+                                    <button class="btn btn-link btn-sm" @onclick="() => _editingItemId = null">Cancel</button>
+                                }
+                                else
+                                {
+                                    <button class="btn btn-link btn-sm p-0" @onclick="() => OpenItemEdit(item)">Record result…</button>
+                                }
+                            </AuthorizeView>
+                        </div>
+                    }
+
+                    <AuthorizeView Roles="@Roles.CanEditPolicy">
+                        <hr />
+                        <div class="d-flex gap-2">
+                            <input class="form-control form-control-sm" placeholder="New target label" @bind="_checklistTargetLabel" @bind:event="oninput" />
+                            <button class="btn btn-outline-secondary btn-sm" @onclick="UpdateTarget" disabled="@string.IsNullOrWhiteSpace(_checklistTargetLabel)">Update target (invalidates reviewed checks)</button>
+                        </div>
+                    </AuthorizeView>
+                }
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    private DatabaseInstance? _instance;
+    private bool _loaded;
+    private string? _userName;
+
+    private List<InstanceDependency> _dependencies = new();
+    private DependencyImpactResult? _impact;
+    private List<Team> _teams = new();
+
+    private List<PathAssessment> _pathAssessments = new();
+    private ReadinessChecklist? _checklist;
+
+    // Dependency form.
+    private DependencyKind _depKind = DependencyKind.Driver;
+    private DependencyDirection _depDirection = DependencyDirection.Upstream;
+    private string _depName = "", _depVersionText = "", _depOsConstraint = "", _depProviderConstraint = "", _depEvidenceUrl = "";
+    private DependencyVersionState _depVersionState = DependencyVersionState.Current;
+    private int _depOwnerTeamId;
+
+    // Path assessment form.
+    private MigrationAssessmentType _pathAssessmentType = MigrationAssessmentType.VersionUpgrade;
+    private MigrationMethod _pathMethod = MigrationMethod.InPlaceUpgrade;
+    private string _pathSourceProduct = "", _pathSourceBuild = "", _pathTargetProduct = "", _pathTargetBuild = "";
+
+    // Readiness checklist form.
+    private string _checklistSourceLabel = "", _checklistTargetLabel = "";
+    private int? _editingItemId;
+    private ReadinessCheckStatus _itemStatus = ReadinessCheckStatus.Unknown;
+    private string _itemReviewer = "", _itemFindings = "", _itemRemediationOwner = "";
+    private DateTime? _itemEvidenceExpires;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var state = await AuthProvider.GetAuthenticationStateAsync();
+        _userName = state.User.Identity?.Name ?? "unknown";
+        await Load();
+        _loaded = true;
+    }
+
+    private async Task Load()
+    {
+        var overview = await OverviewService.GetByIdAsync(Id);
+        _instance = overview?.Instance;
+        if (_instance is null)
+        {
+            return;
+        }
+
+        _dependencies = await Dependencies.ListForInstanceAsync(Id);
+        _impact = DependencyImpactAssessor.Assess(_dependencies);
+        _teams = (await Teams.ListAsync()).Select(s => s.Team).ToList();
+
+        _pathAssessments = await PathAssessments.ListForInstanceAsync(Id);
+        _checklist = await Readiness.GetLatestForInstanceAsync(Id);
+        if (_checklist is not null && string.IsNullOrWhiteSpace(_checklistTargetLabel))
+        {
+            _checklistTargetLabel = _checklist.TargetLabel;
+        }
+    }
+
+    private async Task AddDependency()
+    {
+        await Dependencies.AddAsync(new InstanceDependency
+        {
+            DatabaseInstanceId = Id,
+            Kind = _depKind,
+            Direction = _depDirection,
+            Name = _depName,
+            VersionState = _depVersionState,
+            OwnerTeamId = _depOwnerTeamId == 0 ? null : _depOwnerTeamId,
+            RecordedVersionText = _depVersionText,
+            OsRuntimeConstraint = _depOsConstraint,
+            ManagedProviderConstraint = _depProviderConstraint,
+            EvidenceUrl = _depEvidenceUrl
+        }, _userName ?? "unknown");
+        Toasts.Success($"Dependency \"{_depName}\" recorded.");
+        _depName = _depVersionText = _depOsConstraint = _depProviderConstraint = _depEvidenceUrl = "";
+        _depOwnerTeamId = 0;
+        await Load();
+    }
+
+    private async Task ToggleResolved(InstanceDependency d)
+    {
+        await Dependencies.SetResolvedAsync(d.Id, !d.IsResolved, d.ResolutionNotes, _userName ?? "unknown");
+        Toasts.Success(d.IsResolved ? "Dependency marked unresolved." : "Dependency marked resolved.");
+        await Load();
+    }
+
+    private async Task EvaluatePath()
+    {
+        var result = await PathAssessments.EvaluateAsync(Id, _pathAssessmentType, _pathMethod,
+            _pathSourceProduct, _pathSourceBuild, "", "", "",
+            _pathTargetProduct, _pathTargetBuild, "", "", "",
+            "", "", "", "", _userName ?? "unknown");
+        Toasts.Success($"Path assessment recorded: {result.Status}.");
+        await Load();
+    }
+
+    private async Task CreateChecklist()
+    {
+        await Readiness.CreateChecklistAsync(Id, _pathAssessments.FirstOrDefault()?.Id, _checklistSourceLabel, _checklistTargetLabel, _userName ?? "unknown");
+        Toasts.Success("Readiness checklist created — every check starts Unknown.");
+        await Load();
+    }
+
+    private void OpenItemEdit(ReadinessCheckItem item)
+    {
+        _editingItemId = item.Id;
+        _itemStatus = item.Status;
+        _itemReviewer = item.Reviewer;
+        _itemFindings = item.Findings;
+        _itemRemediationOwner = item.RemediationOwner;
+        _itemEvidenceExpires = item.EvidenceExpiresAtUtc;
+    }
+
+    private async Task SaveItem(int itemId)
+    {
+        await Readiness.UpdateCheckItemAsync(itemId, _itemStatus, _itemFindings, _itemReviewer, "", "",
+            _itemRemediationOwner, "", _itemEvidenceExpires, _userName ?? "unknown");
+        Toasts.Success("Check result saved.");
+        _editingItemId = null;
+        await Load();
+    }
+
+    private async Task UpdateTarget()
+    {
+        if (_checklist is null)
+        {
+            return;
+        }
+        await Readiness.UpdateTargetAsync(_checklist.Id, _checklistTargetLabel, _userName ?? "unknown");
+        Toasts.Success("Target updated — any already-reviewed checks are flagged for re-review.");
+        await Load();
+    }
+
+    private static string PathStatusCssClass(PathSupportStatus status) => status switch
+    {
+        PathSupportStatus.Supported => "OnTrack",
+        PathSupportStatus.Blocked => "Failed",
+        _ => "Overdue"
+    };
+
+    private static string ReadinessCssClass(ReadinessCheckStatus status) => status switch
+    {
+        ReadinessCheckStatus.Passed => "OnTrack",
+        ReadinessCheckStatus.Failed => "Failed",
+        ReadinessCheckStatus.NotApplicable => "OnTrack",
+        _ => "Overdue"
+    };
+}
