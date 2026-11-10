@@ -1,3 +1,4 @@
+using DBTracker.Infrastructure.Diagnostics;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -15,28 +16,35 @@ namespace DBTracker.Infrastructure.Scanning;
 public class BackupScanHostedService(
     IServiceScopeFactory scopeFactory,
     IConfiguration configuration,
+    WorkerHeartbeatStore heartbeats,
     ILogger<BackupScanHostedService> logger) : BackgroundService
 {
+    public const string WorkerName = "Backup scan";
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         var intervalMinutes = configuration.GetValue("BackupScan:IntervalMinutes", 15);
         if (intervalMinutes <= 0)
         {
             logger.LogInformation("Backup scan background service disabled (BackupScan:IntervalMinutes <= 0).");
+            heartbeats.Disabled(WorkerName);
             return;
         }
 
         var interval = TimeSpan.FromMinutes(intervalMinutes);
+        heartbeats.Starting(WorkerName, interval);
 
         while (!stoppingToken.IsCancellationRequested)
         {
             try
             {
                 await ScanAllConfiguredInstancesAsync(stoppingToken);
+                heartbeats.RanSuccessfully(WorkerName, interval);
             }
             catch (Exception ex)
             {
                 logger.LogError(ex, "Backup scan sweep failed.");
+                heartbeats.RanWithError(WorkerName, interval, ex.Message);
             }
 
             try

@@ -4,6 +4,8 @@
 @inject NavigationManager Nav
 @inject ToastService Toasts
 @inject IJSRuntime JS
+@inject AuditRecorder Audit
+@inject AuthenticationStateProvider AuthProvider
 
 <PageTitle>Import instances · DBTracker</PageTitle>
 
@@ -11,7 +13,7 @@
     <div>
         <div class="eyebrow">Instance record</div>
         <h1>Import database instances</h1>
-        <div class="subtitle">Bulk-onboard many databases from a CSV instead of one at a time through the form.</div>
+        <div class="subtitle">Bulk-onboard many databases from a CSV — re-importing the same file updates existing instances by name instead of duplicating them.</div>
     </div>
     <button class="btn btn-outline-secondary" @onclick="DownloadTemplate">
         <i class="bi bi-download"></i> Download CSV template
@@ -22,7 +24,9 @@
     <h2 class="h6 text-muted text-uppercase mb-3">File</h2>
     <p class="text-muted small mb-3">
         Header row required — only <strong>Name</strong> and <strong>Engine</strong> are mandatory columns.
-        Everything else is optional and defaults the same way the "Add instance" form does.
+        Matching is by Name (case-insensitive) against the existing inventory — a row with the same name as an
+        existing instance updates it; a new name creates a new instance. Quoted fields may contain commas and
+        line breaks.
     </p>
     <InputFile OnChange="OnFileSelected" class="form-control" accept=".csv" />
 
@@ -32,26 +36,36 @@
     }
 </div>
 
-@if (_result is not null)
+@if (_preview is not null)
 {
     <div class="dbt-card mt-4">
         <h2 class="h6 text-muted text-uppercase mb-3">Preview</h2>
 
         <p class="mb-3">
-            <span style="color:var(--dbt-ontrack)">@_result.Valid.Count valid</span>
-            @if (_result.Errors.Count > 0)
+            <span style="color:var(--dbt-ontrack)">@_preview.CreateCount create</span>,
+            <span style="color:var(--dbt-overdue)">@_preview.UpdateCount update</span>,
+            <span class="text-muted">@_preview.SkipCount unchanged (skip)</span>
+            @if (_preview.AmbiguousCount > 0)
             {
-                <span>, <span style="color:var(--dbt-failed)">@_result.Errors.Count row(s) with errors (skipped)</span></span>
+                <span>, <span style="color:var(--dbt-failed)">@_preview.AmbiguousCount ambiguous (not imported)</span></span>
+            }
+            @if (_preview.Errors.Count > 0)
+            {
+                <span>, <span style="color:var(--dbt-failed)">@_preview.Errors.Count row(s) with errors (skipped)</span></span>
             }
         </p>
 
-        @if (_result.Errors.Count > 0)
+        @if (_preview.Errors.Count > 0)
         {
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <span class="text-muted small">Fix these rows and re-upload — correct rows above are unaffected.</span>
+                <button class="btn btn-outline-secondary btn-sm" @onclick="DownloadErrors"><i class="bi bi-download"></i> Download error rows (CSV)</button>
+            </div>
             <div class="dbt-table mb-4">
                 <table class="table">
                     <thead><tr><th>Row</th><th>Error</th></tr></thead>
                     <tbody>
-                        @foreach (var e in _result.Errors)
+                        @foreach (var e in _preview.Errors)
                         {
                             <tr><td>@e.RowNumber</td><td class="text-danger">@e.Message</td></tr>
                         }
@@ -60,33 +74,32 @@
             </div>
         }
 
-        @if (_result.Valid.Count > 0)
+        @if (_preview.Rows.Count > 0)
         {
             <div class="dbt-table mb-4">
                 <table class="table">
-                    <thead><tr><th>Name</th><th>Engine</th><th>Application</th><th>Company / Dept</th><th>Role</th><th>Env</th></tr></thead>
+                    <thead><tr><th>Row</th><th>Plan</th><th>Name</th><th>Engine</th><th>Detail</th></tr></thead>
                     <tbody>
-                        @foreach (var row in _result.Valid.Take(50))
+                        @foreach (var row in _preview.Rows.Take(100))
                         {
                             <tr>
-                                <td class="fw-semibold">@row.Name</td>
-                                <td>@row.Engine</td>
-                                <td>@row.Application</td>
-                                <td>@row.Company / @row.Department</td>
-                                <td><span class="role-pill @row.Role">@row.Role</span></td>
-                                <td>@row.Environment</td>
+                                <td class="small">@row.RowNumber</td>
+                                <td><span class="badge-health dot @PlanClass(row.Plan)">@row.Plan</span></td>
+                                <td class="small">@(row.Instance?.Name ?? "—")</td>
+                                <td class="small">@row.Instance?.Engine</td>
+                                <td class="small text-muted">@row.AmbiguityReason</td>
                             </tr>
                         }
                     </tbody>
                 </table>
             </div>
-            @if (_result.Valid.Count > 50)
+            @if (_preview.Rows.Count > 100)
             {
-                <p class="text-muted small">…and @(_result.Valid.Count - 50) more.</p>
+                <p class="text-muted small">…and @(_preview.Rows.Count - 100) more.</p>
             }
 
-            <button class="btn btn-primary" @onclick="Import" disabled="@_importing">
-                <i class="bi bi-upload"></i> @(_importing ? "Importing…" : $"Import {_result.Valid.Count} instance(s)")
+            <button class="btn btn-primary" @onclick="Import" disabled="@(_importing || (_preview.CreateCount + _preview.UpdateCount) == 0)">
+                <i class="bi bi-upload"></i> @(_importing ? "Importing…" : $"Apply {_preview.CreateCount} create / {_preview.UpdateCount} update")
             </button>
         }
     </div>
@@ -94,45 +107,97 @@
 
 @code {
     private string? _fileName;
-    private ImportResult? _result;
+    private ImportPreviewResult? _preview;
     private bool _importing;
 
     private async Task OnFileSelected(InputFileChangeEventArgs e)
     {
-        _result = null;
+        _preview = null;
         _fileName = e.File.Name;
 
         using var stream = e.File.OpenReadStream(maxAllowedSize: 2 * 1024 * 1024);
         using var reader = new StreamReader(stream);
         var content = await reader.ReadToEndAsync();
 
-        _result = InstanceCsvImporter.Parse(content);
+        var existingByName = await Db.DatabaseInstances
+            .AsNoTracking()
+            .ToDictionaryAsync(i => i.Name, i => i, StringComparer.OrdinalIgnoreCase);
+
+        _preview = InstanceCsvImporter.ParseForImport(content, existingByName);
     }
 
     private async Task Import()
     {
-        if (_result is null || _result.Valid.Count == 0)
+        if (_preview is null)
         {
             return;
         }
 
         _importing = true;
         var now = DateTime.UtcNow;
-        foreach (var row in _result.Valid)
+        var creates = 0;
+        var updates = 0;
+
+        foreach (var row in _preview.Rows)
         {
-            row.CreatedAtUtc = now;
-            row.UpdatedAtUtc = now;
+            if (row.Instance is null)
+            {
+                continue;
+            }
+
+            if (row.Plan == ImportRowPlan.Create)
+            {
+                row.Instance.CreatedAtUtc = now;
+                row.Instance.UpdatedAtUtc = now;
+                Db.DatabaseInstances.Add(row.Instance);
+                creates++;
+            }
+            else if (row.Plan == ImportRowPlan.Update)
+            {
+                row.Instance.UpdatedAtUtc = now;
+                Db.DatabaseInstances.Update(row.Instance);
+                updates++;
+            }
+            // Skip and Ambiguous rows are never written.
         }
 
-        Db.DatabaseInstances.AddRange(_result.Valid);
         await Db.SaveChangesAsync();
         Db.ChangeTracker.Clear();
-        _importing = false;
 
-        Toasts.Success($"Imported {_result.Valid.Count} instance(s).");
+        var state = await AuthProvider.GetAuthenticationStateAsync();
+        var userId = state.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? "";
+        var userName = state.User.Identity?.Name ?? "unknown";
+        await Audit.RecordUserActionAsync(userId, userName, "InstancesCsvImported", "CsvImport", "", $"{_fileName}",
+            reason: $"{creates} created, {updates} updated, {_preview.SkipCount} unchanged, {_preview.AmbiguousCount} ambiguous, {_preview.Errors.Count} error row(s)");
+
+        _importing = false;
+        Toasts.Success($"Import complete — {creates} created, {updates} updated.");
         Nav.NavigateTo("/instances");
     }
 
     private async Task DownloadTemplate() =>
         await JS.InvokeVoidAsync("dbtracker.downloadCsv", "dbtracker-import-template.csv", InstanceCsvImporter.TemplateCsv());
+
+    private async Task DownloadErrors()
+    {
+        if (_preview is null || _preview.Errors.Count == 0)
+        {
+            return;
+        }
+
+        var csv = new System.Text.StringBuilder("Row,Error\n");
+        foreach (var e in _preview.Errors)
+        {
+            csv.AppendLine($"{e.RowNumber},\"{e.Message.Replace("\"", "\"\"")}\"");
+        }
+        await JS.InvokeVoidAsync("dbtracker.downloadCsv", "dbtracker-import-errors.csv", csv.ToString());
+    }
+
+    private static string PlanClass(ImportRowPlan plan) => plan switch
+    {
+        ImportRowPlan.Create => "OnTrack",
+        ImportRowPlan.Update => "Overdue",
+        ImportRowPlan.Skip => "NeverBackedUp",
+        _ => "Failed"
+    };
 }

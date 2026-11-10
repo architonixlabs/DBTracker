@@ -1,0 +1,148 @@
+@page "/instances/bulk-edit"
+@attribute [Authorize(Roles = Roles.CanEditPolicy)]
+@inject InstanceBulkEditService BulkEditService
+@inject AuthenticationStateProvider AuthProvider
+@inject NavigationManager Nav
+@inject ToastService Toasts
+
+<PageTitle>Bulk edit instances · DBTracker</PageTitle>
+
+<div class="app-topbar">
+    <div>
+        <div class="eyebrow">Instance record</div>
+        <h1>Bulk edit @_instanceIds.Count instance(s)</h1>
+        <div class="subtitle">Owner, tags and retention policy only — archiving stays a separate, individually-confirmed action.</div>
+    </div>
+    <a class="btn btn-outline-secondary" href="/instances">Cancel</a>
+</div>
+
+@if (_instanceIds.Count == 0)
+{
+    <div class="empty-state"><i class="bi bi-inbox"></i> No instances selected. <a href="/instances">Go back and select some</a>.</div>
+}
+else
+{
+    <div class="dbt-card mb-4" style="max-width:760px;">
+        <h2 class="h6 text-muted text-uppercase mb-3">Changes to apply</h2>
+
+        <div class="form-check mb-2">
+            <input class="form-check-input" type="checkbox" id="set-owner" @bind="_setOwner" />
+            <label class="form-check-label" for="set-owner">Set owner (company / department / contact)</label>
+        </div>
+        @if (_setOwner)
+        {
+            <div class="row g-2 mb-3 ms-4" style="max-width:700px;">
+                <div class="col-md-6"><input class="form-control form-control-sm" placeholder="Company" @bind="_company" @bind:event="oninput" /></div>
+                <div class="col-md-6"><input class="form-control form-control-sm" placeholder="Department" @bind="_department" @bind:event="oninput" /></div>
+                <div class="col-md-6"><input class="form-control form-control-sm" placeholder="Contact name" @bind="_contactName" @bind:event="oninput" /></div>
+                <div class="col-md-6"><input class="form-control form-control-sm" placeholder="Contact email" @bind="_contactEmail" @bind:event="oninput" /></div>
+            </div>
+        }
+
+        <div class="form-check mb-2">
+            <input class="form-check-input" type="checkbox" id="set-tags" @bind="_setTags" />
+            <label class="form-check-label" for="set-tags">Set tags</label>
+        </div>
+        @if (_setTags)
+        {
+            <div class="mb-3 ms-4" style="max-width:400px;">
+                <input class="form-control form-control-sm" placeholder="comma, separated, tags" @bind="_tags" @bind:event="oninput" />
+            </div>
+        }
+
+        <div class="form-check mb-2">
+            <input class="form-check-input" type="checkbox" id="set-retention" @bind="_setRetention" />
+            <label class="form-check-label" for="set-retention">Set retention policy (days)</label>
+        </div>
+        @if (_setRetention)
+        {
+            <div class="mb-3 ms-4" style="max-width:200px;">
+                <input type="number" class="form-control form-control-sm" @bind="_retentionDays" @bind:event="oninput" />
+            </div>
+        }
+
+        <button class="btn btn-outline-secondary" @onclick="RefreshPreview" disabled="@(!AnyFieldSelected)">
+            <i class="bi bi-eye"></i> Preview changes
+        </button>
+    </div>
+
+    @if (_preview is not null)
+    {
+        <div class="dbt-card" style="max-width:900px;">
+            <h2 class="h6 text-muted text-uppercase mb-3">Before / after preview — @_preview.Count of @_instanceIds.Count instance(s) would change</h2>
+            @if (_preview.Count == 0)
+            {
+                <div class="empty-state py-3"><i class="bi bi-inbox"></i>No instance would change with these values.</div>
+            }
+            else
+            {
+                <table class="table table-sm dbt-table mb-3">
+                    <thead><tr><th>Instance</th><th>Field</th><th>Before</th><th>After</th></tr></thead>
+                    <tbody>
+                        @foreach (var row in _preview)
+                        {
+                            @foreach (var change in row.Changes)
+                            {
+                                <tr>
+                                    <td class="small">@row.InstanceName</td>
+                                    <td class="small">@change.Field</td>
+                                    <td class="small text-muted">@(string.IsNullOrEmpty(change.Before) ? "—" : change.Before)</td>
+                                    <td class="small">@(string.IsNullOrEmpty(change.After) ? "—" : change.After)</td>
+                                </tr>
+                            }
+                        }
+                    </tbody>
+                </table>
+                <button class="btn btn-primary" @onclick="Apply" disabled="@_applying">@(_applying ? "Applying…" : $"Apply to {_preview.Count} instance(s)")</button>
+            }
+        </div>
+    }
+}
+
+@code {
+    [SupplyParameterFromQuery] public string? Ids { get; set; }
+
+    private List<int> _instanceIds = new();
+    private bool _setOwner, _setTags, _setRetention;
+    private string _company = "", _department = "", _contactName = "", _contactEmail = "", _tags = "";
+    private int? _retentionDays;
+    private IReadOnlyList<BulkEditRowPreview>? _preview;
+    private bool _applying;
+    private string? _userId, _userName;
+
+    private bool AnyFieldSelected => _setOwner || _setTags || _setRetention;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _instanceIds = (Ids ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(s => int.TryParse(s, out var id) ? id : (int?)null)
+            .Where(id => id is not null)
+            .Select(id => id!.Value)
+            .Distinct()
+            .ToList();
+
+        var state = await AuthProvider.GetAuthenticationStateAsync();
+        _userId = state.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? "";
+        _userName = state.User.Identity?.Name ?? "unknown";
+    }
+
+    private BulkEditRequest BuildRequest() => new(
+        _setOwner, _company, _department, _contactName, _contactEmail,
+        _setTags, _tags,
+        _setRetention, _retentionDays);
+
+    private async Task RefreshPreview() =>
+        _preview = await BulkEditService.PreviewAsync(_instanceIds, BuildRequest());
+
+    private async Task Apply()
+    {
+        _applying = true;
+        var result = await BulkEditService.ApplyAsync(_instanceIds, BuildRequest(), _userId ?? "", _userName ?? "unknown");
+        _applying = false;
+
+        Toasts.Success(result.SkippedArchivedCount > 0
+            ? $"Applied to {result.AppliedCount} instance(s); skipped {result.SkippedArchivedCount} archived instance(s)."
+            : $"Applied to {result.AppliedCount} instance(s).");
+        Nav.NavigateTo("/instances");
+    }
+}

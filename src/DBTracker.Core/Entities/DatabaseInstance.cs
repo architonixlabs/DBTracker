@@ -60,8 +60,22 @@ public class DatabaseInstance
     public string Notes { get; set; } = string.Empty;
     public bool IsArchived { get; set; }
 
+    /// <summary>Archive attribution (U14) — who/when/why, recorded alongside the audit log so the instance detail page can show it even before anyone opens /audit.</summary>
+    public DateTime? ArchivedAtUtc { get; set; }
+    public string ArchivedBy { get; set; } = string.Empty;
+    public string ArchiveReason { get; set; } = string.Empty;
+
+    /// <summary>Optional host/DNS override for the connectivity check (U18) — leave blank to use ServerIp/DatabaseIp.</summary>
+    public string ConnectivityHostOverride { get; set; } = string.Empty;
+
+    /// <summary>Optional port override for the connectivity check (U18) — null uses the engine's conventional default port.</summary>
+    public int? ConnectivityPortOverride { get; set; }
+
     public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAtUtc { get; set; } = DateTime.UtcNow;
+
+    /// <summary>SQL Server ROWVERSION concurrency token (U13) — lets the editor detect another session saved first, instead of silently overwriting newer changes.</summary>
+    public byte[] RowVersion { get; set; } = [];
 
     public ICollection<BackupRecord> BackupRecords { get; set; } = new List<BackupRecord>();
     public ICollection<RestoreEvent> RestoreEvents { get; set; } = new List<RestoreEvent>();

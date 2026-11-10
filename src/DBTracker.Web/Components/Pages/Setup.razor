@@ -1,0 +1,158 @@
+@page "/setup"
+@attribute [Authorize(Roles = Roles.Admin)]
+@using System.ComponentModel.DataAnnotations
+@inject SetupDiagnosticsService Diagnostics
+@inject ToastService Toasts
+
+<PageTitle>Setup &amp; diagnostics · DBTracker</PageTitle>
+
+<div class="app-topbar">
+    <div>
+        <div class="eyebrow">Administration</div>
+        <h1>Setup &amp; diagnostics</h1>
+        <div class="subtitle">Admin-only — diagnose configuration without database or log access. Credentials are masked below.</div>
+    </div>
+    <button class="btn btn-outline-secondary" @onclick="Load"><i class="bi bi-arrow-clockwise"></i> Refresh</button>
+</div>
+
+@if (_items is null)
+{
+    <div class="spinner-ring"></div>
+}
+else
+{
+    <div class="dbt-table mb-4">
+        <table class="table">
+            <thead><tr><th>Area</th><th>Check</th><th>Status</th><th>Detail</th><th></th></tr></thead>
+            <tbody>
+                @foreach (var item in _items)
+                {
+                    <tr>
+                        <td class="small text-muted">@item.Area</td>
+                        <td class="small fw-semibold">@item.Label</td>
+                        <td><span class="badge-health dot @SeverityClass(item.Severity)">@item.Severity</span></td>
+                        <td class="small">@item.Detail</td>
+                        <td class="small">
+                            @if (item.NextActionUrl is not null)
+                            {
+                                <a href="@item.NextActionUrl">@item.NextActionLabel</a>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+
+    <div class="dbt-card mb-4">
+        <h2 class="h6 text-muted text-uppercase mb-3">Backup file path reachability</h2>
+        <p class="text-muted small mb-3">Checked under the service's own process identity — the same identity the background scanner runs as.</p>
+        @if (_paths is null)
+        {
+            <button class="btn btn-outline-secondary btn-sm" @onclick="CheckPaths" disabled="@_checkingPaths">@(_checkingPaths ? "Checking…" : "Check configured paths")</button>
+        }
+        else if (_paths.Count == 0)
+        {
+            <div class="text-muted small">No instances have a backup file location configured.</div>
+        }
+        else
+        {
+            <table class="table table-sm dbt-table mb-0">
+                <thead><tr><th>Instance</th><th>Path</th><th>Status</th></tr></thead>
+                <tbody>
+                    @foreach (var p in _paths)
+                    {
+                        <tr>
+                            <td class="small">@p.InstanceName</td>
+                            <td class="small text-muted">@p.Path</td>
+                            <td class="small">
+                                @if (p.Reachable)
+                                {
+                                    <span class="badge-health dot OnTrack">Reachable</span>
+                                }
+                                else
+                                {
+                                    <span class="badge-health dot Failed">Unreachable</span>
+                                    <span class="text-muted"> — @p.Error</span>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+    </div>
+
+    <div class="dbt-card" style="max-width:480px;">
+        <h2 class="h6 text-muted text-uppercase mb-3">Send test email</h2>
+        <div class="d-flex gap-2 align-items-end flex-wrap">
+            <div class="field" style="min-width:260px;">
+                <label class="form-label small">Recipient</label>
+                <input class="form-control form-control-sm" @bind="_testEmailAddress" @bind:event="oninput" placeholder="you@architonixlabs.com" />
+            </div>
+            <button class="btn btn-outline-secondary btn-sm" @onclick="SendTestEmail" disabled="@(_sendingTest || string.IsNullOrWhiteSpace(_testEmailAddress))">
+                @(_sendingTest ? "Sending…" : "Send test email")
+            </button>
+        </div>
+        @if (_testResult is not null)
+        {
+            <div class="small mt-2" style="color:@(_testResult.Outcome == DBTracker.Core.Enums.EmailSendOutcome.Accepted ? "var(--dbt-ontrack)" : "var(--dbt-failed)")">
+                @_testResult.Outcome switch
+                {
+                    DBTracker.Core.Enums.EmailSendOutcome.Disabled => "No email provider is configured — nothing was attempted. See Email:Provider above.",
+                    DBTracker.Core.Enums.EmailSendOutcome.Accepted => "The provider accepted the message. (Acceptance isn't proof the recipient received it.)",
+                    _ => $"Failed: {_testResult.Detail}"
+                }
+            </div>
+        }
+    </div>
+}
+
+@code {
+    private List<DiagnosticItem>? _items;
+    private List<PathCheck>? _paths;
+    private bool _checkingPaths;
+    private string _testEmailAddress = "";
+    private bool _sendingTest;
+    private EmailSendResult? _testResult;
+
+    protected override async Task OnInitializedAsync() => await Load();
+
+    private async Task Load()
+    {
+        _items = await Diagnostics.BuildChecklistAsync();
+        _paths = null;
+    }
+
+    private async Task CheckPaths()
+    {
+        _checkingPaths = true;
+        _paths = await Diagnostics.CheckFilePathsAsync();
+        _checkingPaths = false;
+    }
+
+    private async Task SendTestEmail()
+    {
+        _sendingTest = true;
+        _testResult = await Diagnostics.SendTestEmailAsync(_testEmailAddress);
+        _sendingTest = false;
+
+        if (_testResult.Outcome == DBTracker.Core.Enums.EmailSendOutcome.Accepted)
+        {
+            Toasts.Success("Test email accepted by the provider.");
+        }
+        else
+        {
+            Toasts.Error(_testResult.Outcome == DBTracker.Core.Enums.EmailSendOutcome.Disabled
+                ? "Email is disabled (Email:Provider=None) — nothing was sent."
+                : $"Send failed: {_testResult.Detail}");
+        }
+    }
+
+    private static string SeverityClass(DiagnosticSeverity severity) => severity switch
+    {
+        DiagnosticSeverity.Ok => "OnTrack",
+        DiagnosticSeverity.Warning => "Overdue",
+        _ => "Failed"
+    };
+}

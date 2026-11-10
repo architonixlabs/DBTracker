@@ -1,3 +1,4 @@
+using DBTracker.Core.Entities;
 using DBTracker.Core.Enums;
 using DBTracker.Core.Services;
 using Xunit;
@@ -116,5 +117,105 @@ public class InstanceCsvImporterTests
         var template = InstanceCsvImporter.TemplateCsv();
 
         Assert.StartsWith("Name,Engine,", template);
+    }
+
+    [Fact]
+    public void QuotedFieldWithEmbeddedNewline_IsParsedAsOneRow_NotSplitIntoTwo()
+    {
+        var csv = "Name,Engine,Notes\nX,PostgreSql,\"line one\nline two\"\nY,MySql,plain\n";
+
+        var result = InstanceCsvImporter.Parse(csv);
+
+        Assert.Equal(2, result.Valid.Count);
+        Assert.Equal("line one\nline two", result.Valid[0].Notes);
+        Assert.Equal("Y", result.Valid[1].Name);
+    }
+
+    [Fact]
+    public void RowFailingSharedValidation_IsReportedAsError()
+    {
+        // ExpectedBackupIntervalHours of 0 fails InstanceValidator (U13), shared with the create/edit form.
+        var csv = "Name,Engine,ExpectedBackupIntervalHours\nX,PostgreSql,0\n";
+
+        var result = InstanceCsvImporter.Parse(csv);
+
+        Assert.Empty(result.Valid);
+        Assert.Contains(result.Errors, e => e.Message.Contains("positive"));
+    }
+
+    [Fact]
+    public void ParseForImport_UnknownName_IsClassifiedAsCreate()
+    {
+        var csv = "Name,Engine\nNEW-ONE,PostgreSql\n";
+        var existing = new Dictionary<string, DatabaseInstance>(StringComparer.OrdinalIgnoreCase);
+
+        var result = InstanceCsvImporter.ParseForImport(csv, existing);
+
+        var row = Assert.Single(result.Rows);
+        Assert.Equal(ImportRowPlan.Create, row.Plan);
+        Assert.Equal(1, result.CreateCount);
+    }
+
+    [Fact]
+    public void ParseForImport_NameMatchesExisting_WithChangedField_IsClassifiedAsUpdate()
+    {
+        var csv = "Name,Engine,Application\nARX-01,SqlServer,NewApp\n";
+        var existing = new Dictionary<string, DatabaseInstance>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["ARX-01"] = new DatabaseInstance { Id = 5, Name = "ARX-01", Engine = DatabaseEngine.SqlServer, Application = "OldApp" }
+        };
+
+        var result = InstanceCsvImporter.ParseForImport(csv, existing);
+
+        var row = Assert.Single(result.Rows);
+        Assert.Equal(ImportRowPlan.Update, row.Plan);
+        Assert.Equal(5, row.MatchedExistingId);
+        Assert.Equal(5, row.Instance!.Id);
+        Assert.Equal(1, result.UpdateCount);
+    }
+
+    [Fact]
+    public void ParseForImport_NameMatchesExisting_WithNoFieldChanges_IsClassifiedAsSkip()
+    {
+        var csv = "Name,Engine,Application\nARX-01,SqlServer,SameApp\n";
+        var existing = new Dictionary<string, DatabaseInstance>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["ARX-01"] = new DatabaseInstance { Id = 5, Name = "ARX-01", Engine = DatabaseEngine.SqlServer, Application = "SameApp", ExpectedBackupIntervalHours = 24 }
+        };
+
+        var result = InstanceCsvImporter.ParseForImport(csv, existing);
+
+        var row = Assert.Single(result.Rows);
+        Assert.Equal(ImportRowPlan.Skip, row.Plan);
+        Assert.Equal(1, result.SkipCount);
+    }
+
+    [Fact]
+    public void ParseForImport_DuplicateNameWithinFile_IsClassifiedAsAmbiguous_AndNotDuplicated()
+    {
+        var csv = "Name,Engine\nARX-01,SqlServer\nARX-01,MySql\n";
+        var existing = new Dictionary<string, DatabaseInstance>(StringComparer.OrdinalIgnoreCase);
+
+        var result = InstanceCsvImporter.ParseForImport(csv, existing);
+
+        Assert.Equal(1, result.CreateCount);
+        Assert.Equal(1, result.AmbiguousCount);
+        Assert.Contains(result.Rows, r => r.Plan == ImportRowPlan.Ambiguous && r.AmbiguityReason != null);
+    }
+
+    [Fact]
+    public void ParseForImport_MatchedUpdateRow_CarriesOverExistingRowVersion()
+    {
+        var csv = "Name,Engine,Application\nARX-01,SqlServer,NewApp\n";
+        var rowVersion = new byte[] { 1, 2, 3, 4 };
+        var existing = new Dictionary<string, DatabaseInstance>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["ARX-01"] = new DatabaseInstance { Id = 5, Name = "ARX-01", Engine = DatabaseEngine.SqlServer, Application = "OldApp", RowVersion = rowVersion }
+        };
+
+        var result = InstanceCsvImporter.ParseForImport(csv, existing);
+
+        var row = Assert.Single(result.Rows);
+        Assert.Equal(rowVersion, row.Instance!.RowVersion);
     }
 }

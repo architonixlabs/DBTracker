@@ -31,10 +31,20 @@
             <i class="bi bi-inbox"></i>
             <span>Notifications</span>
         </NavLink>
+        <AuthorizeView Roles="@Roles.AuditViewPolicy">
+            <NavLink class="app-nav-link" href="audit">
+                <i class="bi bi-journal-text"></i>
+                <span>Audit</span>
+            </NavLink>
+        </AuthorizeView>
         <AuthorizeView Roles="@Roles.Admin">
             <NavLink class="app-nav-link" href="users">
                 <i class="bi bi-people"></i>
                 <span>Users</span>
+            </NavLink>
+            <NavLink class="app-nav-link" href="setup">
+                <i class="bi bi-wrench-adjustable"></i>
+                <span>Setup</span>
             </NavLink>
         </AuthorizeView>
     </nav>
@@ -44,6 +54,7 @@
             <div class="user-chip">
                 <span class="name">@context.User.Identity?.Name</span>
                 <span class="role">@string.Join(", ", context.User.Claims.Where(c => c.Type == System.Security.Claims.ClaimTypes.Role).Select(c => c.Value))</span>
+                <a href="/account/change-password" class="d-block small">Change password</a>
                 <form action="Account/Logout" method="post">
                     <AntiforgeryToken />
                     <input type="hidden" name="returnUrl" value="@("/Account/Login")" />

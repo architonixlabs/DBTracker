@@ -19,4 +19,7 @@ public static class Roles
 
     /// <summary>Roles allowed to trigger/view the management compliance report — leadership-facing, not DBA-only.</summary>
     public const string ReportingPolicy = $"{Admin},{ItManager},{Auditor}";
+
+    /// <summary>Roles allowed to view the general audit trail (U19) — Angela's (Auditor) core need, plus Admin for account/administration events.</summary>
+    public const string AuditViewPolicy = $"{Admin},{Auditor}";
 }

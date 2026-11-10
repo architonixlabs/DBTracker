@@ -1,0 +1,121 @@
+@page "/audit"
+@attribute [Authorize(Roles = Roles.AuditViewPolicy)]
+@implements IDisposable
+@inject AuditRecorder AuditService
+@inject IJSRuntime JS
+
+<PageTitle>Audit trail · DBTracker</PageTitle>
+
+<div class="app-topbar">
+    <div>
+        <div class="eyebrow">Administration</div>
+        <h1>Audit trail</h1>
+        <div class="subtitle">
+            Application-level activity log (U19) — append-only. This is not tamper-proof against someone with
+            direct database access; it records normal application activity, not a cryptographic chain of custody.
+        </div>
+    </div>
+    <button class="btn btn-outline-secondary" @onclick="Export"><i class="bi bi-download"></i> Export CSV</button>
+</div>
+
+<div class="filter-bar mb-3">
+    <input class="form-control" style="max-width:260px;" placeholder="Search actor, action, target, reason…" value="@_search" @oninput="OnSearch" />
+    <select class="form-select" style="max-width:160px;" value="@_actorType" @onchange="OnActorTypeChanged">
+        <option value="">Any actor type</option>
+        <option value="User">User</option>
+        <option value="System">System</option>
+    </select>
+    <input class="form-control" style="max-width:200px;" placeholder="Target type (e.g. DatabaseInstance)" value="@_targetType" @oninput="OnTargetTypeChanged" />
+</div>
+
+@if (_rows is null)
+{
+    <div class="spinner-ring"></div>
+}
+else if (_rows.Count == 0)
+{
+    <div class="empty-state"><i class="bi bi-journal-x"></i> No audit events match this filter.</div>
+}
+else
+{
+    <div class="dbt-table">
+        <table class="table">
+            <thead><tr><th>When</th><th>Actor</th><th>Action</th><th>Target</th><th>Reason</th></tr></thead>
+            <tbody>
+                @foreach (var e in _rows)
+                {
+                    <tr>
+                        <td class="small">@e.TimestampUtc.ToLocalTime().ToString("MMM d, yyyy h:mm:ss tt")</td>
+                        <td class="small">
+                            <span class="badge-health dot @(e.ActorType == AuditActorType.System ? "NeverBackedUp" : "OnTrack")">@e.ActorType</span>
+                            @e.ActorName
+                        </td>
+                        <td class="small">@e.Action</td>
+                        <td class="small">@e.TargetType @(string.IsNullOrEmpty(e.TargetName) ? "" : $"— {e.TargetName}")</td>
+                        <td class="small text-muted">@e.Reason</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+    <p class="small text-muted mt-2">Showing the most recent @_rows.Count matching event(s).</p>
+}
+
+@code {
+    private List<AuditEvent>? _rows;
+    private string _search = "";
+    private string _actorType = "";
+    private string _targetType = "";
+    private Timer? _debounce;
+
+    protected override async Task OnInitializedAsync() => await Load();
+
+    private async Task Load()
+    {
+        AuditActorType? actorType = _actorType switch
+        {
+            "User" => AuditActorType.User,
+            "System" => AuditActorType.System,
+            _ => null
+        };
+        _rows = (await AuditService.SearchAsync(_search, actorType, _targetType.Length > 0 ? _targetType : null)).ToList();
+    }
+
+    private async Task OnSearch(ChangeEventArgs e)
+    {
+        _search = e.Value?.ToString() ?? "";
+        _debounce?.Dispose();
+        _debounce = new Timer(_ => InvokeAsync(async () => { await Load(); StateHasChanged(); }), null, 300, Timeout.Infinite);
+    }
+
+    private async Task OnTargetTypeChanged(ChangeEventArgs e)
+    {
+        _targetType = e.Value?.ToString() ?? "";
+        await Load();
+    }
+
+    private async Task OnActorTypeChanged(ChangeEventArgs e)
+    {
+        _actorType = e.Value?.ToString() ?? "";
+        await Load();
+    }
+
+    private async Task Export()
+    {
+        var csv = new System.Text.StringBuilder();
+        csv.AppendLine("TimestampUtc,ActorType,ActorName,Action,TargetType,TargetId,TargetName,Reason");
+        foreach (var e in _rows ?? [])
+        {
+            csv.AppendLine(string.Join(",", new[]
+            {
+                e.TimestampUtc.ToString("O"), e.ActorType.ToString(), Csv(e.ActorName), Csv(e.Action),
+                Csv(e.TargetType), Csv(e.TargetId), Csv(e.TargetName), Csv(e.Reason)
+            }));
+        }
+        await JS.InvokeVoidAsync("dbtracker.downloadCsv", "dbtracker-audit-trail.csv", csv.ToString());
+    }
+
+    private static string Csv(string value) => "\"" + (value ?? "").Replace("\"", "\"\"") + "\"";
+
+    public void Dispose() => _debounce?.Dispose();
+}

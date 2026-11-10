@@ -43,6 +43,7 @@
             </div>
             <button type="submit" class="w-100 btn btn-primary">Log in</button>
         </EditForm>
+        <a class="small text-muted d-block mt-2" href="/Account/ForgotPassword">Forgot your password?</a>
 
         <div class="qr-login">
             <button type="button" class="qr-toggle" id="qr-toggle">
@@ -95,7 +96,16 @@
         if (result.Succeeded)
         {
             Logger.LogInformation("User logged in.");
+            var user = await SignInManager.UserManager.FindByEmailAsync(Input.Email);
+            if (user?.MustChangePassword == true)
+            {
+                RedirectManager.RedirectTo("/account/change-password?Required=true");
+            }
             RedirectManager.RedirectTo(ReturnUrl ?? "/");
+        }
+        else if (result.IsNotAllowed)
+        {
+            errorMessage = "Error: this account has been deactivated. Contact an Administrator.";
         }
         else
         {

@@ -1,4 +1,5 @@
 @page "/instances/{Id:int}"
+@attribute [Authorize]
 @inject InstanceOverviewService OverviewService
 @inject DBTrackerDbContext Db
 @inject BackupFileScanner Scanner
@@ -8,17 +9,38 @@
 @inject NavigationManager Nav
 @inject ToastService Toasts
 @inject IConfiguration Configuration
-@inject AuthenticationStateProvider AuthProvider
+@inject InstanceArchiveService ArchiveService
+@inject AuditRecorder Audit
 
 <PageTitle>@(_overview?.Instance.Name ?? "Instance") · DBTracker</PageTitle>
 
-@if (_overview is null)
+@if (!_loaded)
 {
     <div class="spinner-ring"></div>
+}
+else if (_overview is null)
+{
+    <div class="dbt-card" style="max-width: 600px;">
+        <div class="empty-state py-4">
+            <i class="bi bi-question-diamond"></i>
+            Instance #@Id doesn't exist — it may have been deleted or archived, or the link is wrong.
+        </div>
+        <a class="btn btn-outline-secondary" href="/instances">Back to instances</a>
+        <a class="btn btn-outline-secondary" href="/instances/archived">Check archived instances</a>
+    </div>
 }
 else
 {
     var instance = _overview.Instance;
+
+    @if (instance.IsArchived)
+    {
+        <div class="alert alert-warning">
+            <i class="bi bi-archive"></i> This instance is <strong>archived</strong>
+            (@instance.ArchivedAtUtc?.ToLocalTime().ToString("MMM d, yyyy h:mm tt") by @instance.ArchivedBy) — reason: @instance.ArchiveReason.
+            It's excluded from background scans/alerts/reports. <a href="/instances/archived">Browse archived instances</a> to unarchive it.
+        </div>
+    }
 
     <div class="app-topbar">
         <div>
@@ -35,7 +57,7 @@ else
             <div class="subtitle">@instance.Engine @instance.Version · @instance.Environment · <span class="role-pill @instance.Role">@instance.Role</span></div>
         </div>
         <div class="d-flex gap-2">
-            <button class="btn btn-outline-secondary" @onclick="TestConnection" disabled="@_testingConnection">
+            <button class="btn btn-outline-secondary" @onclick="TestConnection" disabled="@(_testingConnection || !CanCheckConnectivity(instance))" title="@(CanCheckConnectivity(instance) ? "" : "No host/IP or override configured")">
                 <i class="bi bi-ethernet"></i> @(_testingConnection ? "Testing…" : "Test connection")
             </button>
             <AuthorizeView Roles="@Roles.CanEditPolicy">
@@ -47,9 +69,9 @@ else
                         </button>
                     }
                     <a class="btn btn-outline-secondary" href="/instances/@Id/edit"><i class="bi bi-pencil"></i> Edit</a>
-                    @if (!instance.IsArchived)
+                    @if (!instance.IsArchived && !_showArchiveConfirm)
                     {
-                        <button class="btn btn-outline-danger" @onclick="Archive"><i class="bi bi-archive"></i> Archive</button>
+                        <button class="btn btn-outline-danger" @onclick="OpenArchiveConfirm"><i class="bi bi-archive"></i> Archive</button>
                     }
                 </div>
             </AuthorizeView>
@@ -58,11 +80,42 @@ else
 
     @if (_connectivityResult is not null)
     {
-        <p class="small mb-4" style="margin-top:-20px;color:@(_connectivityResult.Success ? "var(--dbt-ontrack)" : "var(--dbt-failed)")">
-            @(_connectivityResult.Success
-                ? $"Reachable — connected in {_connectivityResult.Elapsed.TotalMilliseconds:N0} ms."
-                : $"Not reachable — {_connectivityResult.Error}")
-        </p>
+        <div class="small mb-4" style="margin-top:-20px;">
+            <div style="color:@(_connectivityResult.Success ? "var(--dbt-ontrack)" : "var(--dbt-failed)")">
+                @(_connectivityResult.Success
+                    ? $"Reachable — connected to {_connectivityEndpointDescription} in {_connectivityResult.Elapsed.TotalMilliseconds:N0} ms."
+                    : $"Not reachable — {_connectivityEndpointDescription} — {_connectivityResult.Error}")
+            </div>
+            <div class="text-muted">
+                Checked @_connectivityResult.CheckedAtUtc.ToLocalTime().ToString("MMM d, h:mm:ss tt") · timeout @_connectivityResult.Timeout.TotalSeconds s ·
+                a TCP connection succeeding is not proof of database login, backup success, or recoverability.
+            </div>
+        </div>
+    }
+    else if (_connectivityDisabledReason is not null)
+    {
+        <p class="small text-muted mb-4" style="margin-top:-20px;">Connectivity check unavailable — @_connectivityDisabledReason</p>
+    }
+
+    @if (_showArchiveConfirm && _archivePreview is not null)
+    {
+        <div class="dbt-card mb-4" style="border-color:var(--dbt-failed);">
+            <h2 class="h6 text-muted text-uppercase mb-3">Confirm archive</h2>
+            <ul class="small mb-3">
+                @foreach (var line in _archivePreview)
+                {
+                    <li>@line.Text</li>
+                }
+            </ul>
+            <div class="mb-2">
+                <label class="form-label small">Reason (required)</label>
+                <input class="form-control form-control-sm" @bind="_archiveReason" @bind:event="oninput" placeholder="Decommissioned, replaced by…, duplicate entry, …" />
+            </div>
+            <div class="d-flex gap-2">
+                <button class="btn btn-danger btn-sm" @onclick="ConfirmArchive" disabled="@string.IsNullOrWhiteSpace(_archiveReason)">Archive this instance</button>
+                <button class="btn btn-outline-secondary btn-sm" @onclick="() => _showArchiveConfirm = false">Cancel</button>
+            </div>
+        </div>
     }
 
     <div class="row g-0 mb-4">
@@ -729,8 +782,15 @@ else
     private string _ackNote = "";
     private string _ackTicket = "";
     private string? _userDisplayName;
+    private string? _userId;
     private RestoreTestRecencyResult? _restoreTestRecency;
     private int _effectiveRestoreTestIntervalDays;
+    private bool _loaded;
+    private string? _connectivityEndpointDescription;
+    private string? _connectivityDisabledReason;
+    private bool _showArchiveConfirm;
+    private IReadOnlyList<ArchiveImpactLine>? _archivePreview;
+    private string _archiveReason = "";
 
     // History tables are paged/filtered client-side over the already-loaded per-instance
     // collection (U06) — a single instance's own history is bounded in a way the cross-instance
@@ -746,12 +806,16 @@ else
     {
         var state = await AuthProvider.GetAuthenticationStateAsync();
         _userDisplayName = state.User.Identity?.Name ?? "";
+        _userId = state.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? "";
         await Load();
+        _loaded = true;
     }
 
     private async Task Load()
     {
         _overview = await OverviewService.GetByIdAsync(Id);
+        _showArchiveConfirm = false;
+        _archiveReason = "";
         _newRecord = new BackupRecord();
         _newRestore = new RestoreEvent();
         _newRecordOccurredLocal = DateTime.Now;
@@ -953,6 +1017,8 @@ else
         });
         await Db.SaveChangesAsync();
         Db.ChangeTracker.Clear();
+        await Audit.RecordUserActionAsync(_userId ?? "", _userDisplayName ?? "unknown", "BackupRecordCorrected", "BackupRecord", _correctingBackupId.ToString(), _overview!.Instance.Name,
+            reason: _correctionReason, beforeJson: $"{{\"Status\":\"{currentStatus}\"}}", afterJson: $"{{\"Status\":\"{_correctedBackupStatus}\"}}");
         Toasts.Success("Correction recorded — the original entry is preserved.");
         await Load();
     }
@@ -980,6 +1046,8 @@ else
         });
         await Db.SaveChangesAsync();
         Db.ChangeTracker.Clear();
+        await Audit.RecordUserActionAsync(_userId ?? "", _userDisplayName ?? "unknown", "RestoreEventCorrected", "RestoreEvent", _correctingRestoreId.ToString(), _overview!.Instance.Name,
+            reason: _correctionReasonRestore, beforeJson: $"{{\"Outcome\":\"{currentOutcome}\"}}", afterJson: $"{{\"Outcome\":\"{_correctedRestoreOutcome}\"}}");
         Toasts.Success("Correction recorded — the original entry is preserved.");
         await Load();
     }
@@ -1008,15 +1076,25 @@ else
         await Load();
     }
 
-    private async Task Archive()
+    private async Task OpenArchiveConfirm()
     {
-        var entity = await Db.DatabaseInstances.FindAsync(Id);
-        if (entity is not null)
+        _archivePreview = ArchivePreviewBuilder.Build(await ArchiveService.PreviewAsync(Id));
+        _archiveReason = "";
+        _showArchiveConfirm = true;
+    }
+
+    private async Task ConfirmArchive()
+    {
+        if (string.IsNullOrWhiteSpace(_archiveReason))
         {
-            entity.IsArchived = true;
-            entity.UpdatedAtUtc = DateTime.UtcNow;
-            await Db.SaveChangesAsync();
-            Toasts.Success($"{entity.Name} archived.");
+            return;
+        }
+
+        var ok = await ArchiveService.ArchiveAsync(Id, _archiveReason, _userId ?? "", _userDisplayName ?? "unknown");
+        Db.ChangeTracker.Clear();
+        if (ok)
+        {
+            Toasts.Success($"{_overview?.Instance.Name} archived.");
         }
         Nav.NavigateTo("/instances");
     }
@@ -1030,6 +1108,8 @@ else
             entity.MaintenanceReason = _maintenanceReason;
             entity.UpdatedAtUtc = DateTime.UtcNow;
             await Db.SaveChangesAsync();
+            await Audit.RecordUserActionAsync(_userId ?? "", _userDisplayName ?? "unknown", "MaintenanceWindowStarted", "DatabaseInstance", Id.ToString(), entity.Name,
+                reason: $"{hours}h — {_maintenanceReason}");
             Toasts.Success($"Maintenance window started for {hours}h — Overdue/Failed alerts suppressed.");
         }
         Db.ChangeTracker.Clear();
@@ -1046,6 +1126,7 @@ else
             entity.MaintenanceReason = "";
             entity.UpdatedAtUtc = DateTime.UtcNow;
             await Db.SaveChangesAsync();
+            await Audit.RecordUserActionAsync(_userId ?? "", _userDisplayName ?? "unknown", "MaintenanceWindowEnded", "DatabaseInstance", Id.ToString(), entity.Name);
             Toasts.Success("Maintenance window ended.");
         }
         Db.ChangeTracker.Clear();
@@ -1061,21 +1142,36 @@ else
 
         _testingConnection = true;
         _connectivityResult = null;
+        _connectivityDisabledReason = null;
 
-        var host = !string.IsNullOrWhiteSpace(_overview.Instance.ServerIp) ? _overview.Instance.ServerIp : _overview.Instance.DatabaseIp;
-        var port = DefaultPortMapper.GetDefaultPort(_overview.Instance.Engine);
-        _connectivityResult = await Connectivity.CheckAsync(host, port, TimeSpan.FromSeconds(4));
+        var instance = _overview.Instance;
+        var endpoint = ConnectivityEndpointResolver.Resolve(instance.ServerIp, instance.DatabaseIp, instance.Engine, instance.ConnectivityHostOverride, instance.ConnectivityPortOverride);
+
+        if (!endpoint.CanCheck)
+        {
+            _connectivityDisabledReason = endpoint.DisabledReason;
+            _testingConnection = false;
+            Toasts.Error(endpoint.DisabledReason ?? "No endpoint to check.");
+            return;
+        }
+
+        _connectivityEndpointDescription = $"{endpoint.Host}:{endpoint.Port}" +
+            (endpoint.UsedHostOverride || endpoint.UsedPortOverride ? " (override)" : "");
+        _connectivityResult = await Connectivity.CheckAsync(endpoint.Host, endpoint.Port, TimeSpan.FromSeconds(4));
         _testingConnection = false;
 
         if (_connectivityResult.Success)
         {
-            Toasts.Success($"Connected to {host}:{port} in {_connectivityResult.Elapsed.TotalMilliseconds:N0} ms.");
+            Toasts.Success($"Connected to {_connectivityEndpointDescription} in {_connectivityResult.Elapsed.TotalMilliseconds:N0} ms.");
         }
         else
         {
-            Toasts.Error($"Could not reach {host}:{port} — {_connectivityResult.Error}");
+            Toasts.Error($"Could not reach {_connectivityEndpointDescription} — {_connectivityResult.Error}");
         }
     }
+
+    private static bool CanCheckConnectivity(DatabaseInstance instance) =>
+        ConnectivityEndpointResolver.Resolve(instance.ServerIp, instance.DatabaseIp, instance.Engine, instance.ConnectivityHostOverride, instance.ConnectivityPortOverride).CanCheck;
 
     private static string StatusClass(BackupStatus status) => status switch
     {

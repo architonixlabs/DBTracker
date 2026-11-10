@@ -1,3 +1,4 @@
+using DBTracker.Infrastructure.Diagnostics;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -13,18 +14,23 @@ namespace DBTracker.Infrastructure.Notifications;
 public class ReportHostedService(
     IServiceScopeFactory scopeFactory,
     IConfiguration configuration,
+    WorkerHeartbeatStore heartbeats,
     ILogger<ReportHostedService> logger) : BackgroundService
 {
+    public const string WorkerName = "Scheduled report";
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         var intervalDays = configuration.GetValue("Reports:IntervalDays", 7);
         if (intervalDays <= 0)
         {
             logger.LogInformation("Scheduled compliance report disabled (Reports:IntervalDays <= 0).");
+            heartbeats.Disabled(WorkerName);
             return;
         }
 
         var interval = TimeSpan.FromDays(intervalDays);
+        heartbeats.Starting(WorkerName, interval);
 
         while (!stoppingToken.IsCancellationRequested)
         {
@@ -45,10 +51,12 @@ public class ReportHostedService(
                 logger.LogInformation(
                     "Scheduled compliance report: {Accepted} accepted, {Failed} failed, {Total} recipient(s) total.",
                     result.AcceptedCount, result.FailedCount, result.Outcomes.Count);
+                heartbeats.RanSuccessfully(WorkerName, interval);
             }
             catch (Exception ex)
             {
                 logger.LogError(ex, "Scheduled compliance report failed to send.");
+                heartbeats.RanWithError(WorkerName, interval, ex.Message);
             }
         }
     }

@@ -1,4 +1,5 @@
 using DBTracker.Core.Services;
+using DBTracker.Infrastructure.Diagnostics;
 using DBTracker.Infrastructure.Identity;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -19,28 +20,35 @@ namespace DBTracker.Infrastructure.Notifications;
 public class AlertCheckHostedService(
     IServiceScopeFactory scopeFactory,
     IConfiguration configuration,
+    WorkerHeartbeatStore heartbeats,
     ILogger<AlertCheckHostedService> logger) : BackgroundService
 {
+    public const string WorkerName = "Alert check";
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         var intervalMinutes = configuration.GetValue("Alerts:IntervalMinutes", 10);
         if (intervalMinutes <= 0)
         {
             logger.LogInformation("Alert check background service disabled (Alerts:IntervalMinutes <= 0).");
+            heartbeats.Disabled(WorkerName);
             return;
         }
 
         var interval = TimeSpan.FromMinutes(intervalMinutes);
+        heartbeats.Starting(WorkerName, interval);
 
         while (!stoppingToken.IsCancellationRequested)
         {
             try
             {
                 await CheckAllInstancesAsync(stoppingToken);
+                heartbeats.RanSuccessfully(WorkerName, interval);
             }
             catch (Exception ex)
             {
                 logger.LogError(ex, "Alert check sweep failed.");
+                heartbeats.RanWithError(WorkerName, interval, ex.Message);
             }
 
             try

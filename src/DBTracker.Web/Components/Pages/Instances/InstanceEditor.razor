@@ -1,11 +1,14 @@
 @page "/instances/new"
 @page "/instances/{Id:int}/edit"
 @attribute [Authorize(Roles = Roles.CanEditPolicy)]
+@implements IDisposable
 @inject DBTrackerDbContext Db
 @inject NavigationManager Nav
 @inject ToastService Toasts
 @inject AuthenticationStateProvider AuthProvider
 @inject BackupFileScanner Scanner
+@inject AuditRecorder Audit
+@inject IJSRuntime JS
 
 <PageTitle>@(Id is null ? "Add instance" : "Edit instance") · DBTracker</PageTitle>
 
@@ -21,10 +24,46 @@
 {
     <div class="spinner-ring"></div>
 }
+else if (_notFound)
+{
+    <div class="dbt-card" style="max-width: 600px;">
+        <div class="empty-state py-4">
+            <i class="bi bi-question-diamond"></i>
+            Instance #@Id doesn't exist — it may have been deleted, or the link is wrong.
+        </div>
+        <a class="btn btn-outline-secondary" href="/instances">Back to instances</a>
+    </div>
+}
 else
 {
     <div class="dbt-card" style="max-width: 760px;">
-        <EditForm Model="_model" OnValidSubmit="Save">
+        @if (_concurrencyConflict)
+        {
+            <div class="alert alert-danger">
+                <strong>This record changed since you opened it.</strong> Someone else saved an update in the
+                meantime. Your edits below are preserved — reload to see the latest version (you'll lose these
+                edits), or save again to overwrite it with your changes.
+                <div class="mt-2 d-flex gap-2">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="ReloadDiscardingEdits">Reload latest, discard my edits</button>
+                    <button type="button" class="btn btn-sm btn-outline-danger" @onclick="() => SaveInternal(overwrite: true)">Save anyway (overwrite)</button>
+                </div>
+            </div>
+        }
+
+        @if (_fieldErrors.Count > 0)
+        {
+            <div class="alert alert-danger" role="alert">
+                <strong>Fix the following before saving:</strong>
+                <ul class="mb-0">
+                    @foreach (var e in _fieldErrors)
+                    {
+                        <li>@e.Message</li>
+                    }
+                </ul>
+            </div>
+        }
+
+        <EditForm EditContext="_editContext" OnSubmit="Save">
             <DataAnnotationsValidator />
 
             <h2 class="h6 text-muted text-uppercase mb-3">Identity</h2>
@@ -109,6 +148,19 @@ else
                 <div class="col-md-3">
                     <label class="form-label">Server IP</label>
                     <InputText class="form-control" @bind-Value="_model.ServerIp" />
+                </div>
+            </div>
+
+            <h2 class="h6 text-muted text-uppercase mb-3">Connectivity check (U18)</h2>
+            <div class="row g-3 mb-4">
+                <div class="col-md-6">
+                    <label class="form-label">Host/DNS override (optional)</label>
+                    <InputText class="form-control" @bind-Value="_model.ConnectivityHostOverride" placeholder="Defaults to Server IP, then Database IP" />
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">Port override (optional)</label>
+                    <InputNumber class="form-control" @bind-Value="_model.ConnectivityPortOverride" placeholder="Defaults to the engine's conventional port" />
+                    <div class="form-text">An out-of-range port (not 1-65535) falls back to the engine default rather than being used as-is.</div>
                 </div>
             </div>
 
@@ -209,6 +261,7 @@ else
                 <div class="col-md-7">
                     <label class="form-label">Runbook / monitoring link</label>
                     <InputText class="form-control" @bind-Value="_model.RunbookUrl" placeholder="https://…" />
+                    <ValidationMessage For="() => _model.RunbookUrl" />
                 </div>
                 <div class="col-12">
                     <label class="form-label">Notes</label>
@@ -217,7 +270,7 @@ else
             </div>
 
             <div class="d-flex gap-2">
-                <button type="submit" class="btn btn-primary">Save</button>
+                <button type="submit" class="btn btn-primary" disabled="@_saving">@(_saving ? "Saving…" : "Save")</button>
                 <a class="btn btn-outline-secondary" href="@CancelUrl">Cancel</a>
             </div>
         </EditForm>
@@ -228,10 +281,20 @@ else
     [Parameter] public int? Id { get; set; }
 
     private DatabaseInstance _model = new();
+    private EditContext _editContext = default!;
+    private ValidationMessageStore _messageStore = default!;
     private bool _loading = true;
+    private bool _notFound;
     private bool _previewing;
+    private bool _saving;
+    private bool _dirty;
+    private bool _concurrencyConflict;
     private string? _previewError;
     private IReadOnlyList<FilePreview>? _preview;
+    private IReadOnlyList<FieldError> _fieldErrors = [];
+    private byte[] _loadedRowVersion = [];
+    private IDisposable? _navigationLock;
+    private string? _userDisplayName;
 
     private string CancelUrl => Id is null ? "/instances" : $"/instances/{Id}";
 
@@ -255,53 +318,173 @@ else
 
     protected override async Task OnInitializedAsync()
     {
+        _userDisplayName = (await AuthProvider.GetAuthenticationStateAsync()).User.Identity?.Name ?? "unknown";
+
         if (Id is not null)
         {
             var existing = await Db.DatabaseInstances.AsNoTracking().FirstOrDefaultAsync(i => i.Id == Id.Value);
-            if (existing is not null)
+            if (existing is null)
             {
-                _model = existing;
+                _notFound = true;
+                _loading = false;
+                return;
             }
+            _model = existing;
+            _loadedRowVersion = existing.RowVersion;
         }
+
+        _editContext = new EditContext(_model);
+        _messageStore = new ValidationMessageStore(_editContext);
+        _editContext.OnFieldChanged += (_, _) => _dirty = true;
+
+        // In-app navigation (sidebar/cancel link) with unsaved changes (U13) — a real browser
+        // confirm() dialog, since Blazor has no built-in equivalent for intercepted navigation.
+        _navigationLock = Nav.RegisterLocationChangingHandler(async context =>
+        {
+            if (!_dirty || _saving)
+            {
+                return;
+            }
+            var proceed = await JS.InvokeAsync<bool>("dbtracker.confirmLeave", "You have unsaved changes on this form. Leave without saving?");
+            if (!proceed)
+            {
+                context.PreventNavigation();
+            }
+        });
+
         _loading = false;
     }
 
-    private async Task Save()
+    /// <summary>Also arms/disarms the browser's native beforeunload prompt for an actual tab close/refresh, which RegisterLocationChangingHandler doesn't cover.</summary>
+    protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        if (!_loading && !_notFound)
+        {
+            await JS.InvokeVoidAsync("dbtracker.setUnloadGuard", _dirty && !_saving);
+        }
+    }
+
+    private Task Save() => SaveInternal(overwrite: false);
+
+    private async Task SaveInternal(bool overwrite)
+    {
+        if (_saving)
+        {
+            return; // duplicate-submit guard
+        }
+
+        _fieldErrors = InstanceValidator.Validate(_model);
+        _messageStore.Clear();
+        if (_fieldErrors.Count > 0)
+        {
+            foreach (var error in _fieldErrors)
+            {
+                _messageStore.Add(_editContext.Field(error.Field), error.Message);
+            }
+            _editContext.NotifyValidationStateChanged();
+            return;
+        }
+
+        _saving = true;
+        _concurrencyConflict = false;
         var now = DateTime.UtcNow;
         _model.UpdatedAtUtc = now;
 
-        if (Id is null)
+        try
         {
-            Db.DatabaseInstances.Add(_model);
-        }
-        else
-        {
-            // Diff against the untouched row still in the database — not the in-memory _model,
-            // which already carries the edited values the form just bound — so the change log
-            // records actual before/after, not after/after.
-            var before = await Db.DatabaseInstances.AsNoTracking().FirstOrDefaultAsync(i => i.Id == Id.Value);
-            if (before is not null)
+            if (Id is null)
             {
-                var changedBy = (await AuthProvider.GetAuthenticationStateAsync()).User.Identity?.Name ?? "unknown";
-                var changes = InstanceChangeLogBuilder.Diff(before, _model, changedBy, now);
-                if (changes.Count > 0)
-                {
-                    Db.InstanceChangeLogs.AddRange(changes);
-                }
+                Db.DatabaseInstances.Add(_model);
+                await Db.SaveChangesAsync();
+                await Audit.RecordUserActionAsync(await CurrentUserIdAsync(), _userDisplayName ?? "unknown", "InstanceCreated", "DatabaseInstance", _model.Id.ToString(), _model.Name);
             }
+            else
+            {
+                // Diff against the untouched row still in the database — not the in-memory _model,
+                // which already carries the edited values the form just bound — so the change log
+                // records actual before/after, not after/after.
+                var before = await Db.DatabaseInstances.AsNoTracking().FirstOrDefaultAsync(i => i.Id == Id.Value);
+                if (before is not null)
+                {
+                    var changedBy = _userDisplayName ?? "unknown";
+                    var changes = InstanceChangeLogBuilder.Diff(before, _model, changedBy, now);
+                    if (changes.Count > 0)
+                    {
+                        Db.InstanceChangeLogs.AddRange(changes);
+                    }
+                }
 
-            Db.DatabaseInstances.Update(_model);
+                if (overwrite)
+                {
+                    // "Save anyway" deliberately re-reads the row's *current* RowVersion right
+                    // before writing, so the concurrency token matches what's actually in the
+                    // database now and this write isn't itself rejected as stale — this is the
+                    // explicit, user-confirmed overwrite the conflict banner offered, not a silent one.
+                    var currentRowVersion = await Db.DatabaseInstances
+                        .Where(i => i.Id == Id.Value)
+                        .Select(i => i.RowVersion)
+                        .FirstOrDefaultAsync() ?? [];
+                    _model.RowVersion = currentRowVersion;
+                }
+                else
+                {
+                    // Carries the RowVersion loaded when this form opened as the concurrency token's
+                    // original value (U13) — if another session saved first, SQL Server's rowversion
+                    // no longer matches and EF throws DbUpdateConcurrencyException below instead of
+                    // silently overwriting their change.
+                    _model.RowVersion = _loadedRowVersion;
+                }
+                Db.DatabaseInstances.Update(_model);
+                await Db.SaveChangesAsync();
+                await Audit.RecordUserActionAsync(await CurrentUserIdAsync(), _userDisplayName ?? "unknown", "InstanceEdited", "DatabaseInstance", _model.Id.ToString(), _model.Name);
+            }
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            Db.ChangeTracker.Clear();
+            _concurrencyConflict = true;
+            _saving = false;
+            return;
         }
 
-        await Db.SaveChangesAsync();
         // The scoped DbContext persists across navigation within a circuit (see NotificationBell's
         // factory-context comment elsewhere in this app for the same root cause). Without this, an
         // instance saved here stays tracked as Unchanged; editing that same instance again later in
         // the same session then throws "another instance with the same key is already being
         // tracked" when Update() tries to attach the freshly-loaded _model.
         Db.ChangeTracker.Clear();
+        _dirty = false;
+        await JS.InvokeVoidAsync("dbtracker.setUnloadGuard", false);
         Toasts.Success(Id is null ? $"{_model.Name} created." : $"{_model.Name} updated.");
         Nav.NavigateTo($"/instances/{_model.Id}");
     }
+
+    private async Task ReloadDiscardingEdits()
+    {
+        _concurrencyConflict = false;
+        _dirty = false;
+        _loading = true;
+        var existing = await Db.DatabaseInstances.AsNoTracking().FirstOrDefaultAsync(i => i.Id == Id!.Value);
+        if (existing is null)
+        {
+            _notFound = true;
+        }
+        else
+        {
+            _model = existing;
+            _loadedRowVersion = existing.RowVersion;
+            _editContext = new EditContext(_model);
+            _messageStore = new ValidationMessageStore(_editContext);
+            _editContext.OnFieldChanged += (_, _) => _dirty = true;
+        }
+        _loading = false;
+    }
+
+    private async Task<string> CurrentUserIdAsync()
+    {
+        var state = await AuthProvider.GetAuthenticationStateAsync();
+        return state.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? "";
+    }
+
+    public void Dispose() => _navigationLock?.Dispose();
 }

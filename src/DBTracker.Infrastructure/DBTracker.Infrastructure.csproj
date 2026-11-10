@@ -4,6 +4,13 @@
     <ProjectReference Include="..\DBTracker.Core\DBTracker.Core.csproj" />
   </ItemGroup>
 
+  <!-- AppSignInManager/AccountLifecycleService (U16) need SignInManager<T>, IHttpContextAccessor
+       and WebUtilities, which live in the full ASP.NET Core shared framework rather than any one
+       of the Identity NuGet packages above. -->
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="10.0.0" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.0">

@@ -3,6 +3,9 @@
 @using System.ComponentModel.DataAnnotations
 @using Microsoft.AspNetCore.Identity
 @inject UserManager<ApplicationUser> UserManager
+@inject AccountLifecycleService Lifecycle
+@inject AuthenticationStateProvider AuthProvider
+@inject NavigationManager Nav
 @inject ToastService Toasts
 
 <PageTitle>Users · DBTracker</PageTitle>
@@ -11,14 +14,14 @@
     <div>
         <div class="eyebrow">Administration</div>
         <h1>Users</h1>
-        <div class="subtitle">Accounts and role assignments — admin only</div>
+        <div class="subtitle">Accounts, roles and lifecycle — admin only. Every change below is recorded in the <a href="/audit">audit trail</a>.</div>
     </div>
 </div>
 
 <div class="row g-3">
     <div class="col-md-5">
         <div class="dbt-card">
-            <h2 class="h6 text-muted text-uppercase mb-3">Add a user</h2>
+            <h2 class="h6 text-muted text-uppercase mb-3">Invite a user</h2>
             <EditForm Model="_newUser" OnValidSubmit="CreateUser">
                 <DataAnnotationsValidator />
                 <div class="mb-2">
@@ -34,6 +37,7 @@
                     <label class="form-label small">Temporary password</label>
                     <InputText class="form-control form-control-sm" type="password" @bind-Value="_newUser.Password" />
                     <ValidationMessage For="() => _newUser.Password" />
+                    <div class="form-text">The user must change this on first sign-in.</div>
                 </div>
                 <div class="mb-3">
                     <label class="form-label small">Role</label>
@@ -43,6 +47,10 @@
                             <option value="@r">@r</option>
                         }
                     </InputSelect>
+                </div>
+                <div class="form-check mb-3">
+                    <input class="form-check-input" type="checkbox" id="send-invite" @bind="_newUser.SendInviteEmail" />
+                    <label class="form-check-label small" for="send-invite">Email the temporary password to them</label>
                 </div>
                 @if (!string.IsNullOrEmpty(_error))
                 {
@@ -56,15 +64,51 @@
         <div class="dbt-table">
             <table class="table">
                 <thead>
-                    <tr><th>Name</th><th>Email</th><th>Role</th></tr>
+                    <tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th><th></th></tr>
                 </thead>
                 <tbody>
                     @foreach (var u in _users)
                     {
                         <tr>
                             <td>@u.DisplayName</td>
-                            <td>@u.Email</td>
-                            <td>@string.Join(", ", u.Roles)</td>
+                            <td class="small">@u.Email</td>
+                            <td>
+                                <select class="form-select form-select-sm" value="@u.Roles.FirstOrDefault()" @onchange="e => OnRoleSelected(u.Id, e)">
+                                    @foreach (var r in Roles.All)
+                                    {
+                                        <option value="@r">@r</option>
+                                    }
+                                </select>
+                            </td>
+                            <td>
+                                @if (u.IsActive)
+                                {
+                                    <span class="badge-health dot OnTrack">Active</span>
+                                }
+                                else
+                                {
+                                    <span class="badge-health dot Failed">Deactivated</span>
+                                }
+                                @if (u.MustChangePassword)
+                                {
+                                    <div class="text-muted small">Must change password</div>
+                                }
+                            </td>
+                            <td class="small">
+                                <div class="d-flex gap-1 flex-wrap">
+                                    @if (u.IsActive)
+                                    {
+                                        <button class="btn btn-outline-danger btn-sm" @onclick="() => Deactivate(u.Id)">Deactivate</button>
+                                    }
+                                    else
+                                    {
+                                        <button class="btn btn-outline-secondary btn-sm" @onclick="() => Reactivate(u.Id)">Reactivate</button>
+                                    }
+                                    <button class="btn btn-outline-secondary btn-sm" @onclick="() => SendReset(u.Id, u.Email)" disabled="@(_sendingResetFor == u.Id)">
+                                        @(_sendingResetFor == u.Id ? "Sending…" : "Send reset link")
+                                    </button>
+                                </div>
+                            </td>
                         </tr>
                     }
                 </tbody>
@@ -74,13 +118,21 @@
 </div>
 
 @code {
-    private record UserRow(string DisplayName, string? Email, IList<string> Roles);
+    private record UserRow(string Id, string DisplayName, string? Email, IList<string> Roles, bool IsActive, bool MustChangePassword);
 
     private List<UserRow> _users = new();
     private NewUserModel _newUser = new();
     private string? _error;
+    private string? _sendingResetFor;
+    private string? _actorId, _actorName;
 
-    protected override async Task OnInitializedAsync() => await Load();
+    protected override async Task OnInitializedAsync()
+    {
+        var state = await AuthProvider.GetAuthenticationStateAsync();
+        _actorId = state.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? "";
+        _actorName = state.User.Identity?.Name ?? "unknown";
+        await Load();
+    }
 
     private async Task Load()
     {
@@ -89,7 +141,7 @@
         foreach (var u in all)
         {
             var roles = await UserManager.GetRolesAsync(u);
-            rows.Add(new UserRow(u.DisplayName, u.Email, roles));
+            rows.Add(new UserRow(u.Id, u.DisplayName, u.Email, roles, u.IsActive, u.MustChangePassword));
         }
         _users = rows.OrderBy(r => r.DisplayName).ToList();
     }
@@ -103,7 +155,8 @@
             UserName = _newUser.Email,
             Email = _newUser.Email,
             DisplayName = _newUser.DisplayName,
-            EmailConfirmed = true
+            EmailConfirmed = true,
+            MustChangePassword = true
         };
 
         var result = await UserManager.CreateAsync(user, _newUser.Password);
@@ -114,9 +167,87 @@
         }
 
         await UserManager.AddToRoleAsync(user, _newUser.Role);
-        Toasts.Success($"{_newUser.DisplayName} added as {_newUser.Role}.");
+
+        if (_newUser.SendInviteEmail)
+        {
+            var emailResult = await Lifecycle.SendInviteAsync(user, _newUser.Password, Nav.BaseUri, _actorId ?? "", _actorName ?? "unknown");
+            Toasts.Success(emailResult.Outcome == DBTracker.Core.Enums.EmailSendOutcome.Accepted
+                ? $"{_newUser.DisplayName} added as {_newUser.Role} — invite email sent."
+                : $"{_newUser.DisplayName} added as {_newUser.Role}, but the invite email was not sent ({emailResult.Outcome}). Share the temporary password directly.");
+        }
+        else
+        {
+            Toasts.Success($"{_newUser.DisplayName} added as {_newUser.Role}.");
+        }
+
         _newUser = new NewUserModel();
         await Load();
+    }
+
+    private Task OnRoleSelected(string userId, ChangeEventArgs e) => ChangeRole(userId, e.Value?.ToString() ?? "");
+
+    private async Task ChangeRole(string userId, string newRole)
+    {
+        if (string.IsNullOrWhiteSpace(newRole))
+        {
+            return;
+        }
+
+        var result = await Lifecycle.ChangeRoleAsync(userId, newRole, _actorId ?? "", _actorName ?? "unknown");
+        if (result.Succeeded)
+        {
+            Toasts.Success("Role updated.");
+        }
+        else
+        {
+            Toasts.Error(result.Error ?? "Could not change role.");
+        }
+        await Load();
+    }
+
+    private async Task Deactivate(string userId)
+    {
+        var result = await Lifecycle.SetActiveAsync(userId, false, _actorId ?? "", _actorName ?? "unknown");
+        if (result.Succeeded)
+        {
+            Toasts.Success("User deactivated — their sessions and any pending device-link approval are revoked.");
+        }
+        else
+        {
+            Toasts.Error(result.Error ?? "Could not deactivate user.");
+        }
+        await Load();
+    }
+
+    private async Task Reactivate(string userId)
+    {
+        var result = await Lifecycle.SetActiveAsync(userId, true, _actorId ?? "", _actorName ?? "unknown");
+        if (result.Succeeded)
+        {
+            Toasts.Success("User reactivated.");
+        }
+        await Load();
+    }
+
+    private async Task SendReset(string userId, string? email)
+    {
+        if (string.IsNullOrWhiteSpace(email))
+        {
+            return;
+        }
+
+        _sendingResetFor = userId;
+        var outcome = await Lifecycle.SendPasswordResetLinkAsync(email, Nav.BaseUri, _actorId ?? "", _actorName ?? "unknown");
+        _sendingResetFor = null;
+
+        if (outcome.EmailResult?.Outcome == DBTracker.Core.Enums.EmailSendOutcome.Accepted)
+        {
+            Toasts.Success($"Reset link emailed to {email}.");
+        }
+        else
+        {
+            Toasts.Error($"Could not email the reset link ({outcome.EmailResult?.Outcome}). Configure email on the setup page, or reset the password directly.");
+        }
     }
 
     private class NewUserModel
@@ -131,5 +262,7 @@
         public string Password { get; set; } = "";
 
         public string Role { get; set; } = Roles.Viewer;
+
+        public bool SendInviteEmail { get; set; } = true;
     }
 }

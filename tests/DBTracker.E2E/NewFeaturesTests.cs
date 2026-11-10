@@ -172,11 +172,13 @@ public class NewFeaturesTests
             Buffer = Encoding.UTF8.GetBytes(csv)
         });
 
-        await _page.WaitForSelectorAsync("text=1 valid");
+        // U17 superseded the old "X valid / X row(s) with errors" summary with an explicit
+        // create/update/skip/ambiguous classification against the existing inventory.
+        await _page.WaitForSelectorAsync("text=1 create");
         await Assertions.Expect(_page.Locator("text=1 row(s) with errors")).ToBeVisibleAsync();
         await Assertions.Expect(_page.Locator($"text={instanceName}")).ToBeVisibleAsync();
 
-        await _page.ClickAsync("button:has-text('Import 1 instance')");
+        await _page.ClickAsync("button:has-text('Apply')");
         await _page.WaitForURLAsync(url => url.Contains("/instances") && !url.Contains("/import"));
         await WaitForCircuitAsync();
 

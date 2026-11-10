@@ -1,0 +1,92 @@
+@page "/instances/archived"
+@attribute [Authorize(Roles = Roles.CanEditPolicy)]
+@inject InstanceArchiveService ArchiveService
+@inject AuthenticationStateProvider AuthProvider
+@inject ToastService Toasts
+
+<PageTitle>Archived instances · DBTracker</PageTitle>
+
+<div class="app-topbar">
+    <div>
+        <div class="eyebrow">Instance record</div>
+        <h1>Archived instances</h1>
+        <div class="subtitle">Browse, search and unarchive — history is preserved across the whole archive/unarchive cycle.</div>
+    </div>
+    <a class="btn btn-outline-secondary" href="/instances"><i class="bi bi-arrow-left"></i> Back to instances</a>
+</div>
+
+<div class="filter-bar mb-3">
+    <input class="form-control" style="max-width:280px;" placeholder="Search name, application, company…" value="@_search" @oninput="OnSearch" />
+</div>
+
+@if (_rows is null)
+{
+    <div class="spinner-ring"></div>
+}
+else if (_rows.Count == 0)
+{
+    <div class="empty-state">
+        <i class="bi bi-archive"></i>
+        No archived instances@(string.IsNullOrWhiteSpace(_search) ? "." : " match this search.")
+    </div>
+}
+else
+{
+    <div class="dbt-table">
+        <table class="table">
+            <thead>
+                <tr><th>Name</th><th>Application</th><th>Company</th><th>Archived</th><th>By</th><th>Reason</th><th></th></tr>
+            </thead>
+            <tbody>
+                @foreach (var row in _rows)
+                {
+                    <tr>
+                        <td class="fw-semibold"><a href="/instances/@row.Id">@row.Name</a></td>
+                        <td>@row.Application</td>
+                        <td>@row.Company</td>
+                        <td class="small text-muted">@(row.ArchivedAtUtc?.ToLocalTime().ToString("MMM d, yyyy h:mm tt") ?? "—")</td>
+                        <td class="small text-muted">@row.ArchivedBy</td>
+                        <td class="small">@row.ArchiveReason</td>
+                        <td><button class="btn btn-outline-secondary btn-sm" @onclick="() => Unarchive(row.Id)">Unarchive</button></td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+@code {
+    private List<ArchivedInstanceRow>? _rows;
+    private string _search = "";
+    private string? _userId;
+    private string? _userName;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var state = await AuthProvider.GetAuthenticationStateAsync();
+        _userId = state.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? "";
+        _userName = state.User.Identity?.Name ?? "unknown";
+        await Load();
+    }
+
+    private async Task Load() => _rows = await ArchiveService.SearchArchivedAsync(_search);
+
+    private async Task OnSearch(ChangeEventArgs e)
+    {
+        _search = e.Value?.ToString() ?? "";
+        await Load();
+    }
+
+    private async Task Unarchive(int id)
+    {
+        var ok = await ArchiveService.UnarchiveAsync(id, _userId ?? "", _userName ?? "unknown");
+        if (ok)
+        {
+            // Health/alert eligibility isn't cached anywhere — the next dashboard/list read and
+            // the next scan/alert sweep simply stop excluding this instance now that IsArchived is
+            // false, which is exactly "recomputed on unarchive".
+            Toasts.Success("Instance unarchived — health and alert eligibility will be recomputed on its next read.");
+        }
+        await Load();
+    }
+}

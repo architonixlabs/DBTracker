@@ -1,5 +1,8 @@
 using DBTracker.Infrastructure;
+using DBTracker.Infrastructure.Audit;
+using DBTracker.Infrastructure.Diagnostics;
 using DBTracker.Infrastructure.Identity;
+using DBTracker.Infrastructure.Lifecycle;
 using DBTracker.Infrastructure.Notifications;
 using DBTracker.Infrastructure.Queries;
 using DBTracker.Infrastructure.Scanning;
@@ -50,6 +53,17 @@ builder.Services.AddScoped<ComplianceReportService>();
 builder.Services.AddHostedService<ReportHostedService>();
 builder.Services.AddScoped<DeviceLinkService>();
 builder.Services.AddScoped<DBTracker.Infrastructure.Scanning.ConnectivityChecker>();
+
+// U19: append-only general audit trail, shared by instance lifecycle, account lifecycle, CSV
+// import/bulk edit and maintenance windows.
+builder.Services.AddScoped<AuditRecorder>();
+builder.Services.AddScoped<InstanceArchiveService>();
+builder.Services.AddScoped<InstanceBulkEditService>();
+builder.Services.AddScoped<AccountLifecycleService>();
+
+// Process-lifetime record of each background worker's last/next run (U15 setup/diagnostics page).
+builder.Services.AddSingleton<WorkerHeartbeatStore>();
+builder.Services.AddScoped<SetupDiagnosticsService>();
 builder.Services.Configure<SmtpOptions>(builder.Configuration.GetSection("Email:Smtp"));
 builder.Services.Configure<ArxMailOptions>(builder.Configuration.GetSection("Email:ArxMail"));
 builder.Services.AddHttpClient<ArxMailEmailSender>();
@@ -97,12 +111,21 @@ builder.Services.AddAuthentication(options =>
         });
     });
 
-builder.Services.AddAuthorization(options =>
-{
-    options.FallbackPolicy = new Microsoft.AspNetCore.Authorization.AuthorizationPolicyBuilder()
-        .RequireAuthenticatedUser()
-        .Build();
-});
+// No global FallbackPolicy: every @page component declares its own [Authorize] (optionally
+// Roles=…) or [AllowAnonymous], and every minimal-API endpoint calls .RequireAuthorization() or
+// .AllowAnonymous() explicitly (see DeviceLinkEndpointRouteBuilderExtensions,
+// IdentityComponentsEndpointRouteBuilderExtensions). A FallbackPolicy requiring authentication
+// used to also catch the interactive-render-mode's own transport endpoints (/_blazor/negotiate,
+// /_blazor/initializers, the SignalR hub) — which have no authorization metadata of their own and
+// must stay reachable by an anonymous visitor — redirecting them to the login page instead of
+// returning the JSON/handshake the Blazor JS runtime expects. That silently broke the interactive
+// circuit on any genuinely anonymous page relying on normal C# event dispatch rather than a
+// named-form SSR post-back (the way Login.razor's form happens to be built): the browser fell back
+// to a real, un-enhanced POST with no antiforgery token, which UseAntiforgery() then rejected with
+// a 400. Found building U16's Forgot/Reset password pages — the first anonymous pages in this app
+// to rely on interactive OnValidSubmit. Making every page's authorization explicit (rather than
+// relying on an implicit catch-all) removes the footgun without weakening any existing RBAC check.
+builder.Services.AddAuthorization();
 
 builder.Services.AddIdentityCore<ApplicationUser>(options =>
     {
@@ -111,8 +134,10 @@ builder.Services.AddIdentityCore<ApplicationUser>(options =>
     })
     .AddRoles<IdentityRole>()
     .AddEntityFrameworkStores<DBTrackerDbContext>()
-    .AddSignInManager()
+    .AddSignInManager<AppSignInManager>()
     .AddDefaultTokenProviders();
+
+builder.Services.AddHttpContextAccessor();
 
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();

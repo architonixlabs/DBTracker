@@ -24,10 +24,19 @@ public class DBTrackerDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<BackupRecordCorrection> BackupRecordCorrections => Set<BackupRecordCorrection>();
     public DbSet<RestoreEventCorrection> RestoreEventCorrections => Set<RestoreEventCorrection>();
     public DbSet<ComplianceSnapshot> ComplianceSnapshots => Set<ComplianceSnapshot>();
+    public DbSet<AuditEvent> AuditEvents => Set<AuditEvent>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
+
+        modelBuilder.Entity<ApplicationUser>(entity =>
+        {
+            // Every existing user (including seed data from before U16) must stay able to sign in
+            // once this column exists — the SQL-side default has to be true, not bool's CLR default
+            // of false, or the migration would retroactively lock out every account that already exists.
+            entity.Property(e => e.IsActive).HasDefaultValue(true);
+        });
 
         modelBuilder.Entity<DatabaseInstance>(entity =>
         {
@@ -48,10 +57,15 @@ public class DBTrackerDbContext : IdentityDbContext<ApplicationUser>
             entity.Property(e => e.Tags).HasMaxLength(300);
             entity.Property(e => e.RunbookUrl).HasMaxLength(500);
             entity.Property(e => e.MaintenanceReason).HasMaxLength(500);
+            entity.Property(e => e.ArchivedBy).HasMaxLength(320);
+            entity.Property(e => e.ArchiveReason).HasMaxLength(500);
+            entity.Property(e => e.ConnectivityHostOverride).HasMaxLength(255);
+            entity.Property(e => e.RowVersion).IsRowVersion();
 
             entity.HasIndex(e => e.Application);
             entity.HasIndex(e => e.Company);
             entity.HasIndex(e => e.Engine);
+            entity.HasIndex(e => e.IsArchived);
         });
 
         modelBuilder.Entity<BackupRecord>(entity =>
@@ -237,6 +251,22 @@ public class DBTrackerDbContext : IdentityDbContext<ApplicationUser>
             // "Is there already an open incident for this instance" is checked on every alert
             // sweep, so it needs to be cheap; ClosedAtUtc == null identifies the open one(s).
             entity.HasIndex(e => new { e.DatabaseInstanceId, e.ClosedAtUtc });
+        });
+
+        modelBuilder.Entity<AuditEvent>(entity =>
+        {
+            entity.Property(e => e.ActorUserId).HasMaxLength(450);
+            entity.Property(e => e.ActorName).HasMaxLength(320);
+            entity.Property(e => e.Action).HasMaxLength(100).IsRequired();
+            entity.Property(e => e.TargetType).HasMaxLength(100);
+            entity.Property(e => e.TargetId).HasMaxLength(100);
+            entity.Property(e => e.TargetName).HasMaxLength(320);
+            entity.Property(e => e.Reason).HasMaxLength(1000);
+            entity.Property(e => e.BeforeJson).HasColumnType("nvarchar(max)");
+            entity.Property(e => e.AfterJson).HasColumnType("nvarchar(max)");
+
+            entity.HasIndex(e => e.TimestampUtc);
+            entity.HasIndex(e => new { e.TargetType, e.TargetId });
         });
     }
 }

@@ -423,6 +423,78 @@ authenticated role already, same as the rest of the app, so no separate "my apps
   `DBTrackerDbContext`, the EF Core migrations snapshot (both epics' migrations now apply in
   sequence against one consistent model), `AlertCheckHostedService`, `InstanceDetail.razor`, and
   this backlog file (both sets of checkboxes and both progress-log entries above are preserved).
+- 2026-11-10 — Built Epic 16 (U13-U19) from the usability roadmap: safer entry/recovery and
+  administration. **U13** — a shared `InstanceValidator` (required fields, storage lengths,
+  positive intervals, nonnegative measurements, http/https-only link schemes, enum values) is now
+  used by both the create/edit form and the CSV importer; the editor shows field-level + summary
+  errors, warns on navigating away with unsaved changes (`NavigationManager.
+  RegisterLocationChangingHandler` plus a real `beforeunload` prompt for an actual tab close),
+  guards duplicate submits, preserves input after a failed save, detects a concurrent edit via a
+  new `RowVersion` concurrency token with an explicit reload-or-overwrite choice, and shows a clean
+  not-found state for a bad/missing instance id (instance detail too, not just the editor).
+  **U14** — archiving now requires a preview (`ArchivePreviewBuilder`: scan/alert/incident/report
+  impact) and a reason, records actor/time/reason on the instance itself and in the new U19 audit
+  log, and a new `/instances/archived` browser (Admin/DBA) searches and unarchives; nothing about
+  health/alert eligibility is cached anywhere, so unarchiving just means the next read/sweep stops
+  excluding the instance, and the instance detail page flags a direct link to an archived instance.
+  **U15** — a new Admin-only `/setup` page: an import/create/email/scan/alert/report-enablement
+  checklist, each background worker's last/next run via a new `WorkerHeartbeatStore`, backup-file-
+  path reachability checked under the service's own identity, and a real send-test-email action
+  reusing U09's Disabled/Accepted/Failed outcome rather than a fake success; credentials are
+  masked. **U16** — the Users page gained role change, deactivate/reactivate (guarded so the last
+  active Admin can't be removed), a self-service change-password page, and expiring single-use
+  reset/invite links built on ASP.NET Core Identity's own password-reset token (its security-stamp
+  rotation on success makes it genuinely single-use, so no second token table was needed) sent
+  through the existing email sender; a forced `MustChangePassword` flag routes a new/reset account
+  to the change-password page on first sign-in; deactivation rotates the security stamp (revoking
+  sessions within the 30-minute revalidation window) and denies any pending, unredeemed device-link
+  approval; `/Account/ForgotPassword` gives the same neutral response whether or not the account
+  exists, with actionable guidance when email delivery is disabled. **U17** — `InstanceCsvImporter`
+  now matches a re-imported row by Name (case-insensitive) and classifies each as
+  Create/Update/Skip/Ambiguous (a name repeated in-file, or matching more than one existing row),
+  reuses U13's validation, and its CSV tokenizer was rewritten to handle quoted commas and embedded
+  newlines properly instead of splitting on raw newlines first; a new bulk-edit page lets Admin/DBA
+  change owner/tags/retention across a selection with a before/after diff preview and a count,
+  re-checks for archived instances at apply time, and deliberately has no path to archive. **U18**
+  — `ConnectivityChecker`'s caller now resolves an optional per-instance host/DNS and port override
+  (`ConnectivityEndpointResolver`; an invalid port falls back to the engine default rather than
+  being used as-is); the instance page shows the actual host:port probed, when it was checked, the
+  timeout, and states plainly that a TCP connect isn't proof of database login or backup health;
+  the button disables when there's no host/IP/override to check at all. **U19** — a new
+  `AuditEvent` table/`AuditRecorder` (System vs. User actor, action/target/reason/before-after,
+  strictly append-only — there is deliberately no Update/Delete method on the recorder) now covers
+  instance create/edit, archive/unarchive, maintenance windows, CSV import/bulk edit, account
+  changes and manual evidence corrections; a new `/audit` page (Admin/Auditor) is searchable and
+  CSV-exportable. U10/U11's own self-contained actor/timestamp capture (noted when they shipped,
+  see the Epic 15 entry above) was deliberately left alone rather than retrofitted onto this.
+
+  Found and fixed three real bugs building this. Most serious: a CSV re-import covering only a few
+  columns (e.g. a lean re-export of Name/Engine/Application) silently blanked every column it
+  didn't include — including contact email — on the matched existing instance, because the
+  importer always built a full replacement row from column lookups that default to empty. Caught
+  by a new E2E test for U17's own "repeat import updates, doesn't duplicate" claim, which
+  incidentally also shrank Priya's "My instances" count in an unrelated pre-existing test; fixed so
+  an Update row only overwrites a field whose column is actually present in the file's header,
+  falling back to the existing value otherwise — a present-but-empty cell still clears the field,
+  only a genuinely absent column doesn't. Second: this app's global `RequireAuthenticatedUser()`
+  authorization fallback policy (added under Epic 5) also caught the interactive-render-mode's own
+  transport endpoints (`/_blazor/initializers`, the SignalR hub), which carry no authorization
+  metadata of their own — redirecting them to the login page instead of returning the JSON/
+  handshake the Blazor JS runtime expects, which silently broke the interactive circuit on any
+  genuinely anonymous page relying on normal C# event dispatch rather than a named-form SSR
+  post-back the way Login.razor's form happens to be built (the first such page is this round's
+  new Forgot/Reset password flow). Fixed by making every page's own `[Authorize]`/`[AllowAnonymous]`
+  attribute the sole source of truth — added an explicit `[Authorize]` to the handful of pages
+  (Home, Compliance, Reports, Notifications, the Instances list/detail, Error, not-found) that had
+  been relying on the implicit fallback — and removing the fallback policy entirely, re-verified
+  against the existing DBA-blocked-from-`/users` E2E test so this didn't quietly loosen any role
+  gate. Third (a test-writing bug, not an app bug, same class as the one called out in the Epic 15
+  entry): the Setup page's "Send test email" button's disabled state was gated on a plain `@bind`
+  field that only updates on blur, so filling it and clicking immediately left it stuck disabled —
+  fixed with `@bind:event="oninput"`. 55 new unit tests and 9 new E2E tests
+  (`Epic16ArchiveAndDiagnosticsTests`, `Epic16AccountLifecycleTests`, `Epic16ImportAndBulkEditTests`);
+  one pre-existing E2E test's CSV-import assertions were updated for the new create/update/skip/
+  ambiguous preview wording. Full suite: 267/267 (213 unit + 54 E2E).
 
 ### Epic 12 — Handiness features (user-prioritized)
 *Every item below was proposed as a shortlist and picked by the user, not decided unilaterally.*
@@ -582,7 +654,7 @@ The U identifiers are canonical: references from existing epics describe the sam
 
 ### Epic 16 — Safer entry, recovery and administration
 
-- [ ] **U13 · P1 · M — Prevent lost edits and recover from failed saves.**
+- [x] **U13 · P1 · M — Prevent lost edits and recover from failed saves.**
   Priya/Dev need safe editing; Sam wants errors users can correct; Alex needs accessible feedback.
   **Acceptance:** shared form/import validation for required fields, storage lengths, positive
   intervals/retention and nonnegative measurements; validate supported link schemes and enum values.
@@ -590,14 +662,14 @@ The U identifiers are canonical: references from existing epics describe the sam
   submits and preserve inputs after failures. Detect concurrent edits and offer reload/review without
   overwriting newer changes. Missing instance IDs produce a useful not-found state, not endless load.
 
-- [ ] **U14 · P1 · M — Archive preview, archive browser and unarchive.**
+- [x] **U14 · P1 · M — Archive preview, archive browser and unarchive.**
   Sam/Priya need recovery from accidental archiving; Angela needs preserved evidence and attribution.
   **Acceptance:** preview effects on scans, alerts and current reports; confirm with a reason.
   Authorized users can browse/search archived records and restore them. Preserve history; record
   actor/reason/time; exclude archived instances from normal sweeps and indicate them clearly on
   direct links. Recompute health and alert eligibility on unarchive. Uses U19 audit conventions.
 
-- [ ] **U15 · P2 · M — Guided setup and monitoring diagnostics.**
+- [x] **U15 · P2 · M — Guided setup and monitoring diagnostics.**
   Sam wants to diagnose setup without database/log access; Dev wants actionable empty states.
   **Acceptance:** Admin setup checklist for instance import/create, file-path access under the
   service identity, scan/alert/report enablement and distribution list. Show last/next worker run,
@@ -605,7 +677,7 @@ The U identifiers are canonical: references from existing epics describe the sam
   accepted/failed/disabled accurately. Mask credentials and restrict sensitive paths/details to
   appropriate roles. Empty states link to a permitted next action. Use existing mail integration.
 
-- [ ] **U16 · P1 · M — Complete account lifecycle and password recovery.**
+- [x] **U16 · P1 · M — Complete account lifecycle and password recovery.**
   Refines Epic 5's open item. Sam needs offboarding without database edits; Dev needs recovery from
   a forgotten or temporary password; Angela needs an accountable role-change history.
   **Acceptance:** change roles, deactivate/reactivate, change own password and recover access via
@@ -614,7 +686,7 @@ The U identifiers are canonical: references from existing epics describe the sam
   device-link revocation on deactivation/role downgrade; audit changes. Neutral reset responses and
   actionable disabled-mail guidance avoid misleading confirmations. Enterprise SSO remains deferred.
 
-- [ ] **U17 · P2 · L — Safe repeatable imports and reviewed bulk edits.**
+- [x] **U17 · P2 · L — Safe repeatable imports and reviewed bulk edits.**
   Priya/Sam want to onboard and maintain many records; Angela requires visible, attributable changes.
   **Acceptance:** choose an explicit stable identity/matching rule; preview create/update/skip and
   ambiguous duplicates within a file and existing inventory. Repeating an import does not duplicate
@@ -623,13 +695,13 @@ The U identifiers are canonical: references from existing epics describe the sam
   Bulk owner/tag/policy changes show selected count and before/after diff; recheck permission and
   conflicts at apply time and audit the batch. Archive remains a separate consequential action.
 
-- [ ] **U18 · P2 · S — Configurable connectivity endpoints.**
+- [x] **U18 · P2 · S — Configurable connectivity endpoints.**
   Priya needs valid checks for nondefault ports; Dev needs an understandable result.
   **Acceptance:** optional host/DNS and validated port override with engine defaults; show actual
   host:port, check time, timeout and actionable failure. Disable checks when no endpoint is set.
   State that TCP reachability does not prove database login, backup success or recoverability.
 
-- [ ] **U19 · P2 · L — Extend audit coverage across operational changes.**
+- [x] **U19 · P2 · L — Extend audit coverage across operational changes.**
   Angela/Sam want consistent accountability; Priya needs event corrections without erased history.
   **Acceptance:** record actor, time, reason, target and before/after where relevant for creation,
   edits, archive/unarchive, maintenance, imports/bulk edits, account changes, incident actions and
