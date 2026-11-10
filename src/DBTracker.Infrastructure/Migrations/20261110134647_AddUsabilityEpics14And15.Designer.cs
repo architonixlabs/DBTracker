@@ -12,8 +12,8 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace DBTracker.Infrastructure.Migrations
 {
     [DbContext(typeof(DBTrackerDbContext))]
-    [Migration("20261110130703_AddSavedViewsSubscriptionsIncidents")]
-    partial class AddSavedViewsSubscriptionsIncidents
+    [Migration("20261110134647_AddUsabilityEpics14And15")]
+    partial class AddUsabilityEpics14And15
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -50,6 +50,11 @@ namespace DBTracker.Infrastructure.Migrations
                     b.Property<long?>("ObservedFileBytes")
                         .HasColumnType("bigint");
 
+                    b.Property<string>("RecordedByUserName")
+                        .IsRequired()
+                        .HasMaxLength(320)
+                        .HasColumnType("nvarchar(320)");
+
                     b.Property<double?>("SizeMb")
                         .HasColumnType("float");
 
@@ -79,6 +84,99 @@ namespace DBTracker.Infrastructure.Migrations
                         .HasFilter("[Source] = 1 AND [ObservedFileBytes] IS NOT NULL");
 
                     b.ToTable("BackupRecords");
+                });
+
+            modelBuilder.Entity("DBTracker.Core.Entities.BackupRecordCorrection", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("BackupRecordId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CorrectedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("CorrectedByUserName")
+                        .IsRequired()
+                        .HasMaxLength(320)
+                        .HasColumnType("nvarchar(320)");
+
+                    b.Property<string>("NewNotes")
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<int?>("NewStatus")
+                        .HasColumnType("int");
+
+                    b.Property<string>("PreviousNotes")
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<int?>("PreviousStatus")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BackupRecordId");
+
+                    b.ToTable("BackupRecordCorrections");
+                });
+
+            modelBuilder.Entity("DBTracker.Core.Entities.ComplianceSnapshot", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("EffectiveAsOfUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("EvidenceProvenance")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<DateTime>("GeneratedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("GeneratedByUserName")
+                        .IsRequired()
+                        .HasMaxLength(320)
+                        .HasColumnType("nvarchar(320)");
+
+                    b.Property<string>("PolicyVersion")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<int>("RowCount")
+                        .HasColumnType("int");
+
+                    b.Property<string>("RowsJson")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("ScopeDescription")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("GeneratedAtUtc");
+
+                    b.ToTable("ComplianceSnapshots");
                 });
 
             modelBuilder.Entity("DBTracker.Core.Entities.DatabaseInstance", b =>
@@ -183,6 +281,9 @@ namespace DBTracker.Infrastructure.Migrations
                         .IsRequired()
                         .HasMaxLength(2000)
                         .HasColumnType("nvarchar(2000)");
+
+                    b.Property<int?>("RestoreTestIntervalDaysOverride")
+                        .HasColumnType("int");
 
                     b.Property<int?>("RetentionPolicyDays")
                         .HasColumnType("int");
@@ -488,6 +589,12 @@ namespace DBTracker.Infrastructure.Migrations
                     b.Property<int>("DatabaseInstanceId")
                         .HasColumnType("int");
 
+                    b.Property<double?>("DurationMinutes")
+                        .HasColumnType("float");
+
+                    b.Property<int?>("LinkedBackupRecordId")
+                        .HasColumnType("int");
+
                     b.Property<string>("Notes")
                         .IsRequired()
                         .HasMaxLength(2000)
@@ -504,14 +611,69 @@ namespace DBTracker.Infrastructure.Migrations
                     b.Property<int>("Reason")
                         .HasColumnType("int");
 
+                    b.Property<string>("RecordedByUserName")
+                        .IsRequired()
+                        .HasMaxLength(320)
+                        .HasColumnType("nvarchar(320)");
+
+                    b.Property<double?>("TargetRecoveryTimeMinutes")
+                        .HasColumnType("float");
+
                     b.Property<DateTime>("TimestampUtc")
                         .HasColumnType("datetime2");
 
                     b.HasKey("Id");
 
+                    b.HasIndex("LinkedBackupRecordId");
+
                     b.HasIndex("DatabaseInstanceId", "TimestampUtc");
 
                     b.ToTable("RestoreEvents");
+                });
+
+            modelBuilder.Entity("DBTracker.Core.Entities.RestoreEventCorrection", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CorrectedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("CorrectedByUserName")
+                        .IsRequired()
+                        .HasMaxLength(320)
+                        .HasColumnType("nvarchar(320)");
+
+                    b.Property<string>("NewNotes")
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<int?>("NewOutcome")
+                        .HasColumnType("int");
+
+                    b.Property<string>("PreviousNotes")
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<int?>("PreviousOutcome")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<int>("RestoreEventId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RestoreEventId");
+
+                    b.ToTable("RestoreEventCorrections");
                 });
 
             modelBuilder.Entity("DBTracker.Core.Entities.SavedView", b =>
@@ -771,6 +933,17 @@ namespace DBTracker.Infrastructure.Migrations
                     b.Navigation("DatabaseInstance");
                 });
 
+            modelBuilder.Entity("DBTracker.Core.Entities.BackupRecordCorrection", b =>
+                {
+                    b.HasOne("DBTracker.Core.Entities.BackupRecord", "BackupRecord")
+                        .WithMany("Corrections")
+                        .HasForeignKey("BackupRecordId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("BackupRecord");
+                });
+
             modelBuilder.Entity("DBTracker.Core.Entities.Incident", b =>
                 {
                     b.HasOne("DBTracker.Core.Entities.DatabaseInstance", "DatabaseInstance")
@@ -832,7 +1005,25 @@ namespace DBTracker.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.HasOne("DBTracker.Core.Entities.BackupRecord", "LinkedBackupRecord")
+                        .WithMany()
+                        .HasForeignKey("LinkedBackupRecordId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
                     b.Navigation("DatabaseInstance");
+
+                    b.Navigation("LinkedBackupRecord");
+                });
+
+            modelBuilder.Entity("DBTracker.Core.Entities.RestoreEventCorrection", b =>
+                {
+                    b.HasOne("DBTracker.Core.Entities.RestoreEvent", "RestoreEvent")
+                        .WithMany("Corrections")
+                        .HasForeignKey("RestoreEventId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("RestoreEvent");
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<string>", b =>
@@ -886,11 +1077,21 @@ namespace DBTracker.Infrastructure.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("DBTracker.Core.Entities.BackupRecord", b =>
+                {
+                    b.Navigation("Corrections");
+                });
+
             modelBuilder.Entity("DBTracker.Core.Entities.DatabaseInstance", b =>
                 {
                     b.Navigation("BackupRecords");
 
                     b.Navigation("RestoreEvents");
+                });
+
+            modelBuilder.Entity("DBTracker.Core.Entities.RestoreEvent", b =>
+                {
+                    b.Navigation("Corrections");
                 });
 #pragma warning restore 612, 618
         }

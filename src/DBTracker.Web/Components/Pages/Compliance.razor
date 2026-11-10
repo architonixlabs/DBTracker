@@ -1,6 +1,8 @@
 @page "/compliance"
 @inject InstanceOverviewService OverviewService
 @inject ComplianceReportService ReportService
+@inject DBTrackerDbContext Db
+@inject AuthenticationStateProvider AuthProvider
 @inject ToastService Toasts
 @inject IJSRuntime JS
 
@@ -14,8 +16,13 @@
     </div>
     <div class="d-flex gap-2">
         <AuthorizeView Roles="@Roles.ReportingPolicy">
-            <button class="btn btn-outline-secondary" @onclick="SendReport" disabled="@(_overviews is null || _sendingReport)">
-                <i class="bi bi-envelope"></i> @(_sendingReport ? "Sending…" : "Send report")
+            <div>
+                <ReportSendPanel ButtonText="Send report" FullScopeCount="@(_overviews?.Count ?? 0)" FilteredScope="@CurrentFilterScope()" />
+            </div>
+        </AuthorizeView>
+        <AuthorizeView Roles="@Roles.ReportingPolicy">
+            <button class="btn btn-outline-secondary" @onclick="SaveSnapshot" disabled="@(_overviews is null || _savingSnapshot)">
+                <i class="bi bi-camera"></i> @(_savingSnapshot ? "Saving…" : "Save snapshot")
             </button>
         </AuthorizeView>
         <button class="btn btn-outline-primary" @onclick="ExportCsv" disabled="@(_overviews is null)">
@@ -88,19 +95,75 @@ else
             </tbody>
         </table>
     </div>
+
+    <div class="row g-0 mt-4" style="border-top:1px solid var(--dbt-line);padding-top:28px;">
+        <div class="col-12">
+            <div class="dbt-card">
+                <h2 class="h6 text-muted text-uppercase mb-3">Saved snapshots</h2>
+                <p class="text-muted small mb-3">A snapshot freezes the rows above at the moment it's saved — reopening it later reproduces those exact values even if instances are since edited, archived or backdated. Evidence for an audit period, not a live view.</p>
+                @if (_snapshots.Count == 0)
+                {
+                    <div class="empty-state py-3"><i class="bi bi-camera"></i>No snapshots saved yet.</div>
+                }
+                else
+                {
+                    <table class="table table-sm mb-0 dbt-table">
+                        <thead><tr><th>Generated</th><th>By</th><th>Scope</th><th>Rows</th><th></th></tr></thead>
+                        <tbody>
+                            @foreach (var s in _snapshots)
+                            {
+                                <tr>
+                                    <td class="small">@s.GeneratedAtUtc.ToLocalTime().ToString("MMM d, yyyy h:mm tt")</td>
+                                    <td class="small">@s.GeneratedByUserName</td>
+                                    <td class="small">@s.ScopeDescription</td>
+                                    <td class="small">@s.RowCount</td>
+                                    <td class="small"><a href="/compliance/snapshots/@s.Id">View</a></td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                }
+            </div>
+        </div>
+    </div>
 }
 
 @code {
     private List<InstanceOverview>? _overviews;
+    private List<ComplianceSnapshot> _snapshots = new();
     private DateTime _asOf;
     private string _role = "";
     private string _envTier = "";
-    private bool _sendingReport;
+    private bool _savingSnapshot;
 
     protected override async Task OnInitializedAsync()
     {
         _asOf = DateTime.UtcNow;
         _overviews = await OverviewService.GetAllAsync();
+        await LoadSnapshots();
+    }
+
+    private async Task LoadSnapshots()
+    {
+        _snapshots = await Db.ComplianceSnapshots.AsNoTracking()
+            .OrderByDescending(s => s.GeneratedAtUtc)
+            .Take(20)
+            .ToListAsync();
+    }
+
+    /// <summary>Describes the role/environment filter currently applied on screen, for the "current filtered view" report-scope option (U09). Null once no filter narrows the set (same as full inventory).</summary>
+    private ReportScope? CurrentFilterScope()
+    {
+        if (_overviews is null || (_role.Length == 0 && _envTier.Length == 0))
+        {
+            return null;
+        }
+
+        var ids = Filtered().Select(o => o.Instance.Id);
+        var parts = new List<string>();
+        if (_role.Length > 0) parts.Add($"Role={_role}");
+        if (_envTier.Length > 0) parts.Add($"Env={_envTier}");
+        return ReportScope.Filtered(ids, string.Join(", ", parts));
     }
 
     private IEnumerable<InstanceOverview> Filtered()
@@ -154,19 +217,38 @@ else
             ? $"\"{value.Replace("\"", "\"\"")}\""
             : value;
 
-    private async Task SendReport()
+    private async Task SaveSnapshot()
     {
-        _sendingReport = true;
-        var count = await ReportService.SendNowAsync();
-        _sendingReport = false;
+        _savingSnapshot = true;
 
-        if (count > 0)
+        var rows = Filtered().Select(o => new ComplianceReportRow(
+            o.Instance, o.Health, o.LastBackupUtc,
+            o.Instance.RestoreEvents.Any(r => r.Outcome == RestoreOutcome.Success)));
+        var snapshotRows = ComplianceSnapshotBuilder.BuildRows(rows);
+
+        var scopeDescription = _role.Length == 0 && _envTier.Length == 0
+            ? "Full inventory"
+            : string.Join(", ", new[] { _role.Length > 0 ? $"Role={_role}" : null, _envTier.Length > 0 ? $"Env={_envTier}" : null }.Where(p => p is not null));
+
+        var username = (await AuthProvider.GetAuthenticationStateAsync()).User.Identity?.Name ?? "unknown";
+
+        var snapshot = new ComplianceSnapshot
         {
-            Toasts.Success(count == 1 ? "Report sent to 1 recipient." : $"Report sent to {count} recipients.");
-        }
-        else
-        {
-            Toasts.Error("No distribution list configured (Reports:DistributionList).");
-        }
+            GeneratedAtUtc = DateTime.UtcNow,
+            EffectiveAsOfUtc = _asOf,
+            GeneratedByUserName = username,
+            ScopeDescription = scopeDescription,
+            EvidenceProvenance = "BackupHealthCalculator.Compute + RestoreEvents, via the Compliance view",
+            RowsJson = ComplianceSnapshotBuilder.Serialize(snapshotRows),
+            RowCount = snapshotRows.Count
+        };
+
+        Db.ComplianceSnapshots.Add(snapshot);
+        await Db.SaveChangesAsync();
+        Db.ChangeTracker.Clear();
+
+        _savingSnapshot = false;
+        Toasts.Success($"Snapshot saved ({snapshotRows.Count} row(s)).");
+        await LoadSnapshots();
     }
 }

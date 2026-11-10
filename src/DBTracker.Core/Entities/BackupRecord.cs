@@ -26,5 +26,14 @@ public class BackupRecord
     /// <summary>Exact file size in bytes at discovery time, for Discovered records — the dedup signature (with SourceFile) that lets a changed file reusing the same name be recorded as new evidence rather than silently skipped or duplicated. Null for Manual records and for Discovered records predating U01.</summary>
     public long? ObservedFileBytes { get; set; }
 
+    /// <summary>
+    /// The authenticated user who entered this record (U11) — distinct from TimestampUtc, which is
+    /// when the backup actually occurred and may be backdated after an incident. Empty for
+    /// system-generated Discovered records (there's no human "entry").
+    /// </summary>
+    public string RecordedByUserName { get; set; } = string.Empty;
+
     public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
+
+    public ICollection<BackupRecordCorrection> Corrections { get; set; } = new List<BackupRecordCorrection>();
 }

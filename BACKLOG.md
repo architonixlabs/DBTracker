@@ -386,6 +386,43 @@ authenticated role already, same as the rest of the app, so no separate "my apps
   a rewrite of the one existing notification-bell E2E test whose premise (counting unread seed data
   against a shared `IsRead` flag) no longer held once reads became personal. Full suite: 176/176
   (136 unit + 40 E2E).
+- 2026-11-10 — Built Epic 15 (U09-U12) from the usability roadmap: report scope and delivery
+  outcomes are now explicit — "Send report"/"Send now" open a preview (generation time,
+  recipients, row count, and an explicit "current filtered view vs. full inventory" scope choice
+  on Compliance) before anything is sent, and `IEmailSender.SendAsync` now returns a real
+  Disabled/Accepted/Failed outcome per recipient instead of the old boolean-ish "count of
+  configured recipients" that silently claimed success even when the email provider itself was
+  disabled (`Email:Provider=None`) — found while building this: the pre-existing "Send report"
+  E2E test was asserting that exact bug (a "Report sent" toast when nothing was actually sent in
+  the Testing environment), so it was rewritten to assert the honest outcome instead. Compliance
+  snapshots are now persisted (`ComplianceSnapshot` + `ComplianceSnapshotBuilder`, frozen rows as
+  JSON) via a new "Save snapshot" action and a `/compliance/snapshots/{id}` detail page that
+  reproduces exactly what was saved regardless of later edits/archiving/backdating; Backup
+  Activity gained a Custom from/to date range alongside the 7/30/90-day presets. Backup and
+  restore log entries now separate occurrence time (user-set, backdatable, future times
+  rejected) from entry time and the authenticated recorder's identity (`RecordedByUserName`),
+  and support append-only corrections (`BackupRecordCorrection`/`RestoreEventCorrection` +
+  `EvidenceCorrectionResolver`) that never overwrite the original record — a correction layers a
+  newer effective value on top, shown with a "(corrected)" marker. Restores can now optionally
+  link to the specific backup evidence they proved, with duration/target-recovery-time fields.
+  Restore-test recency (`RestoreTestRecencyCalculator`, org-wide `RestoreTest:IntervalDays`
+  default with a per-instance override) is reported as Never tested/Current/Overdue — distinct
+  from ordinary backup health — on the Restore Testing report and the instance detail page. A
+  second real bug was found and fixed while writing a correction-panel E2E test: the "Save
+  correction" button's disabled state was gated on a plain `@bind` text field, which (correctly,
+  per Blazor's default) only updates on blur/change, so clicking the button immediately after
+  filling the field in the same interaction left it stuck disabled — fixed with
+  `@bind:event="oninput"` so it enables as the reason is typed, matching how a DBA would actually
+  expect it to behave. U19 (a unified audit log) doesn't exist yet, so the snapshot's
+  actor/time/scope metadata is self-contained for now rather than integrated with it. 26 new unit
+  tests and 5 new E2E tests; one pre-existing E2E test's locator was scoped with `.First` after a
+  second `.badge-health` element (the new restore-test-coverage badge) legitimately appeared on
+  the instance detail page. Full suite: 168/168 (129 unit + 39 E2E).
+- 2026-11-10 — Merged Epic 14 and Epic 15, which were built in parallel from the same Epic-13 base
+  (Epic 14 directly on main, Epic 15 in an isolated worktree). Reconciled conflicts in
+  `DBTrackerDbContext`, the EF Core migrations snapshot (both epics' migrations now apply in
+  sequence against one consistent model), `AlertCheckHostedService`, `InstanceDetail.razor`, and
+  this backlog file (both sets of checkboxes and both progress-log entries above are preserved).
 
 ### Epic 12 — Handiness features (user-prioritized)
 *Every item below was proposed as a shortlist and picked by the user, not decided unilaterally.*
@@ -510,7 +547,7 @@ The U identifiers are canonical: references from existing epics describe the sam
 
 ### Epic 15 — Reporting that matches user intent
 
-- [ ] **U09 · P1 · M — Make report scope and delivery outcomes explicit.**
+- [x] **U09 · P1 · M — Make report scope and delivery outcomes explicit.**
   Marcus/Angela need to know what was sent to whom; Sam needs useful delivery diagnostics.
   **Acceptance:** preview filters, generation time and permitted recipients before sending; make
   current filtered scope versus full inventory explicit and send exactly the confirmed scope.
@@ -518,7 +555,7 @@ The U identifiers are canonical: references from existing epics describe the sam
   outcomes accurately: a no-op sender cannot produce a sent-success message. Never equate provider
   acceptance with recipient delivery; retain attempt status for diagnosis. Builds on U15's diagnostics.
 
-- [ ] **U10 · P2 · L — Reproducible compliance snapshots and custom report dates.**
+- [x] **U10 · P2 · L — Reproducible compliance snapshots and custom report dates.**
   Angela wants repeatable evidence; Marcus wants review-period exports; Priya wants incident windows.
   **Acceptance:** custom from/to ranges with explicit timezone and boundary rules; store generated
   snapshots with ID, actor, scope, generation/effective time, policy version and evidence provenance.
@@ -527,7 +564,7 @@ The U identifiers are canonical: references from existing epics describe the sam
   historical-as-of view needs versioned inventory/policy and excludes later backup/restore events.
   Depends on U01/U04/U11/U19. Promotes the former custom-date future item into this roadmap.
 
-- [ ] **U11 · P2 · M — Record actual event time and inspect complete evidence.**
+- [x] **U11 · P2 · M — Record actual event time and inspect complete evidence.**
   Priya needs to log a backup after an incident; Angela needs event time distinguished from entry.
   **Acceptance:** backup/restore entry defaults to now but allows an explicit past occurrence time
   with timezone; retain entry time and authenticated recorder separately from performed-by. Validate
@@ -535,7 +572,7 @@ The U identifiers are canonical: references from existing epics describe the sam
   append-only corrections preserve the original. Common entry remains short; use U13 validation
   and U19 audit conventions. Backdating never silently changes a retained U10 snapshot.
 
-- [ ] **U12 · P2 · M — Restore-test recency and evidence linkage.**
+- [x] **U12 · P2 · M — Restore-test recency and evidence linkage.**
   Angela wants recent proof; Marcus wants an actionable drill list; Priya wants realistic policies.
   **Acceptance:** configurable test interval by policy/instance, last success, next due date and
   Never tested/Current/Overdue states. Link tests to backup evidence when known; retain tester,

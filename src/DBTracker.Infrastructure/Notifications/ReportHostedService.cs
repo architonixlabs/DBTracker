@@ -41,8 +41,10 @@ public class ReportHostedService(
             {
                 using var scope = scopeFactory.CreateScope();
                 var reportService = scope.ServiceProvider.GetRequiredService<ComplianceReportService>();
-                var sentCount = await reportService.SendNowAsync(stoppingToken);
-                logger.LogInformation("Scheduled compliance report sent to {Count} recipient(s).", sentCount);
+                var result = await reportService.SendNowAsync(stoppingToken);
+                logger.LogInformation(
+                    "Scheduled compliance report: {Accepted} accepted, {Failed} failed, {Total} recipient(s) total.",
+                    result.AcceptedCount, result.FailedCount, result.Outcomes.Count);
             }
             catch (Exception ex)
             {

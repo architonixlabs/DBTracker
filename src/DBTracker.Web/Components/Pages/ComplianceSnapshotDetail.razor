@@ -1,0 +1,111 @@
+@page "/compliance/snapshots/{Id:int}"
+@inject DBTrackerDbContext Db
+@inject IJSRuntime JS
+
+<PageTitle>Snapshot · DBTracker</PageTitle>
+
+<div class="app-topbar">
+    <div>
+        <div class="eyebrow">Governance · frozen snapshot</div>
+        <h1>Compliance snapshot</h1>
+        @if (_snapshot is not null)
+        {
+            <div class="subtitle">
+                Generated @_snapshot.GeneratedAtUtc.ToLocalTime().ToString("MMM d, yyyy h:mm tt") by @_snapshot.GeneratedByUserName
+                — scope: @_snapshot.ScopeDescription — policy @_snapshot.PolicyVersion
+            </div>
+        }
+    </div>
+    <div class="d-flex gap-2">
+        <a class="btn btn-outline-secondary" href="/compliance"><i class="bi bi-arrow-left"></i> Back to Compliance</a>
+        @if (_snapshot is not null)
+        {
+            <button class="btn btn-outline-primary" @onclick="ExportCsv"><i class="bi bi-download"></i> Export CSV</button>
+        }
+    </div>
+</div>
+
+@if (_snapshot is null)
+{
+    @if (_loaded)
+    {
+        <div class="empty-state"><i class="bi bi-camera"></i>Snapshot not found — it may have been removed.</div>
+    }
+    else
+    {
+        <div class="spinner-ring"></div>
+    }
+}
+else
+{
+    <p class="text-muted small mb-3">
+        These values are frozen as of generation time — they will not change even if the underlying
+        instances are later edited, archived, or have backdated backup/restore entries added.
+        Evidence: @_snapshot.EvidenceProvenance
+    </p>
+
+    <div class="dbt-table">
+        <table class="table">
+            <thead>
+                <tr><th>Instance</th><th>Owner</th><th>Role</th><th>Env</th><th>Last successful backup</th><th>Health</th><th>Restore tested</th></tr>
+            </thead>
+            <tbody>
+                @foreach (var r in _rows)
+                {
+                    <tr>
+                        <td class="fw-semibold">@r.InstanceName</td>
+                        <td>@r.Company / @r.Department</td>
+                        <td><span class="role-pill @r.Role">@r.Role</span></td>
+                        <td>@r.Environment</td>
+                        <td>@(r.LastBackupUtc is null ? "Never" : r.LastBackupUtc.Value.ToLocalTime().ToString("MMM d, yyyy h:mm tt"))</td>
+                        <td><HealthBadge Health="r.Health" /></td>
+                        <td>
+                            @if (r.RestoreTested)
+                            {
+                                <span class="badge-health dot OnTrack">Yes</span>
+                            }
+                            else
+                            {
+                                <span class="badge-health dot Overdue">No</span>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    private ComplianceSnapshot? _snapshot;
+    private IReadOnlyList<ComplianceSnapshotRow> _rows = [];
+    private bool _loaded;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _snapshot = await Db.ComplianceSnapshots.AsNoTracking().FirstOrDefaultAsync(s => s.Id == Id);
+        _rows = _snapshot is null ? [] : ComplianceSnapshotBuilder.Deserialize(_snapshot.RowsJson);
+        _loaded = true;
+    }
+
+    private async Task ExportCsv()
+    {
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("Instance,Company,Department,Role,Environment,LastSuccessfulBackupUtc,Health,RestoreTested");
+        foreach (var r in _rows)
+        {
+            sb.AppendLine(string.Join(",", Csv(r.InstanceName), Csv(r.Company), Csv(r.Department), Csv(r.Role.ToString()),
+                Csv(r.Environment.ToString()), Csv(r.LastBackupUtc?.ToString("O") ?? ""), Csv(r.Health.ToString()), Csv(r.RestoreTested ? "Yes" : "No")));
+        }
+
+        var fileName = $"dbtracker-compliance-snapshot-{Id}-{_snapshot!.GeneratedAtUtc:yyyyMMdd-HHmm}.csv";
+        await JS.InvokeVoidAsync("dbtracker.downloadCsv", fileName, sb.ToString());
+    }
+
+    private static string Csv(string value) =>
+        value.Contains(',') || value.Contains('"')
+            ? $"\"{value.Replace("\"", "\"\"")}\""
+            : value;
+}

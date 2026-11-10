@@ -130,6 +130,13 @@ else
                     <div class="form-text">UNC path scanned for backup files. Leave blank to disable.</div>
                 </div>
             </div>
+            <div class="row g-3 mb-4">
+                <div class="col-md-4">
+                    <label class="form-label">Restore-test interval override (days)</label>
+                    <InputNumber class="form-control" @bind-Value="_model.RestoreTestIntervalDaysOverride" />
+                    <div class="form-text">Leave blank to use the org-wide default (RestoreTest:IntervalDays). How often this instance's backups should be proven restorable.</div>
+                </div>
+            </div>
 
             @if (!string.IsNullOrWhiteSpace(_model.BackupFileLocation))
             {

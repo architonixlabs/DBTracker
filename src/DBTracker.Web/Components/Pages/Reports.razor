@@ -34,16 +34,34 @@ else
     {
         case ReportType.BackupActivity:
         {
-            <div class="filter-bar" style="padding-top:0;border-top:none;border-bottom:none;margin-bottom:18px;gap:12px;">
+            <div class="filter-bar" style="padding-top:0;border-top:none;border-bottom:none;margin-bottom:6px;gap:12px;">
                 @foreach (var days in new[] { 7, 30, 90 })
                 {
-                    <button type="button" class="btn btn-sm @(days == _rangeDays ? "btn-primary" : "btn-outline-secondary")" @onclick="() => _rangeDays = days">
+                    <button type="button" class="btn btn-sm @(!_useCustomRange && days == _rangeDays ? "btn-primary" : "btn-outline-secondary")" @onclick="() => SelectPreset(days)">
                         Last @days d
                     </button>
                 }
+                <button type="button" class="btn btn-sm @(_useCustomRange ? "btn-primary" : "btn-outline-secondary")" @onclick="() => _useCustomRange = true">
+                    Custom
+                </button>
             </div>
 
-            var rowsInRange = BackupActivityReportBuilder.InRange(AllBackupActivityRows(), DateTime.UtcNow.AddDays(-_rangeDays), DateTime.UtcNow);
+            @if (_useCustomRange)
+            {
+                <div class="d-flex gap-2 align-items-end mb-3" style="flex-wrap:wrap;">
+                    <div class="field">
+                        <label class="form-label small">From (local time)</label>
+                        <input type="date" class="form-control form-control-sm" @bind="_customFrom" />
+                    </div>
+                    <div class="field">
+                        <label class="form-label small">To (local time, inclusive)</label>
+                        <input type="date" class="form-control form-control-sm" @bind="_customTo" />
+                    </div>
+                </div>
+            }
+
+            var (fromUtc, toUtc) = CurrentRangeUtc();
+            var rowsInRange = BackupActivityReportBuilder.InRange(AllBackupActivityRows(), fromUtc, toUtc);
             var summary = BackupActivityReportBuilder.Summarize(rowsInRange);
 
             <div class="stat-strip">
@@ -94,11 +112,18 @@ else
 
         case ReportType.RestoreTesting:
         {
-            var rows = RestoreTestingReportBuilder.Build(_overviews.Select(o => new RestoreTestingInput(
-                o.Instance.Name, o.Instance.Company, o.Instance.Department, o.Instance.Role, o.Instance.Environment, o.Instance.RestoreEvents.ToList())));
+            var rows = RestoreTestingReportBuilder.Build(
+                _overviews.Select(o => new RestoreTestingInput(
+                    o.Instance.Name, o.Instance.Company, o.Instance.Department, o.Instance.Role, o.Instance.Environment,
+                    o.Instance.RestoreEvents.ToList(), o.Instance.RestoreTestIntervalDaysOverride)),
+                RestoreTestIntervalDaysDefault, DateTime.UtcNow);
             var untested = rows.Count(r => !r.RestoreTested);
+            var expired = rows.Count(r => r.Recency == RestoreTestRecency.Overdue);
 
-            <p class="text-muted mb-3">@untested of @rows.Count instance(s) have never had a <em>successful</em> restore proven — an untested backup is an audit red flag.</p>
+            <p class="text-muted mb-3">
+                @untested of @rows.Count instance(s) have never had a <em>successful</em> restore proven — an untested backup is an audit red flag.
+                Separately, @expired instance(s) have <strong>expired restore-test coverage</strong> (last proven restore older than the @RestoreTestIntervalDaysDefault-day default policy, or a per-instance override) — distinct from ordinary backup health.
+            </p>
 
             <div class="d-flex justify-content-between align-items-center mb-3">
                 <span class="small text-muted">Exports all @rows.Count instance(s) shown — the full result, not a page.</span>
@@ -109,7 +134,7 @@ else
 
             <div class="dbt-table">
                 <table class="table">
-                    <thead><tr><th>Instance</th><th>Company / Dept</th><th>Role</th><th>Env</th><th>Restore tested</th><th>Last successful restore</th><th>Total attempts</th></tr></thead>
+                    <thead><tr><th>Instance</th><th>Company / Dept</th><th>Role</th><th>Env</th><th>Restore tested</th><th>Last successful restore</th><th>Total attempts</th><th>Coverage</th><th>Next test due</th></tr></thead>
                     <tbody>
                         @foreach (var r in rows)
                         {
@@ -121,6 +146,8 @@ else
                                 <td><span class="badge-health dot @(r.RestoreTested ? "OnTrack" : "Overdue")">@(r.RestoreTested ? "Yes" : "No")</span></td>
                                 <td>@(r.LastSuccessfulRestoreUtc is null ? "—" : r.LastSuccessfulRestoreUtc.Value.ToLocalTime().ToString("MMM d, yyyy h:mm tt"))</td>
                                 <td>@r.TotalAttempts</td>
+                                <td><span class="badge-health dot @RecencyClass(r.Recency)">@RecencyLabel(r.Recency)</span></td>
+                                <td class="small text-muted">@(r.NextDueUtc is null ? "—" : r.NextDueUtc.Value.ToLocalTime().ToString("MMM d, yyyy h:mm tt"))</td>
                             </tr>
                         }
                     </tbody>
@@ -225,9 +252,7 @@ else
             <div class="d-flex gap-2 mb-3">
                 <AuthorizeView Roles="@Roles.ReportingPolicy">
                     <Authorized>
-                        <button class="btn btn-primary" @onclick="SendSummary" disabled="@_sendingReport">
-                            <i class="bi bi-envelope"></i> @(_sendingReport ? "Sending…" : "Send now")
-                        </button>
+                        <ReportSendPanel ButtonText="Send now" ButtonClass="btn-primary" FullScopeCount="@(_overviews?.Count ?? 0)" FilteredScope="null" />
                     </Authorized>
                 </AuthorizeView>
                 <button class="btn btn-outline-secondary" @onclick="CopySummary">
@@ -258,10 +283,13 @@ else
     private List<InstanceOverview>? _overviews;
     private ReportType _selected = ReportType.BackupActivity;
     private int _rangeDays = 7;
-    private bool _sendingReport;
+    private bool _useCustomRange;
+    private DateTime _customFrom = DateTime.Today.AddDays(-7);
+    private DateTime _customTo = DateTime.Today;
 
     private int ScanIntervalMinutes => Configuration.GetValue("BackupScan:IntervalMinutes", 15);
     private int StaleAfterMultiplier => Configuration.GetValue("BackupScan:StaleAfterMultiplier", 3);
+    private int RestoreTestIntervalDaysDefault => Configuration.GetValue("RestoreTest:IntervalDays", 90);
 
     protected override async Task OnInitializedAsync()
     {
@@ -272,6 +300,39 @@ else
 
         _overviews = await OverviewService.GetAllAsync();
     }
+
+    private void SelectPreset(int days)
+    {
+        _useCustomRange = false;
+        _rangeDays = days;
+    }
+
+    /// <summary>Custom range is entered as local calendar dates (U10) — converted to explicit UTC boundaries: start of day (inclusive) to end of day (inclusive) in the server's local time zone.</summary>
+    private (DateTime FromUtc, DateTime ToUtc) CurrentRangeUtc()
+    {
+        if (!_useCustomRange)
+        {
+            return (DateTime.UtcNow.AddDays(-_rangeDays), DateTime.UtcNow);
+        }
+
+        var fromLocal = _customFrom.Date;
+        var toLocal = _customTo.Date.AddDays(1).AddTicks(-1);
+        return (fromLocal.ToUniversalTime(), toLocal.ToUniversalTime());
+    }
+
+    private static string RecencyClass(RestoreTestRecency recency) => recency switch
+    {
+        RestoreTestRecency.Current => "OnTrack",
+        RestoreTestRecency.Overdue => "Overdue",
+        _ => "NeverBackedUp"
+    };
+
+    private static string RecencyLabel(RestoreTestRecency recency) => recency switch
+    {
+        RestoreTestRecency.Current => "Current",
+        RestoreTestRecency.Overdue => "Expired",
+        _ => "Never tested"
+    };
 
     private static string ScannerFreshnessClass(ScannerFreshness freshness) => freshness switch
     {
@@ -315,21 +376,6 @@ else
         return ComplianceReportBuilder.BuildPlainTextBody(rows, DateTime.UtcNow);
     }
 
-    private async Task SendSummary()
-    {
-        _sendingReport = true;
-        var count = await ReportService.SendNowAsync();
-        _sendingReport = false;
-
-        if (count > 0)
-        {
-            Toasts.Success(count == 1 ? "Report sent to 1 recipient." : $"Report sent to {count} recipients.");
-        }
-        else
-        {
-            Toasts.Error("No distribution list configured (Reports:DistributionList).");
-        }
-    }
 
     private async Task CopySummary()
     {
@@ -361,11 +407,12 @@ else
     private Task ExportRestoreTesting(IReadOnlyList<RestoreTestingRow> rows)
     {
         var sb = new System.Text.StringBuilder();
-        sb.AppendLine("Instance,Company,Department,Role,Environment,RestoreTested,LastSuccessfulRestoreUtc,TotalAttempts");
+        sb.AppendLine("Instance,Company,Department,Role,Environment,RestoreTested,LastSuccessfulRestoreUtc,TotalAttempts,Coverage,NextTestDueUtc");
         foreach (var r in rows)
         {
             sb.AppendLine(string.Join(",", Csv(r.InstanceName), Csv(r.Company), Csv(r.Department), Csv(r.Role.ToString()), Csv(r.Environment.ToString()),
-                Csv(r.RestoreTested ? "Yes" : "No"), Csv(r.LastSuccessfulRestoreUtc?.ToString("O") ?? ""), Csv(r.TotalAttempts.ToString())));
+                Csv(r.RestoreTested ? "Yes" : "No"), Csv(r.LastSuccessfulRestoreUtc?.ToString("O") ?? ""), Csv(r.TotalAttempts.ToString()),
+                Csv(r.Recency.ToString()), Csv(r.NextDueUtc?.ToString("O") ?? "")));
         }
         return DownloadCsv($"dbtracker-restore-testing-{DateTime.UtcNow:yyyyMMdd-HHmm}.csv", sb.ToString());
     }

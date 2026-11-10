@@ -8,6 +8,7 @@
 @inject NavigationManager Nav
 @inject ToastService Toasts
 @inject IConfiguration Configuration
+@inject AuthenticationStateProvider AuthProvider
 
 <PageTitle>@(_overview?.Instance.Name ?? "Instance") · DBTracker</PageTitle>
 
@@ -158,6 +159,15 @@ else
                     }
                     <dt class="col-5">Last successful backup</dt>
                     <dd class="col-7">@(_overview.LastBackupUtc is null ? "Never" : _overview.LastBackupUtc.Value.ToLocalTime().ToString("MMM d, yyyy h:mm tt"))</dd>
+                    <dt class="col-5">Restore-test coverage</dt>
+                    <dd class="col-7">
+                        <span class="badge-health dot @RecencyClass(_restoreTestRecency!.Status)">@RecencyLabel(_restoreTestRecency.Status)</span>
+                        @if (_restoreTestRecency.NextDueUtc is { } nextDue)
+                        {
+                            <span class="text-muted small ms-1">next due @nextDue.ToLocalTime().ToString("MMM d, yyyy")</span>
+                        }
+                        <span class="text-muted small ms-1">(every @_effectiveRestoreTestIntervalDays d@(instance.RestoreTestIntervalDaysOverride is null ? ", default" : ", override"))</span>
+                    </dd>
                     <dt class="col-5">Backup file location</dt>
                     <dd class="col-7">@(string.IsNullOrWhiteSpace(instance.BackupFileLocation) ? "Not configured" : instance.BackupFileLocation)</dd>
                     @if (!string.IsNullOrWhiteSpace(instance.BackupFileLocation))
@@ -287,6 +297,11 @@ else
                         <h2 class="h6 text-muted text-uppercase mb-3">Log a backup result</h2>
                         <EditForm Model="_newRecord" OnValidSubmit="LogBackup">
                             <div class="mb-2">
+                                <label class="form-label small">Occurred at (local time)</label>
+                                <input type="datetime-local" class="form-control form-control-sm" @bind="_newRecordOccurredLocal" />
+                                <div class="form-text">Defaults to now — backdate after logging an incident late. Future times are rejected.</div>
+                            </div>
+                            <div class="mb-2">
                                 <label class="form-label small">Type</label>
                                 <InputSelect class="form-select form-select-sm" @bind-Value="_newRecord.Type">
                                     @foreach (var t in Enum.GetValues<BackupType>())
@@ -318,8 +333,47 @@ else
                                 <label class="form-label small">Notes</label>
                                 <InputTextArea class="form-control form-control-sm" rows="2" @bind-Value="_newRecord.Notes" />
                             </div>
+                            @if (!string.IsNullOrEmpty(_backupFormError))
+                            {
+                                <div class="text-danger small mb-2">@_backupFormError</div>
+                            }
                             <button type="submit" class="btn btn-primary btn-sm">Log backup</button>
                         </EditForm>
+
+                        <div class="mt-4" style="border-top:1px solid var(--dbt-line);padding-top:16px;">
+                            <h2 class="h6 text-muted text-uppercase mb-2">Correct a backup entry</h2>
+                            <p class="text-muted small mb-2">The original entry is preserved — a correction is recorded alongside it, not overwritten.</p>
+                            <div class="mb-2">
+                                <select class="form-select form-select-sm" @bind="_correctingBackupId" @bind:after="OnBackupCorrectionTargetChanged">
+                                    <option value="0">Select an entry…</option>
+                                    @foreach (var r in instance.BackupRecords.OrderByDescending(r => r.TimestampUtc))
+                                    {
+                                        <option value="@r.Id">@r.TimestampUtc.ToLocalTime().ToString("MMM d, h:mm tt") — @r.Status</option>
+                                    }
+                                </select>
+                            </div>
+                            @if (_correctingBackupId != 0)
+                            {
+                                <div class="mb-2">
+                                    <label class="form-label small">New status</label>
+                                    <InputSelect class="form-select form-select-sm" @bind-Value="_correctedBackupStatus">
+                                        @foreach (var s in Enum.GetValues<BackupStatus>())
+                                        {
+                                            <option value="@s">@s</option>
+                                        }
+                                    </InputSelect>
+                                </div>
+                                <div class="mb-2">
+                                    <label class="form-label small">New notes</label>
+                                    <InputTextArea class="form-control form-control-sm" rows="2" @bind-Value="_correctedBackupNotes" />
+                                </div>
+                                <div class="mb-2">
+                                    <label class="form-label small">Reason (required)</label>
+                                    <input class="form-control form-control-sm" @bind="_correctionReason" @bind:event="oninput" />
+                                </div>
+                                <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="SubmitBackupCorrection" disabled="@string.IsNullOrWhiteSpace(_correctionReason)">Save correction</button>
+                            }
+                        </div>
                     </div>
                 </div>
             </Authorized>
@@ -350,16 +404,27 @@ else
                 {
                     <table class="table table-sm mb-0 dbt-table">
                         <thead>
-                            <tr><th>When</th><th>Type</th><th>Status</th><th>Size</th><th>Duration</th><th>Evidence</th><th>File</th></tr>
+                            <tr><th>When</th><th>Entered</th><th>By</th><th>Type</th><th>Status</th><th>Size</th><th>Duration</th><th>Evidence</th><th>File</th><th>Notes</th></tr>
                         </thead>
                         <tbody>
                             @foreach (var r in BackupHistoryPage())
                             {
                                 var evidence = BackupEvidenceClassifier.Classify(r, instance.RestoreEvents.ToList());
+                                var effectiveStatus = EvidenceCorrectionResolver.EffectiveStatus(r, _backupCorrections);
+                                var effectiveNotes = EvidenceCorrectionResolver.EffectiveNotes(r, _backupCorrections);
+                                var wasCorrected = _backupCorrections.Any(c => c.BackupRecordId == r.Id);
                                 <tr>
                                     <td class="small">@r.TimestampUtc.ToLocalTime().ToString("MMM d, h:mm tt")</td>
+                                    <td class="small text-muted">@r.CreatedAtUtc.ToLocalTime().ToString("MMM d, h:mm tt")</td>
+                                    <td class="small text-muted">@(string.IsNullOrWhiteSpace(r.RecordedByUserName) ? "—" : r.RecordedByUserName)</td>
                                     <td class="small">@r.Type</td>
-                                    <td><span class="badge-health dot @StatusClass(r.Status)">@r.Status</span></td>
+                                    <td>
+                                        <span class="badge-health dot @StatusClass(effectiveStatus)">@effectiveStatus</span>
+                                        @if (wasCorrected)
+                                        {
+                                            <span class="text-muted small" title="This entry has one or more append-only corrections.">(corrected)</span>
+                                        }
+                                    </td>
                                     <td class="small">@(r.SizeMb is null ? "—" : $"{r.SizeMb:N0} MB")</td>
                                     <td class="small">@(r.DurationMinutes is null ? "—" : $"{r.DurationMinutes:N0} min")</td>
                                     <td class="small">
@@ -373,6 +438,7 @@ else
                                         }
                                     </td>
                                     <td class="small text-muted">@(string.IsNullOrWhiteSpace(r.SourceFile) ? "—" : r.SourceFile)</td>
+                                    <td class="small text-muted">@effectiveNotes</td>
                                 </tr>
                             }
                         </tbody>
@@ -404,6 +470,11 @@ else
                         <h2 class="h6 text-muted text-uppercase mb-3">Log a restore</h2>
                         <EditForm Model="_newRestore" OnValidSubmit="LogRestore">
                             <div class="mb-2">
+                                <label class="form-label small">Occurred at (local time)</label>
+                                <input type="datetime-local" class="form-control form-control-sm" @bind="_newRestoreOccurredLocal" />
+                                <div class="form-text">Defaults to now — backdate after an incident. Future times are rejected.</div>
+                            </div>
+                            <div class="mb-2">
                                 <label class="form-label small">Performed by</label>
                                 <InputText class="form-control form-control-sm" @bind-Value="_newRestore.PerformedBy" />
                             </div>
@@ -427,12 +498,72 @@ else
                                     </InputSelect>
                                 </div>
                             </div>
+                            <div class="mb-2">
+                                <label class="form-label small">Backup evidence this proves (optional)</label>
+                                <InputSelect class="form-select form-select-sm" @bind-Value="_newRestoreLinkedBackupId">
+                                    <option value="0">Unknown / not linked</option>
+                                    @foreach (var r in instance.BackupRecords.OrderByDescending(r => r.TimestampUtc))
+                                    {
+                                        <option value="@r.Id">@r.TimestampUtc.ToLocalTime().ToString("MMM d, h:mm tt") — @r.Status</option>
+                                    }
+                                </InputSelect>
+                                <div class="form-text">Left as "unknown" rather than guessed — never implies every backup was tested.</div>
+                            </div>
+                            <div class="row g-2 mb-2">
+                                <div class="col-6">
+                                    <label class="form-label small">Duration (min)</label>
+                                    <InputNumber class="form-control form-control-sm" @bind-Value="_newRestore.DurationMinutes" />
+                                </div>
+                                <div class="col-6">
+                                    <label class="form-label small">Target recovery time (min)</label>
+                                    <InputNumber class="form-control form-control-sm" @bind-Value="_newRestore.TargetRecoveryTimeMinutes" />
+                                </div>
+                            </div>
                             <div class="mb-3">
                                 <label class="form-label small">Notes</label>
                                 <InputTextArea class="form-control form-control-sm" rows="2" @bind-Value="_newRestore.Notes" />
                             </div>
+                            @if (!string.IsNullOrEmpty(_restoreFormError))
+                            {
+                                <div class="text-danger small mb-2">@_restoreFormError</div>
+                            }
                             <button type="submit" class="btn btn-primary btn-sm">Log restore</button>
                         </EditForm>
+
+                        <div class="mt-4" style="border-top:1px solid var(--dbt-line);padding-top:16px;">
+                            <h2 class="h6 text-muted text-uppercase mb-2">Correct a restore entry</h2>
+                            <p class="text-muted small mb-2">The original entry is preserved — a correction is recorded alongside it, not overwritten.</p>
+                            <div class="mb-2">
+                                <select class="form-select form-select-sm" @bind="_correctingRestoreId" @bind:after="OnRestoreCorrectionTargetChanged">
+                                    <option value="0">Select an entry…</option>
+                                    @foreach (var r in instance.RestoreEvents.OrderByDescending(r => r.TimestampUtc))
+                                    {
+                                        <option value="@r.Id">@r.TimestampUtc.ToLocalTime().ToString("MMM d, h:mm tt") — @r.Outcome</option>
+                                    }
+                                </select>
+                            </div>
+                            @if (_correctingRestoreId != 0)
+                            {
+                                <div class="mb-2">
+                                    <label class="form-label small">New outcome</label>
+                                    <InputSelect class="form-select form-select-sm" @bind-Value="_correctedRestoreOutcome">
+                                        @foreach (var o in Enum.GetValues<RestoreOutcome>())
+                                        {
+                                            <option value="@o">@o</option>
+                                        }
+                                    </InputSelect>
+                                </div>
+                                <div class="mb-2">
+                                    <label class="form-label small">New notes</label>
+                                    <InputTextArea class="form-control form-control-sm" rows="2" @bind-Value="_correctedRestoreNotes" />
+                                </div>
+                                <div class="mb-2">
+                                    <label class="form-label small">Reason (required)</label>
+                                    <input class="form-control form-control-sm" @bind="_correctionReasonRestore" @bind:event="oninput" />
+                                </div>
+                                <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="SubmitRestoreCorrection" disabled="@string.IsNullOrWhiteSpace(_correctionReasonRestore)">Save correction</button>
+                            }
+                        </div>
                     </div>
                 </div>
             </Authorized>
@@ -463,16 +594,29 @@ else
                 {
                     <table class="table table-sm mb-0 dbt-table">
                         <thead>
-                            <tr><th>When</th><th>By</th><th>Reason</th><th>Outcome</th></tr>
+                            <tr><th>When</th><th>By</th><th>Entered by</th><th>Reason</th><th>Outcome</th><th>Linked evidence</th><th>Notes</th></tr>
                         </thead>
                         <tbody>
                             @foreach (var r in RestoreHistoryPage())
                             {
+                                var effectiveOutcome = EvidenceCorrectionResolver.EffectiveOutcome(r, _restoreCorrections);
+                                var effectiveNotes = EvidenceCorrectionResolver.EffectiveNotes(r, _restoreCorrections);
+                                var wasCorrected = _restoreCorrections.Any(c => c.RestoreEventId == r.Id);
+                                var linked = instance.BackupRecords.FirstOrDefault(b => b.Id == r.LinkedBackupRecordId);
                                 <tr>
                                     <td class="small">@r.TimestampUtc.ToLocalTime().ToString("MMM d, h:mm tt")</td>
                                     <td class="small">@r.PerformedBy</td>
+                                    <td class="small text-muted">@(string.IsNullOrWhiteSpace(r.RecordedByUserName) ? "—" : r.RecordedByUserName)</td>
                                     <td class="small">@r.Reason</td>
-                                    <td><span class="badge-health dot @(r.Outcome == RestoreOutcome.Success ? "OnTrack" : "Failed")">@r.Outcome</span></td>
+                                    <td>
+                                        <span class="badge-health dot @(effectiveOutcome == RestoreOutcome.Success ? "OnTrack" : "Failed")">@effectiveOutcome</span>
+                                        @if (wasCorrected)
+                                        {
+                                            <span class="text-muted small" title="This entry has one or more append-only corrections.">(corrected)</span>
+                                        }
+                                    </td>
+                                    <td class="small text-muted">@(linked is null ? "Unknown" : linked.TimestampUtc.ToLocalTime().ToString("MMM d, h:mm tt"))</td>
+                                    <td class="small text-muted">@effectiveNotes</td>
                                 </tr>
                             }
                         </tbody>
@@ -558,7 +702,22 @@ else
     private InstanceOverview? _overview;
     private BackupRecord _newRecord = new();
     private RestoreEvent _newRestore = new();
+    private DateTime _newRecordOccurredLocal = DateTime.Now;
+    private DateTime _newRestoreOccurredLocal = DateTime.Now;
+    private int _newRestoreLinkedBackupId;
+    private string? _backupFormError;
+    private string? _restoreFormError;
     private List<InstanceChangeLog> _changeLog = new();
+    private List<BackupRecordCorrection> _backupCorrections = new();
+    private List<RestoreEventCorrection> _restoreCorrections = new();
+    private int _correctingBackupId;
+    private BackupStatus _correctedBackupStatus;
+    private string _correctedBackupNotes = "";
+    private string _correctionReason = "";
+    private int _correctingRestoreId;
+    private RestoreOutcome _correctedRestoreOutcome;
+    private string _correctedRestoreNotes = "";
+    private string _correctionReasonRestore = "";
     private string _maintenanceReason = "";
     private bool _scanning;
     private bool _testingConnection;
@@ -570,6 +729,8 @@ else
     private string _ackNote = "";
     private string _ackTicket = "";
     private string? _userDisplayName;
+    private RestoreTestRecencyResult? _restoreTestRecency;
+    private int _effectiveRestoreTestIntervalDays;
 
     // History tables are paged/filtered client-side over the already-loaded per-instance
     // collection (U06) — a single instance's own history is bounded in a way the cross-instance
@@ -591,14 +752,30 @@ else
     private async Task Load()
     {
         _overview = await OverviewService.GetByIdAsync(Id);
-        _newRecord = new BackupRecord { TimestampUtc = DateTime.UtcNow };
-        _newRestore = new RestoreEvent { TimestampUtc = DateTime.UtcNow };
+        _newRecord = new BackupRecord();
+        _newRestore = new RestoreEvent();
+        _newRecordOccurredLocal = DateTime.Now;
+        _newRestoreOccurredLocal = DateTime.Now;
+        _newRestoreLinkedBackupId = 0;
+        _backupFormError = null;
+        _restoreFormError = null;
+        _correctingBackupId = 0;
+        _correctingRestoreId = 0;
+        _correctionReason = "";
+        _correctionReasonRestore = "";
+
         _changeLog = await Db.InstanceChangeLogs.AsNoTracking()
             .Where(c => c.DatabaseInstanceId == Id)
             .OrderByDescending(c => c.ChangedAtUtc)
             .ToListAsync();
         _openIncident = await Incidents.GetOpenAsync(Id);
         _assigneeName = _openIncident?.AssigneeName ?? "";
+        _backupCorrections = await Db.BackupRecordCorrections.AsNoTracking()
+            .Where(c => c.BackupRecord!.DatabaseInstanceId == Id)
+            .ToListAsync();
+        _restoreCorrections = await Db.RestoreEventCorrections.AsNoTracking()
+            .Where(c => c.RestoreEvent!.DatabaseInstanceId == Id)
+            .ToListAsync();
 
         if (_overview is not null)
         {
@@ -611,6 +788,17 @@ else
                 scanIntervalMinutes: Configuration.GetValue("BackupScan:IntervalMinutes", 15),
                 staleAfterMultiplier: Configuration.GetValue("BackupScan:StaleAfterMultiplier", 3),
                 nowUtc: now);
+
+            _effectiveRestoreTestIntervalDays = _overview.Instance.RestoreTestIntervalDaysOverride
+                ?? Configuration.GetValue("RestoreTest:IntervalDays", 90);
+            var lastSuccessfulRestore = _overview.Instance.RestoreEvents
+                .Where(r => r.Outcome == RestoreOutcome.Success)
+                .OrderByDescending(r => r.TimestampUtc)
+                .Select(r => r.TimestampUtc)
+                .FirstOrDefault();
+            _restoreTestRecency = RestoreTestRecencyCalculator.Compute(
+                _overview.Instance.RestoreEvents.Any(r => r.Outcome == RestoreOutcome.Success) ? lastSuccessfulRestore : null,
+                _effectiveRestoreTestIntervalDays, now);
         }
     }
 
@@ -664,10 +852,22 @@ else
         await Load();
     }
 
+    private async Task<string?> CurrentUserNameAsync() =>
+        (await AuthProvider.GetAuthenticationStateAsync()).User.Identity?.Name ?? "unknown";
+
     private async Task LogBackup()
     {
+        var occurredUtc = _newRecordOccurredLocal.ToUniversalTime();
+        if (occurredUtc > DateTime.UtcNow.AddMinutes(1))
+        {
+            _backupFormError = "Occurrence time can't be in the future.";
+            return;
+        }
+
+        _backupFormError = null;
         _newRecord.DatabaseInstanceId = Id;
-        _newRecord.TimestampUtc = DateTime.UtcNow;
+        _newRecord.TimestampUtc = occurredUtc;
+        _newRecord.RecordedByUserName = await CurrentUserNameAsync() ?? "unknown";
         Db.BackupRecords.Add(_newRecord);
         await Db.SaveChangesAsync();
         Db.ChangeTracker.Clear();
@@ -677,12 +877,110 @@ else
 
     private async Task LogRestore()
     {
+        var occurredUtc = _newRestoreOccurredLocal.ToUniversalTime();
+        if (occurredUtc > DateTime.UtcNow.AddMinutes(1))
+        {
+            _restoreFormError = "Occurrence time can't be in the future.";
+            return;
+        }
+
+        _restoreFormError = null;
         _newRestore.DatabaseInstanceId = Id;
-        _newRestore.TimestampUtc = DateTime.UtcNow;
+        _newRestore.TimestampUtc = occurredUtc;
+        _newRestore.LinkedBackupRecordId = _newRestoreLinkedBackupId == 0 ? null : _newRestoreLinkedBackupId;
+        _newRestore.RecordedByUserName = await CurrentUserNameAsync() ?? "unknown";
         Db.RestoreEvents.Add(_newRestore);
         await Db.SaveChangesAsync();
         Db.ChangeTracker.Clear();
         Toasts.Success($"Restore logged ({_newRestore.Outcome}).");
+        await Load();
+    }
+
+    private void OnBackupCorrectionTargetChanged()
+    {
+        if (_correctingBackupId == 0 || _overview is null)
+        {
+            return;
+        }
+
+        var original = _overview.Instance.BackupRecords.FirstOrDefault(r => r.Id == _correctingBackupId);
+        if (original is null)
+        {
+            return;
+        }
+
+        _correctedBackupStatus = EvidenceCorrectionResolver.EffectiveStatus(original, _backupCorrections);
+        _correctedBackupNotes = EvidenceCorrectionResolver.EffectiveNotes(original, _backupCorrections);
+    }
+
+    private void OnRestoreCorrectionTargetChanged()
+    {
+        if (_correctingRestoreId == 0 || _overview is null)
+        {
+            return;
+        }
+
+        var original = _overview.Instance.RestoreEvents.FirstOrDefault(r => r.Id == _correctingRestoreId);
+        if (original is null)
+        {
+            return;
+        }
+
+        _correctedRestoreOutcome = EvidenceCorrectionResolver.EffectiveOutcome(original, _restoreCorrections);
+        _correctedRestoreNotes = EvidenceCorrectionResolver.EffectiveNotes(original, _restoreCorrections);
+    }
+
+    private async Task SubmitBackupCorrection()
+    {
+        if (_correctingBackupId == 0 || string.IsNullOrWhiteSpace(_correctionReason))
+        {
+            return;
+        }
+
+        var original = _overview!.Instance.BackupRecords.First(r => r.Id == _correctingBackupId);
+        var currentStatus = EvidenceCorrectionResolver.EffectiveStatus(original, _backupCorrections);
+        var currentNotes = EvidenceCorrectionResolver.EffectiveNotes(original, _backupCorrections);
+
+        Db.BackupRecordCorrections.Add(new BackupRecordCorrection
+        {
+            BackupRecordId = _correctingBackupId,
+            CorrectedByUserName = await CurrentUserNameAsync() ?? "unknown",
+            Reason = _correctionReason,
+            PreviousStatus = currentStatus,
+            NewStatus = _correctedBackupStatus,
+            PreviousNotes = currentNotes,
+            NewNotes = _correctedBackupNotes
+        });
+        await Db.SaveChangesAsync();
+        Db.ChangeTracker.Clear();
+        Toasts.Success("Correction recorded — the original entry is preserved.");
+        await Load();
+    }
+
+    private async Task SubmitRestoreCorrection()
+    {
+        if (_correctingRestoreId == 0 || string.IsNullOrWhiteSpace(_correctionReasonRestore))
+        {
+            return;
+        }
+
+        var original = _overview!.Instance.RestoreEvents.First(r => r.Id == _correctingRestoreId);
+        var currentOutcome = EvidenceCorrectionResolver.EffectiveOutcome(original, _restoreCorrections);
+        var currentNotes = EvidenceCorrectionResolver.EffectiveNotes(original, _restoreCorrections);
+
+        Db.RestoreEventCorrections.Add(new RestoreEventCorrection
+        {
+            RestoreEventId = _correctingRestoreId,
+            CorrectedByUserName = await CurrentUserNameAsync() ?? "unknown",
+            Reason = _correctionReasonRestore,
+            PreviousOutcome = currentOutcome,
+            NewOutcome = _correctedRestoreOutcome,
+            PreviousNotes = currentNotes,
+            NewNotes = _correctedRestoreNotes
+        });
+        await Db.SaveChangesAsync();
+        Db.ChangeTracker.Clear();
+        Toasts.Success("Correction recorded — the original entry is preserved.");
         await Load();
     }
 
@@ -812,4 +1110,18 @@ else
 
     private static string FormatDuration(TimeSpan span) =>
         span.TotalDays >= 1 ? $"{span.TotalDays:N1} days" : $"{span.TotalHours:N1} hours";
+
+    private static string RecencyClass(RestoreTestRecency recency) => recency switch
+    {
+        RestoreTestRecency.Current => "OnTrack",
+        RestoreTestRecency.Overdue => "Overdue",
+        _ => "NeverBackedUp"
+    };
+
+    private static string RecencyLabel(RestoreTestRecency recency) => recency switch
+    {
+        RestoreTestRecency.Current => "Current",
+        RestoreTestRecency.Overdue => "Expired",
+        _ => "Never tested"
+    };
 }

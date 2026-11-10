@@ -1,0 +1,131 @@
+@inject ComplianceReportService ReportService
+@inject ToastService Toasts
+
+<button class="btn @ButtonClass" @onclick="ToggleExpanded" disabled="@_sending">
+    <i class="bi bi-envelope"></i> @(_sending ? "Sending…" : ButtonText)
+</button>
+
+@if (_expanded)
+{
+    <div class="dbt-card mt-2" style="max-width:520px;">
+        @if (FilteredScope is not null)
+        {
+            <div class="mb-3">
+                <label class="form-check d-flex align-items-center gap-2 mb-1">
+                    <input type="radio" class="form-check-input" checked="@(_useFiltered == false)" @onchange="() => SelectScope(false)" />
+                    <span class="small">Full inventory (@FullScopeCount instance(s))</span>
+                </label>
+                <label class="form-check d-flex align-items-center gap-2">
+                    <input type="radio" class="form-check-input" checked="@(_useFiltered == true)" @onchange="() => SelectScope(true)" />
+                    <span class="small">Current filtered view — @FilteredScope.Description (@FilteredScope.InstanceIds.Count instance(s))</span>
+                </label>
+            </div>
+        }
+        else
+        {
+            <p class="small text-muted mb-2">Scope: full inventory (@FullScopeCount instance(s)).</p>
+        }
+
+        @if (_preview is not null)
+        {
+            <dl class="row small mb-2">
+                <dt class="col-5">Generation time</dt>
+                <dd class="col-7">@_preview.GenerationTimeUtc.ToLocalTime().ToString("MMM d, yyyy h:mm tt")</dd>
+                <dt class="col-5">Recipients</dt>
+                <dd class="col-7">
+                    @if (_preview.Recipients.Count == 0)
+                    {
+                        <span class="text-danger">None configured (Reports:DistributionList)</span>
+                    }
+                    else
+                    {
+                        @string.Join(", ", _preview.Recipients)
+                    }
+                </dd>
+                <dt class="col-5">Rows in report</dt>
+                <dd class="col-7">@_preview.RowCount</dd>
+            </dl>
+        }
+
+        <div class="d-flex gap-2">
+            <button class="btn btn-primary btn-sm" @onclick="ConfirmSend" disabled="@(_sending || _preview is null || _preview.Recipients.Count == 0)">
+                Confirm &amp; send
+            </button>
+            <button class="btn btn-outline-secondary btn-sm" @onclick="Cancel" disabled="@_sending">Cancel</button>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public int FullScopeCount { get; set; }
+    [Parameter] public ReportScope? FilteredScope { get; set; }
+    [Parameter] public string ButtonText { get; set; } = "Send now";
+    [Parameter] public string ButtonClass { get; set; } = "btn-outline-secondary";
+
+    private bool _expanded;
+    private bool? _useFiltered;
+    private bool _sending;
+    private ReportPreview? _preview;
+
+    private ReportScope CurrentScope =>
+        _useFiltered == true && FilteredScope is not null ? FilteredScope : ReportScope.Full();
+
+    private async Task ToggleExpanded()
+    {
+        _expanded = !_expanded;
+        if (_expanded)
+        {
+            _useFiltered = false;
+            await RefreshPreview();
+        }
+    }
+
+    private async Task SelectScope(bool useFiltered)
+    {
+        _useFiltered = useFiltered;
+        await RefreshPreview();
+    }
+
+    private async Task RefreshPreview()
+    {
+        _preview = await ReportService.BuildPreviewAsync(CurrentScope);
+    }
+
+    private void Cancel()
+    {
+        _expanded = false;
+        _preview = null;
+    }
+
+    private async Task ConfirmSend()
+    {
+        _sending = true;
+        var result = await ReportService.SendAsync(CurrentScope);
+        _sending = false;
+        _expanded = false;
+        _preview = null;
+
+        if (result.Outcomes.Count == 0)
+        {
+            Toasts.Error("No distribution list configured (Reports:DistributionList).");
+        }
+        else if (result.Disabled)
+        {
+            Toasts.Error("Not sent — no email provider configured (Email:Provider).");
+        }
+        else if (result.FailedCount == 0)
+        {
+            Toasts.Success(result.AcceptedCount == 1
+                ? "Report accepted for 1 recipient."
+                : $"Report accepted for {result.AcceptedCount} recipient(s).");
+        }
+        else if (result.AcceptedCount == 0)
+        {
+            Toasts.Error($"Report failed to send to all {result.FailedCount} recipient(s) — see server log.");
+        }
+        else
+        {
+            Toasts.Error($"Partial send: {result.AcceptedCount} accepted, {result.FailedCount} failed — see server log.");
+        }
+    }
+}

@@ -99,13 +99,13 @@ public class AlertCheckHostedService(
 
                 if (shouldNotify)
                 {
-                    await RaiseAlertAsync(db, instance, health, now, notifications, subscriptionService, userManager, emailSender, webhookSender, ct);
+                    await RaiseAlertAsync(db, instance, health, now, notifications, subscriptionService, userManager, emailSender, webhookSender, logger, ct);
                 }
                 else if (IncidentEscalationEvaluator.ShouldEscalate(incident, now, escalationMinutes))
                 {
                     incident.EscalationLevel++;
                     incident.LastEscalatedAtUtc = now;
-                    await RaiseAlertAsync(db, instance, health, now, notifications, subscriptionService, userManager, emailSender, webhookSender, ct,
+                    await RaiseAlertAsync(db, instance, health, now, notifications, subscriptionService, userManager, emailSender, webhookSender, logger, ct,
                         escalationLevel: incident.EscalationLevel);
                 }
             }
@@ -138,6 +138,7 @@ public class AlertCheckHostedService(
         UserManager<ApplicationUser> userManager,
         IEmailSender emailSender,
         IWebhookSender webhookSender,
+        ILogger<AlertCheckHostedService> logger,
         CancellationToken ct,
         int? escalationLevel = null)
     {
@@ -167,11 +168,16 @@ public class AlertCheckHostedService(
 
         foreach (var email in recipientEmails)
         {
-            await emailSender.SendAsync(
+            var emailResult = await emailSender.SendAsync(
                 email,
                 $"DBTracker alert: {instance.Name} is {DescribeHealth(health)}",
                 $"{message}\n\nApplication: {instance.Application}\nCompany: {instance.Company}\n\nOpen DBTracker to view backup history and log a fix.",
                 ct);
+
+            if (emailResult.Outcome == Core.Enums.EmailSendOutcome.Failed)
+            {
+                logger.LogWarning("Alert email to {Email} for {Instance} failed: {Detail}", email, instance.Name, emailResult.Detail);
+            }
         }
 
         await webhookSender.SendAsync(WebhookPayloadBuilder.BuildAlertPayload(instance, health, now), ct);
