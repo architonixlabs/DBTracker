@@ -127,6 +127,102 @@ code, .mono {
     }
 }
 
+/* ---------- U20: visible keyboard focus ---------- */
+/* :focus-visible rather than :focus so a mouse click doesn't draw the ring, only keyboard/AT focus
+   does — mouse users keep the quiet console look, keyboard users always get an unambiguous target. */
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[tabindex]:focus-visible,
+.th-sort-btn:focus-visible,
+.stat-cell:focus-visible,
+.notif-item:focus-visible {
+    outline: 2px solid var(--dbt-accent);
+    outline-offset: 2px;
+    border-radius: 1px;
+}
+
+/* A scrollable table region (U20) also needs a visible ring when it's the thing with focus. */
+.dbt-table[tabindex]:focus-visible {
+    outline: 2px solid var(--dbt-accent);
+    outline-offset: -2px;
+}
+
+/* Column-sort header rendered as a real <button> (keyboard-operable by default) instead of a
+   div/th with role="button" — styled to look like the plain text label it replaced. */
+.th-sort-btn {
+    background: none;
+    border: none;
+    padding: 0;
+    margin: 0;
+    font: inherit;
+    color: inherit;
+    text-transform: inherit;
+    letter-spacing: inherit;
+    cursor: pointer;
+    width: 100%;
+    text-align: left;
+}
+
+.instance-row-link {
+    color: var(--dbt-sidebar-fg-active);
+}
+
+.instance-row-link:hover {
+    color: var(--dbt-accent);
+}
+
+/* ---------- U20: live/status announcements for screen readers ---------- */
+/* Visually identical to the existing small/muted status text already in use (Dashboard/Instances
+   "Updated h:mm:ss" line, toasts) — role="status" + aria-live="polite" just also announces the
+   text to assistive tech when it changes, without any visual change or motion. */
+[role="status"], [aria-live] {
+    min-height: 1em;
+}
+
+/* ---------- U20: touch target sizing at narrow widths ---------- */
+@media (max-width: 480px) {
+    .btn, .form-check-input, .notif-bell-btn, .th-sort-btn, .stat-cell {
+        min-height: 44px;
+    }
+    .btn {
+        padding-top: 10px;
+        padding-bottom: 10px;
+    }
+}
+
+/* ---------- U20: 360px viewport — primary actions stay reachable, no horizontal page overflow ---------- */
+@media (max-width: 480px) {
+    .app-main {
+        padding: 20px 16px 40px;
+    }
+    .app-topbar {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    .app-topbar > div:last-child {
+        width: 100%;
+    }
+    .filter-bar {
+        gap: 12px;
+    }
+    .filter-bar .form-select,
+    .filter-bar .form-control {
+        max-width: 100% !important;
+        width: 100%;
+    }
+    .stat-strip {
+        flex-direction: column;
+    }
+    .stat-cell {
+        border-right: none;
+        border-bottom: 1px solid var(--dbt-line);
+        padding: 14px 0;
+    }
+}
+
 /* ---------- App shell ---------- */
 .app-shell {
     display: flex;

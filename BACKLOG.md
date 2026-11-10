@@ -495,6 +495,58 @@ authenticated role already, same as the rest of the app, so no separate "my apps
   (`Epic16ArchiveAndDiagnosticsTests`, `Epic16AccountLifecycleTests`, `Epic16ImportAndBulkEditTests`);
   one pre-existing E2E test's CSV-import assertions were updated for the new create/update/skip/
   ambiguous preview wording. Full suite: 267/267 (213 unit + 54 E2E).
+- 2026-11-10 — Built Epic 17 (U20-U22), the last epic of the usability roadmap. **U20** — within the
+  existing dark ops-console theme (no redesign): instance rows gained a real `<a>` link alongside the
+  existing row-click (semantic navigation, not mouse-only); column-sort `<th role="button">` cells
+  became real `<button>` elements (keyboard-operable by default, with `aria-label`s); the notification
+  bell and the Instances "Views" dropdown gained `role="menu"`, Escape-to-close, and focus returned to
+  their toggle button on close; every filter-bar input got a real (visually hidden) `<label>`; toasts
+  gained `role="status"`/`role="alert"` + `aria-live` so save/error feedback is announced, not just
+  shown; `:focus-visible` outlines, a scrollable `role="region"` wrapper on dense tables, and a 480px
+  breakpoint (stacked topbar/filters, 44px touch targets) cover the 360px/200%-zoom and touch-target
+  acceptance criteria without touching the reduced-motion support or status-text conventions already
+  in place. **U21** — a `Team`/`TeamMembership` model (explicit user-to-team membership) and a
+  `BackupContactName/Email/Phone` pair on `DatabaseInstance` extend ownership beyond one contact email
+  while leaving the existing `ContactName/Email/Phone` fields untouched; `OwnershipStatusClassifier`
+  (Missing/Unconfirmed/Confirmed) and a confirm-ownership checkbox on the editor surface
+  missing/unconfirmed owners distinctly; `Region`/`Cluster`/`ReplicaSet` structured fields sit
+  alongside the existing free-text `Tags` as new Instances-list facets; a reusable, version-bumping
+  `BackupPolicy` entity can be applied to selected instances via a new `/instances/apply-policy` page
+  that previews the exact before/after diff first (mirroring U17's bulk-edit preview pattern) and only
+  writes on explicit confirmation; a `ContactCorrectionRequest` flow lets any authenticated viewer
+  (including a Viewer-role Dev persona) flag wrong contact info for an authorized (`CanEditPolicy`)
+  reviewer to approve/reject, applying only the proposed fields that were actually filled in. A new
+  `/ownership` hub (Teams / Backup policies / Correction requests) and `InstanceListFilter.IsMine`
+  (email OR backup-email OR team membership) tie it together; `NotificationSubscription` gained a
+  `Team` scope on the same narrowing-only basis as the existing `Company`/`Instance` scopes. Every
+  addition is explicitly documented as personalization, not row-level security, matching how U07
+  already phrased it. **U22** — a new "Trends" tab on `/reports` compares two user-chosen periods
+  using the nearest U10 `ComplianceSnapshot` at or before each period's end for health/restore-tested
+  coverage (a period with none is flagged "missing evidence" rather than silently computed from
+  today's live inventory), plus raw dated `BackupRecord`/`RestoreEvent`/`Incident` rows for repeated
+  failures, backup duration/size, restore-test counts and outstanding-risk age (via `Incident.
+  OpenedAtUtc`, a real persisted timestamp, not a recomputed status) — all built by a new pure
+  `TrendsReportBuilder`. Every period shows its inventory denominator explicitly, at-risk/repeated-
+  failure/outstanding-risk rows are drillable into their own accessible tables (U20's `role="region"`
+  pattern), and the tab states plainly that retention-days values aren't evidence files still exist on
+  disk (that's D17, future DBA-lifecycle scope). Found and fixed one real recurring-class bug while
+  building this, the same one called out in the Epic 15 and Epic 16 entries above: the new "Create
+  team"/"Create policy" inputs and the contact-correction form's proposed-field inputs used a plain
+  `@bind` (blur-triggered), so filling and clicking at Playwright speed left their buttons stuck
+  disabled — fixed with `@bind:event="oninput"` everywhere a button's enabled state reads one of
+  these fields. Also hardened two E2E-only issues that aren't app bugs: a handful of new tests
+  navigated by clicking a table row, which occasionally hung on Playwright's implicit post-click
+  navigation wait under Blazor's enhanced (non-full-page-load) navigation — switched to navigating via
+  the new semantic `a.instance-row-link`'s own `href`; and a fast fill+click on "Create team" could
+  register two toast events from pure test-automation timing (never reproduced from one real click) —
+  toast assertions now target `.First`. 32 new unit tests (`OwnershipStatusClassifierTests`,
+  `BackupPolicyApplyPreviewBuilderTests`, `ContactCorrectionApplierTests`, `TrendsReportBuilderTests`,
+  plus additions to `InstanceListFilterTests`/`NotificationSubscriptionMatcherTests`) and 10 new E2E
+  tests (`Epic17AccessibilityTests`, `Epic17OwnershipTests`, `Epic17TrendsTests`). One new EF migration
+  (`AddUsabilityEpic17`) for `Team`/`TeamMembership`/`BackupPolicy`/`ContactCorrectionRequest` plus the
+  new `DatabaseInstance`/`NotificationSubscription`/`Notification` columns. Full suite: 308/308
+  (244 unit + 64 E2E). This closes out the usability roadmap (Epics 13-17); the DBA lifecycle roadmap
+  (Epics 18-22) remains proposed and unimplemented.
 
 ### Epic 12 — Handiness features (user-prioritized)
 *Every item below was proposed as a shortlist and picked by the user, not decided unilaterally.*
@@ -712,7 +764,7 @@ The U identifiers are canonical: references from existing epics describe the sam
 
 ### Epic 17 — Inclusive workflows and organizational context
 
-- [ ] **U20 · P1 · M — Accessible mobile workflows within the current theme.**
+- [x] **U20 · P1 · M — Accessible mobile workflows within the current theme.**
   Alex/Noor need equivalent task access; Priya wants the familiar ops console preserved.
   **Acceptance:** semantic instance/report links, named form/filter inputs, keyboard sorting and
   visible focus; dropdown Escape/focus handling; announced save/error/refresh feedback. At 360px
@@ -721,7 +773,7 @@ The U identifiers are canonical: references from existing epics describe the sam
   reduced-motion support and status text. Verify core tasks by keyboard, screen reader and mobile
   viewport; no theme replacement is required.
 
-- [ ] **U21 · P2 · L — Team ownership, structured facets and reusable policies.**
+- [x] **U21 · P2 · L — Team ownership, structured facets and reusable policies.**
   Refines Epic 7's open environment-tag item. Marcus needs ownership beyond one email; Dev wants
   a useful personal view and a safe way to correct contacts; Priya wants fewer repeated settings.
   **Acceptance:** owner team, primary/backup contacts and explicit user/team memberships power
@@ -731,7 +783,7 @@ The U identifiers are canonical: references from existing epics describe the sam
   review. Preserve existing contact data on migration. Personalization does not establish row-level
   security; organization isolation requires a separately designed authorization feature.
 
-- [ ] **U22 · P3 · L — Trends and review-ready risk summaries.**
+- [x] **U22 · P3 · L — Trends and review-ready risk summaries.**
   Marcus wants to see whether risk improves; Priya wants repeated failures and duration growth;
   Angela wants clear denominators and evidence limitations.
   **Acceptance:** compare periods for health coverage, outstanding risk age, repeated failures,

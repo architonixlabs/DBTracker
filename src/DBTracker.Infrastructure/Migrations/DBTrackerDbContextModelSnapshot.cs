@@ -86,6 +86,53 @@ namespace DBTracker.Infrastructure.Migrations
                     b.ToTable("AuditEvents");
                 });
 
+            modelBuilder.Entity("DBTracker.Core.Entities.BackupPolicy", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("ExpectedBackupIntervalHours")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<int?>("RestoreTestIntervalDays")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("RetentionPolicyDays")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("UpdatedBy")
+                        .IsRequired()
+                        .HasMaxLength(320)
+                        .HasColumnType("nvarchar(320)");
+
+                    b.Property<int>("Version")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Name")
+                        .IsUnique();
+
+                    b.ToTable("BackupPolicies");
+                });
+
             modelBuilder.Entity("DBTracker.Core.Entities.BackupRecord", b =>
                 {
                     b.Property<int>("Id")
@@ -240,6 +287,93 @@ namespace DBTracker.Infrastructure.Migrations
                     b.ToTable("ComplianceSnapshots");
                 });
 
+            modelBuilder.Entity("DBTracker.Core.Entities.ContactCorrectionRequest", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("DatabaseInstanceId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Note")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<string>("ProposedBackupContactEmail")
+                        .IsRequired()
+                        .HasMaxLength(320)
+                        .HasColumnType("nvarchar(320)");
+
+                    b.Property<string>("ProposedBackupContactName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("ProposedBackupContactPhone")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<string>("ProposedContactEmail")
+                        .IsRequired()
+                        .HasMaxLength(320)
+                        .HasColumnType("nvarchar(320)");
+
+                    b.Property<string>("ProposedContactName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("ProposedContactPhone")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<DateTime>("RequestedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("RequestedByName")
+                        .IsRequired()
+                        .HasMaxLength(320)
+                        .HasColumnType("nvarchar(320)");
+
+                    b.Property<string>("RequestedByUserId")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<string>("ReviewNote")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<DateTime?>("ReviewedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("ReviewedByName")
+                        .IsRequired()
+                        .HasMaxLength(320)
+                        .HasColumnType("nvarchar(320)");
+
+                    b.Property<string>("ReviewedByUserId")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DatabaseInstanceId", "Status");
+
+                    b.ToTable("ContactCorrectionRequests");
+                });
+
             modelBuilder.Entity("DBTracker.Core.Entities.DatabaseInstance", b =>
                 {
                     b.Property<int>("Id")
@@ -252,6 +386,12 @@ namespace DBTracker.Infrastructure.Migrations
                         .IsRequired()
                         .HasMaxLength(200)
                         .HasColumnType("nvarchar(200)");
+
+                    b.Property<int?>("AppliedPolicyId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("AppliedPolicyVersion")
+                        .HasColumnType("int");
 
                     b.Property<string>("ArchiveReason")
                         .IsRequired()
@@ -266,6 +406,21 @@ namespace DBTracker.Infrastructure.Migrations
                         .HasMaxLength(320)
                         .HasColumnType("nvarchar(320)");
 
+                    b.Property<string>("BackupContactEmail")
+                        .IsRequired()
+                        .HasMaxLength(320)
+                        .HasColumnType("nvarchar(320)");
+
+                    b.Property<string>("BackupContactName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("BackupContactPhone")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
                     b.Property<string>("BackupFileLocation")
                         .IsRequired()
                         .HasMaxLength(500)
@@ -275,6 +430,11 @@ namespace DBTracker.Infrastructure.Migrations
                         .IsRequired()
                         .HasMaxLength(300)
                         .HasColumnType("nvarchar(300)");
+
+                    b.Property<string>("Cluster")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
 
                     b.Property<string>("Company")
                         .IsRequired()
@@ -364,6 +524,27 @@ namespace DBTracker.Infrastructure.Migrations
                         .HasMaxLength(2000)
                         .HasColumnType("nvarchar(2000)");
 
+                    b.Property<int?>("OwnerTeamId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("OwnershipConfirmedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("OwnershipConfirmedBy")
+                        .IsRequired()
+                        .HasMaxLength(320)
+                        .HasColumnType("nvarchar(320)");
+
+                    b.Property<string>("Region")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("ReplicaSet")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
                     b.Property<int?>("RestoreTestIntervalDaysOverride")
                         .HasColumnType("int");
 
@@ -406,11 +587,19 @@ namespace DBTracker.Infrastructure.Migrations
 
                     b.HasIndex("Application");
 
+                    b.HasIndex("AppliedPolicyId");
+
+                    b.HasIndex("Cluster");
+
                     b.HasIndex("Company");
 
                     b.HasIndex("Engine");
 
                     b.HasIndex("IsArchived");
+
+                    b.HasIndex("OwnerTeamId");
+
+                    b.HasIndex("Region");
 
                     b.ToTable("DatabaseInstances");
                 });
@@ -583,6 +772,9 @@ namespace DBTracker.Infrastructure.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
 
+                    b.Property<int?>("OwnerTeamId")
+                        .HasColumnType("int");
+
                     b.Property<int>("Severity")
                         .HasColumnType("int");
 
@@ -593,6 +785,8 @@ namespace DBTracker.Infrastructure.Migrations
                     b.HasIndex("DatabaseInstanceId");
 
                     b.HasIndex("IsRead");
+
+                    b.HasIndex("OwnerTeamId");
 
                     b.ToTable("Notifications");
                 });
@@ -651,6 +845,9 @@ namespace DBTracker.Infrastructure.Migrations
                     b.Property<int>("Scope")
                         .HasColumnType("int");
 
+                    b.Property<int?>("TeamId")
+                        .HasColumnType("int");
+
                     b.Property<string>("UserId")
                         .IsRequired()
                         .HasMaxLength(450)
@@ -659,6 +856,8 @@ namespace DBTracker.Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("DatabaseInstanceId");
+
+                    b.HasIndex("TeamId");
 
                     b.HasIndex("UserId");
 
@@ -808,6 +1007,79 @@ namespace DBTracker.Infrastructure.Migrations
                         .IsUnique();
 
                     b.ToTable("SavedViews");
+                });
+
+            modelBuilder.Entity("DBTracker.Core.Entities.Team", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("BackupContactEmail")
+                        .IsRequired()
+                        .HasMaxLength(320)
+                        .HasColumnType("nvarchar(320)");
+
+                    b.Property<string>("BackupContactName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("PrimaryContactEmail")
+                        .IsRequired()
+                        .HasMaxLength(320)
+                        .HasColumnType("nvarchar(320)");
+
+                    b.Property<string>("PrimaryContactName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Name")
+                        .IsUnique();
+
+                    b.ToTable("Teams");
+                });
+
+            modelBuilder.Entity("DBTracker.Core.Entities.TeamMembership", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("TeamId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId");
+
+                    b.HasIndex("TeamId", "UserId")
+                        .IsUnique();
+
+                    b.ToTable("TeamMemberships");
                 });
 
             modelBuilder.Entity("DBTracker.Infrastructure.Identity.ApplicationUser", b =>
@@ -1042,6 +1314,34 @@ namespace DBTracker.Infrastructure.Migrations
                     b.Navigation("BackupRecord");
                 });
 
+            modelBuilder.Entity("DBTracker.Core.Entities.ContactCorrectionRequest", b =>
+                {
+                    b.HasOne("DBTracker.Core.Entities.DatabaseInstance", "DatabaseInstance")
+                        .WithMany()
+                        .HasForeignKey("DatabaseInstanceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("DatabaseInstance");
+                });
+
+            modelBuilder.Entity("DBTracker.Core.Entities.DatabaseInstance", b =>
+                {
+                    b.HasOne("DBTracker.Core.Entities.BackupPolicy", "AppliedPolicy")
+                        .WithMany()
+                        .HasForeignKey("AppliedPolicyId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("DBTracker.Core.Entities.Team", "OwnerTeam")
+                        .WithMany()
+                        .HasForeignKey("OwnerTeamId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("AppliedPolicy");
+
+                    b.Navigation("OwnerTeam");
+                });
+
             modelBuilder.Entity("DBTracker.Core.Entities.Incident", b =>
                 {
                     b.HasOne("DBTracker.Core.Entities.DatabaseInstance", "DatabaseInstance")
@@ -1092,7 +1392,14 @@ namespace DBTracker.Infrastructure.Migrations
                         .HasForeignKey("DatabaseInstanceId")
                         .OnDelete(DeleteBehavior.Cascade);
 
+                    b.HasOne("DBTracker.Core.Entities.Team", "Team")
+                        .WithMany()
+                        .HasForeignKey("TeamId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
                     b.Navigation("DatabaseInstance");
+
+                    b.Navigation("Team");
                 });
 
             modelBuilder.Entity("DBTracker.Core.Entities.RestoreEvent", b =>
@@ -1122,6 +1429,17 @@ namespace DBTracker.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("RestoreEvent");
+                });
+
+            modelBuilder.Entity("DBTracker.Core.Entities.TeamMembership", b =>
+                {
+                    b.HasOne("DBTracker.Core.Entities.Team", "Team")
+                        .WithMany("Memberships")
+                        .HasForeignKey("TeamId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Team");
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<string>", b =>
@@ -1190,6 +1508,11 @@ namespace DBTracker.Infrastructure.Migrations
             modelBuilder.Entity("DBTracker.Core.Entities.RestoreEvent", b =>
                 {
                     b.Navigation("Corrections");
+                });
+
+            modelBuilder.Entity("DBTracker.Core.Entities.Team", b =>
+                {
+                    b.Navigation("Memberships");
                 });
 #pragma warning restore 612, 618
         }

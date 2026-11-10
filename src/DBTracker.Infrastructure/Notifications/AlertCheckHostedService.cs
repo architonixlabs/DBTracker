@@ -164,7 +164,7 @@ public class AlertCheckHostedService(
             recipientEmails.Add(instance.ContactEmail);
         }
 
-        var subscriberUserIds = await subscriptionService.GetEmailSubscriberUserIdsAsync(instance.Id, instance.Company);
+        var subscriberUserIds = await subscriptionService.GetEmailSubscriberUserIdsAsync(instance.Id, instance.Company, instance.OwnerTeamId);
         foreach (var userId in subscriberUserIds)
         {
             var user = await userManager.FindByIdAsync(userId);

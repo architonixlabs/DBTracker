@@ -35,7 +35,7 @@ public class NotificationService(IDbContextFactory<DBTrackerDbContext> factory)
         var all = await db.Notifications.AsNoTracking().OrderByDescending(n => n.CreatedAtUtc).ToListAsync();
         var visible = subscriptions.Count == 0
             ? all
-            : all.Where(n => NotificationSubscriptionMatcher.AnyMatches(subscriptions, n.DatabaseInstanceId ?? 0, n.Company)).ToList();
+            : all.Where(n => NotificationSubscriptionMatcher.AnyMatches(subscriptions, n.DatabaseInstanceId ?? 0, n.Company, n.OwnerTeamId)).ToList();
 
         var unreadCount = visible.Count(n => !readSet.Contains(n.Id));
         var pageItems = visible
@@ -73,10 +73,10 @@ public class NotificationService(IDbContextFactory<DBTrackerDbContext> factory)
         var subscriptions = await db.NotificationSubscriptions.AsNoTracking().Where(s => s.UserId == userId).ToListAsync();
         var readIds = await db.NotificationReadStates.AsNoTracking().Where(s => s.UserId == userId).Select(s => s.NotificationId).ToHashSetAsync();
 
-        var all = await db.Notifications.AsNoTracking().Select(n => new { n.Id, n.DatabaseInstanceId, n.Company }).ToListAsync();
+        var all = await db.Notifications.AsNoTracking().Select(n => new { n.Id, n.DatabaseInstanceId, n.Company, n.OwnerTeamId }).ToListAsync();
         var visible = subscriptions.Count == 0
             ? all
-            : all.Where(n => NotificationSubscriptionMatcher.AnyMatches(subscriptions, n.DatabaseInstanceId ?? 0, n.Company)).ToList();
+            : all.Where(n => NotificationSubscriptionMatcher.AnyMatches(subscriptions, n.DatabaseInstanceId ?? 0, n.Company, n.OwnerTeamId)).ToList();
 
         var now = DateTime.UtcNow;
         var newlyRead = visible.Where(n => !readIds.Contains(n.Id))
@@ -93,6 +93,7 @@ public class NotificationService(IDbContextFactory<DBTrackerDbContext> factory)
             DatabaseInstanceId = instance.Id,
             InstanceName = instance.Name,
             Company = instance.Company,
+            OwnerTeamId = instance.OwnerTeamId,
             Message = message,
             Severity = severity
         };

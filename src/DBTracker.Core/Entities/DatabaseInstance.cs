@@ -23,11 +23,31 @@ public class DatabaseInstance
     public string ContactEmail { get; set; } = string.Empty;
     public string ContactPhone { get; set; } = string.Empty;
 
+    /// <summary>Owner team (U21) — a reusable alternative/complement to the free-text Contact* fields above, which are preserved unmodified. Null = no team assigned yet.</summary>
+    public int? OwnerTeamId { get; set; }
+    public Team? OwnerTeam { get; set; }
+
+    /// <summary>Backup contact (U21) — the primary contact stays whatever ContactName/Email/Phone already held; this is the "beyond one email" second contact the backlog asked for.</summary>
+    public string BackupContactName { get; set; } = string.Empty;
+
+    [OptionalEmailAddress]
+    public string BackupContactEmail { get; set; } = string.Empty;
+    public string BackupContactPhone { get; set; } = string.Empty;
+
+    /// <summary>Ownership confirmed-current attestation (U21) — purely informational; absence never blocks any action, it only flags the instance distinctly on the list/detail pages.</summary>
+    public DateTime? OwnershipConfirmedAtUtc { get; set; }
+    public string OwnershipConfirmedBy { get; set; } = string.Empty;
+
     public InstanceRole Role { get; set; } = InstanceRole.Active;
     public EnvironmentTier Environment { get; set; } = EnvironmentTier.Production;
 
     public string DatabaseIp { get; set; } = string.Empty;
     public string ServerIp { get; set; } = string.Empty;
+
+    /// <summary>Structured topology facets (U21) — alongside the existing free-text Tags field below, not replacing it.</summary>
+    public string Region { get; set; } = string.Empty;
+    public string Cluster { get; set; } = string.Empty;
+    public string ReplicaSet { get; set; } = string.Empty;
 
     /// <summary>Expected hours between successful backups before this instance is considered overdue.</summary>
     public int ExpectedBackupIntervalHours { get; set; } = 24;
@@ -48,6 +68,11 @@ public class DatabaseInstance
     public int? RestoreTestIntervalDaysOverride { get; set; }
     public string Tags { get; set; } = string.Empty;
     public string RunbookUrl { get; set; } = string.Empty;
+
+    /// <summary>Which reusable BackupPolicy (U21) was last applied to this instance's cadence/retention/restore-test fields, and at which policy Version — purely informational provenance. The instance's own fields (above) remain the live source of truth for health/alerting; editing them afterward is a per-instance override that this pointer doesn't prevent.</summary>
+    public int? AppliedPolicyId { get; set; }
+    public BackupPolicy? AppliedPolicy { get; set; }
+    public int? AppliedPolicyVersion { get; set; }
 
     /// <summary>The health this instance was last alerted on (Overdue/Failed), so alerts fire on a state change, not every sweep.</summary>
     public BackupHealth? LastNotifiedHealth { get; set; }

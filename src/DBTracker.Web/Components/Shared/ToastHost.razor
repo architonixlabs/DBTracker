@@ -1,11 +1,18 @@
 @implements IDisposable
 @inject ToastService Toasts
 
+<!--
+    U20: toasts are the app's main "save succeeded / failed" feedback, but were purely visual —
+    a screen-reader user got no announcement at all when one appeared and disappeared. role="status"
+    (polite, non-interrupting) on the error-free stack announces success toasts; the separate
+    role="alert" (assertive) region for error toasts means a failure is announced promptly rather
+    than only when the user happens to be focused elsewhere and polite-queues behind other speech.
+-->
 <div class="toast-stack">
     @foreach (var (id, toast) in _active.ToList())
     {
-        <div class="dbt-toast @(toast.IsError ? "error" : "")" @key="id">
-            <i class="bi @(toast.IsError ? "bi-exclamation-circle-fill" : "bi-check-circle-fill")"></i>
+        <div class="dbt-toast @(toast.IsError ? "error" : "")" @key="id" role="@(toast.IsError ? "alert" : "status")" aria-live="@(toast.IsError ? "assertive" : "polite")">
+            <i class="bi @(toast.IsError ? "bi-exclamation-circle-fill" : "bi-check-circle-fill")" aria-hidden="true"></i>
             <span>@toast.Text</span>
         </div>
     }

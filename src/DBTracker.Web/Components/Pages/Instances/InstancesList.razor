@@ -3,6 +3,7 @@
 @implements IDisposable
 @inject InstanceOverviewService OverviewService
 @inject SavedViewService SavedViews
+@inject TeamService Teams
 @inject NavigationManager Nav
 @inject AuthenticationStateProvider AuthProvider
 @inject ToastService Toasts
@@ -49,13 +50,13 @@
 </div>
 
 <div class="filter-bar" style="gap:10px;align-items:center;">
-    <div class="dropdown">
-        <button class="btn btn-outline-secondary btn-sm dropdown-toggle" type="button" @onclick="() => _viewsOpen = !_viewsOpen">
-            <i class="bi bi-bookmark"></i> Views
+    <div class="dropdown" @onkeydown="OnViewsKeyDown">
+        <button class="btn btn-outline-secondary btn-sm dropdown-toggle" type="button" @ref="_viewsButtonRef" @onclick="() => _viewsOpen = !_viewsOpen" aria-haspopup="true" aria-expanded="@_viewsOpen">
+            <i class="bi bi-bookmark" aria-hidden="true"></i> Views
         </button>
         @if (_viewsOpen)
         {
-            <div class="dbt-card" style="position:absolute;z-index:20;min-width:260px;margin-top:4px;">
+            <div class="dbt-card" role="menu" aria-label="Saved views" style="position:absolute;z-index:20;min-width:260px;margin-top:4px;">
                 @if (_savedViews.Count == 0)
                 {
                     <div class="text-muted small mb-2">No saved views yet.</div>
@@ -103,74 +104,129 @@
 else
 {
     <div class="filter-bar">
-        <input class="form-control" style="max-width:220px;" placeholder="Search name, app, owner, IP…"
-               value="@_search" @oninput="OnSearchInput" />
+        <div class="field">
+            <label class="form-label visually-hidden" for="instances-search">Search instances</label>
+            <input id="instances-search" class="form-control" style="max-width:220px;" placeholder="Search name, app, owner, IP…"
+                   value="@_search" @oninput="OnSearchInput" />
+        </div>
 
-        <select class="form-select" style="max-width:150px;" value="@_engine" @onchange="e => OnFieldChanged(ref _engine, e.Value)">
-            <option value="">All engines</option>
-            @foreach (var e in Enum.GetValues<DatabaseEngine>())
-            {
-                <option value="@e">@e</option>
-            }
-        </select>
+        <div class="field">
+            <label class="form-label visually-hidden" for="instances-engine">Engine</label>
+            <select id="instances-engine" class="form-select" style="max-width:150px;" value="@_engine" @onchange="e => OnFieldChanged(ref _engine, e.Value)">
+                <option value="">All engines</option>
+                @foreach (var e in Enum.GetValues<DatabaseEngine>())
+                {
+                    <option value="@e">@e</option>
+                }
+            </select>
+        </div>
 
-        <select class="form-select" style="max-width:150px;" value="@_health" @onchange="e => OnFieldChanged(ref _health, e.Value)">
-            <option value="">All health</option>
-            @foreach (var h in Enum.GetValues<BackupHealth>())
-            {
-                <option value="@h">@FilterLabel(h)</option>
-            }
-        </select>
+        <div class="field">
+            <label class="form-label visually-hidden" for="instances-health">Health</label>
+            <select id="instances-health" class="form-select" style="max-width:150px;" value="@_health" @onchange="e => OnFieldChanged(ref _health, e.Value)">
+                <option value="">All health</option>
+                @foreach (var h in Enum.GetValues<BackupHealth>())
+                {
+                    <option value="@h">@FilterLabel(h)</option>
+                }
+            </select>
+        </div>
 
-        <select class="form-select" style="max-width:130px;" value="@_role" @onchange="e => OnFieldChanged(ref _role, e.Value)">
-            <option value="">Active + passive</option>
-            @foreach (var r in Enum.GetValues<InstanceRole>())
-            {
-                <option value="@r">@r</option>
-            }
-        </select>
+        <div class="field">
+            <label class="form-label visually-hidden" for="instances-role">Active / passive</label>
+            <select id="instances-role" class="form-select" style="max-width:130px;" value="@_role" @onchange="e => OnFieldChanged(ref _role, e.Value)">
+                <option value="">Active + passive</option>
+                @foreach (var r in Enum.GetValues<InstanceRole>())
+                {
+                    <option value="@r">@r</option>
+                }
+            </select>
+        </div>
 
-        <select class="form-select" style="max-width:160px;" value="@_envTier" @onchange="e => OnFieldChanged(ref _envTier, e.Value)">
-            <option value="">All environments</option>
-            @foreach (var e in Enum.GetValues<EnvironmentTier>())
-            {
-                <option value="@e">@e</option>
-            }
-        </select>
+        <div class="field">
+            <label class="form-label visually-hidden" for="instances-env">Environment</label>
+            <select id="instances-env" class="form-select" style="max-width:160px;" value="@_envTier" @onchange="e => OnFieldChanged(ref _envTier, e.Value)">
+                <option value="">All environments</option>
+                @foreach (var e in Enum.GetValues<EnvironmentTier>())
+                {
+                    <option value="@e">@e</option>
+                }
+            </select>
+        </div>
 
-        <select class="form-select" style="max-width:170px;" value="@_company" @onchange="e => OnFieldChanged(ref _company, e.Value)">
-            <option value="">All companies</option>
-            @foreach (var c in _facetCompanies)
-            {
-                <option value="@c">@c</option>
-            }
-        </select>
+        <div class="field">
+            <label class="form-label visually-hidden" for="instances-company">Company</label>
+            <select id="instances-company" class="form-select" style="max-width:170px;" value="@_company" @onchange="e => OnFieldChanged(ref _company, e.Value)">
+                <option value="">All companies</option>
+                @foreach (var c in _facetCompanies)
+                {
+                    <option value="@c">@c</option>
+                }
+            </select>
+        </div>
 
-        <select class="form-select" style="max-width:170px;" value="@_department" @onchange="e => OnFieldChanged(ref _department, e.Value)">
-            <option value="">All departments</option>
-            @foreach (var d in _facetDepartments)
-            {
-                <option value="@d">@d</option>
-            }
-        </select>
+        <div class="field">
+            <label class="form-label visually-hidden" for="instances-department">Department</label>
+            <select id="instances-department" class="form-select" style="max-width:170px;" value="@_department" @onchange="e => OnFieldChanged(ref _department, e.Value)">
+                <option value="">All departments</option>
+                @foreach (var d in _facetDepartments)
+                {
+                    <option value="@d">@d</option>
+                }
+            </select>
+        </div>
 
-        <select class="form-select" style="max-width:170px;" value="@_owner" @onchange="e => OnFieldChanged(ref _owner, e.Value)">
-            <option value="">All owners</option>
-            @foreach (var o in _facetOwners)
-            {
-                <option value="@o">@o</option>
-            }
-        </select>
+        <div class="field">
+            <label class="form-label visually-hidden" for="instances-owner">Owner</label>
+            <select id="instances-owner" class="form-select" style="max-width:170px;" value="@_owner" @onchange="e => OnFieldChanged(ref _owner, e.Value)">
+                <option value="">All owners</option>
+                @foreach (var o in _facetOwners)
+                {
+                    <option value="@o">@o</option>
+                }
+            </select>
+        </div>
 
         @if (_facetTags.Count > 0)
         {
-            <select class="form-select" style="max-width:150px;" value="@_tag" @onchange="e => OnFieldChanged(ref _tag, e.Value)">
-                <option value="">All tags</option>
-                @foreach (var t in _facetTags)
-                {
-                    <option value="@t">@t</option>
-                }
-            </select>
+            <div class="field">
+                <label class="form-label visually-hidden" for="instances-tag">Tag</label>
+                <select id="instances-tag" class="form-select" style="max-width:150px;" value="@_tag" @onchange="e => OnFieldChanged(ref _tag, e.Value)">
+                    <option value="">All tags</option>
+                    @foreach (var t in _facetTags)
+                    {
+                        <option value="@t">@t</option>
+                    }
+                </select>
+            </div>
+        }
+
+        @if (_facetRegions.Count > 0)
+        {
+            <div class="field">
+                <label class="form-label visually-hidden" for="instances-region">Region</label>
+                <select id="instances-region" class="form-select" style="max-width:150px;" value="@_region" @onchange="e => OnFieldChanged(ref _region, e.Value)">
+                    <option value="">All regions</option>
+                    @foreach (var r in _facetRegions)
+                    {
+                        <option value="@r">@r</option>
+                    }
+                </select>
+            </div>
+        }
+
+        @if (_facetClusters.Count > 0)
+        {
+            <div class="field">
+                <label class="form-label visually-hidden" for="instances-cluster">Cluster</label>
+                <select id="instances-cluster" class="form-select" style="max-width:150px;" value="@_cluster" @onchange="e => OnFieldChanged(ref _cluster, e.Value)">
+                    <option value="">All clusters</option>
+                    @foreach (var c in _facetClusters)
+                    {
+                        <option value="@c">@c</option>
+                    }
+                </select>
+            </div>
         }
 
         @if (_hasOwnInstances)
@@ -193,24 +249,26 @@ else
             <div class="d-flex align-items-center gap-2 mb-2">
                 <span class="small text-muted">@_selectedIds.Count selected</span>
                 <button class="btn btn-outline-secondary btn-sm" @onclick="GoToBulkEdit"><i class="bi bi-pencil-square"></i> Bulk edit selected</button>
+                <button class="btn btn-outline-secondary btn-sm" @onclick="GoToApplyPolicy"><i class="bi bi-shield-check"></i> Apply policy</button>
                 <button class="btn btn-link btn-sm" @onclick="() => _selectedIds.Clear()">Clear selection</button>
             </div>
         }
     </AuthorizeView>
 
-    <div class="dbt-table">
+    <div class="dbt-table" role="region" aria-label="Database instances" tabindex="0">
         <table class="table">
+            <caption class="visually-hidden">Database instances, sorted and filtered per the controls above. Activate a row to open its detail page.</caption>
             <thead>
                 <tr>
-                    <AuthorizeView Roles="@Roles.CanEditPolicy"><th style="width:2em;"></th></AuthorizeView>
-                    <th role="button" @onclick="() => ToggleSort(InstanceSortKey.Name)">Instance @SortIndicator(InstanceSortKey.Name)</th>
-                    <th role="button" @onclick="() => ToggleSort(InstanceSortKey.Engine)">Engine @SortIndicator(InstanceSortKey.Engine)</th>
-                    <th>Application</th>
-                    <th role="button" @onclick="() => ToggleSort(InstanceSortKey.Company)">Company / Dept @SortIndicator(InstanceSortKey.Company)</th>
-                    <th>Owner</th>
-                    <th>Role</th>
-                    <th role="button" @onclick="() => ToggleSort(InstanceSortKey.Environment)">Env @SortIndicator(InstanceSortKey.Environment)</th>
-                    <th role="button" @onclick="() => ToggleSort(InstanceSortKey.Risk)">Health @SortIndicator(InstanceSortKey.Risk)</th>
+                    <AuthorizeView Roles="@Roles.CanEditPolicy"><th style="width:2em;" scope="col"><span class="visually-hidden">Select</span></th></AuthorizeView>
+                    <th scope="col"><button type="button" class="th-sort-btn" @onclick="() => ToggleSort(InstanceSortKey.Name)" aria-label="Sort by instance name">Instance @SortIndicator(InstanceSortKey.Name)</button></th>
+                    <th scope="col"><button type="button" class="th-sort-btn" @onclick="() => ToggleSort(InstanceSortKey.Engine)" aria-label="Sort by engine">Engine @SortIndicator(InstanceSortKey.Engine)</button></th>
+                    <th scope="col">Application</th>
+                    <th scope="col"><button type="button" class="th-sort-btn" @onclick="() => ToggleSort(InstanceSortKey.Company)" aria-label="Sort by company / department">Company / Dept @SortIndicator(InstanceSortKey.Company)</button></th>
+                    <th scope="col">Owner</th>
+                    <th scope="col">Role</th>
+                    <th scope="col"><button type="button" class="th-sort-btn" @onclick="() => ToggleSort(InstanceSortKey.Environment)" aria-label="Sort by environment">Env @SortIndicator(InstanceSortKey.Environment)</button></th>
+                    <th scope="col"><button type="button" class="th-sort-btn" @onclick="() => ToggleSort(InstanceSortKey.Risk)" aria-label="Sort by health">Health @SortIndicator(InstanceSortKey.Risk)</button></th>
                 </tr>
             </thead>
             <tbody>
@@ -219,11 +277,15 @@ else
                     <tr @onclick='() => Nav.NavigateTo($"/instances/{o.Id}")'>
                         <AuthorizeView Roles="@Roles.CanEditPolicy">
                             <td @onclick:stopPropagation="true">
-                                <input type="checkbox" class="form-check-input" checked="@_selectedIds.Contains(o.Id)" @onchange="e => ToggleSelected(o.Id, (bool)(e.Value ?? false))" />
+                                <input type="checkbox" class="form-check-input" aria-label="Select @o.Name" checked="@_selectedIds.Contains(o.Id)" @onchange="e => ToggleSelected(o.Id, (bool)(e.Value ?? false))" />
                             </td>
                         </AuthorizeView>
-                        <td>
-                            <div class="fw-semibold">@o.Name</div>
+                        <td @onclick:stopPropagation="true">
+                            <a class="fw-semibold instance-row-link" href="/instances/@o.Id">@o.Name</a>
+                            @if (o.OwnershipStatus == OwnershipStatus.Missing)
+                            {
+                                <span class="badge-health dot NeverBackedUp ms-1" title="No owner team or contact on file">No owner</span>
+                            }
                             <div class="text-muted small">@o.DatabaseIp</div>
                         </td>
                         <td><span class="engine-pill">@o.Engine</span> <span class="text-muted small">@o.Version</span></td>
@@ -233,7 +295,7 @@ else
                             <div class="text-muted small">@o.Department</div>
                         </td>
                         <td>
-                            <div>@o.ContactName</div>
+                            <div>@o.ContactName @(string.IsNullOrWhiteSpace(o.OwnerTeamName) ? "" : $"({o.OwnerTeamName})")</div>
                             <div class="text-muted small">@o.ContactEmail</div>
                         </td>
                         <td><span class="role-pill @o.Role">@o.Role</span></td>
@@ -286,6 +348,8 @@ else
     [Parameter, SupplyParameterFromQuery(Name = "dept")] public string? Dept { get; set; }
     [Parameter, SupplyParameterFromQuery(Name = "owner")] public string? Owner { get; set; }
     [Parameter, SupplyParameterFromQuery(Name = "tag")] public string? Tag { get; set; }
+    [Parameter, SupplyParameterFromQuery(Name = "reg")] public string? Reg { get; set; }
+    [Parameter, SupplyParameterFromQuery(Name = "cluster")] public string? ClusterParam { get; set; }
     [Parameter, SupplyParameterFromQuery(Name = "mine")] public bool? Mine { get; set; }
     [Parameter, SupplyParameterFromQuery(Name = "sort")] public string? Sort { get; set; }
     [Parameter, SupplyParameterFromQuery(Name = "dir")] public string? Dir { get; set; }
@@ -293,9 +357,11 @@ else
 
     private InstanceListResult? _result;
     private List<string> _facetCompanies = new(), _facetDepartments = new(), _facetOwners = new(), _facetTags = new();
+    private List<string> _facetRegions = new(), _facetClusters = new();
 
-    private string _search = "", _engine = "", _health = "", _role = "", _envTier = "", _company = "", _department = "", _owner = "", _tag = "";
+    private string _search = "", _engine = "", _health = "", _role = "", _envTier = "", _company = "", _department = "", _owner = "", _tag = "", _region = "", _cluster = "";
     private bool _myInstancesOnly;
+    private HashSet<int> _myTeamIds = new();
     private InstanceSortKey _sortKey = InstanceSortKey.Name;
     private bool _sortDesc;
     private int _page = 1;
@@ -312,6 +378,7 @@ else
     private Timer? _searchDebounce;
 
     private bool _viewsOpen, _savingView;
+    private ElementReference _viewsButtonRef;
     private string _newViewName = "";
     private List<SavedView> _savedViews = new();
     private string? _userId;
@@ -328,6 +395,7 @@ else
         if (!string.IsNullOrEmpty(_userId))
         {
             _savedViews = await SavedViews.ListAsync(_userId, "Instances");
+            _myTeamIds = await Teams.GetUserTeamIdsAsync(_userId);
         }
 
         ReadFromQuery();
@@ -352,6 +420,8 @@ else
         _department = Dept ?? "";
         _owner = Owner ?? "";
         _tag = Tag ?? "";
+        _region = Reg ?? "";
+        _cluster = ClusterParam ?? "";
         _myInstancesOnly = Mine ?? false;
         _sortKey = Enum.TryParse<InstanceSortKey>(Sort, true, out var sk) ? sk : InstanceSortKey.Name;
         _sortDesc = string.Equals(Dir, "desc", StringComparison.OrdinalIgnoreCase);
@@ -364,7 +434,9 @@ else
         Company: _company.Length > 0 ? _company : null, Department: _department.Length > 0 ? _department : null,
         Owner: _owner.Length > 0 ? _owner : null, Tag: _tag.Length > 0 ? _tag : null,
         MyInstancesOnly: _myInstancesOnly, MyEmail: _myEmail,
-        Sort: _sortKey, Descending: _sortDesc, Page: _page, PageSize: PageSize);
+        Sort: _sortKey, Descending: _sortDesc, Page: _page, PageSize: PageSize,
+        Region: _region.Length > 0 ? _region : null, Cluster: _cluster.Length > 0 ? _cluster : null,
+        MyTeamIds: _myTeamIds);
 
     private static TEnum? TryEnum<TEnum>(string value) where TEnum : struct =>
         value.Length > 0 && Enum.TryParse<TEnum>(value, out var v) ? v : null;
@@ -378,8 +450,12 @@ else
             _facetDepartments = Distinct(allForFacets.Select(r => r.Department));
             _facetOwners = Distinct(allForFacets.Select(r => r.ContactName));
             _facetTags = Distinct(allForFacets.SelectMany(r => InstanceListFilter.SplitTags(r.Tags)));
-            _hasOwnInstances = !string.IsNullOrWhiteSpace(_myEmail) &&
-                allForFacets.Any(r => string.Equals(r.ContactEmail, _myEmail, StringComparison.OrdinalIgnoreCase));
+            _facetRegions = Distinct(allForFacets.Select(r => r.Region));
+            _facetClusters = Distinct(allForFacets.Select(r => r.Cluster));
+            // U21: "My instances" is shown at all only if the viewer actually owns something — via
+            // contact email, backup contact email, or team membership — not just whoever has no
+            // owned instances at all getting a dead-end filter.
+            _hasOwnInstances = allForFacets.Any(r => InstanceListFilter.IsMine(r, _myEmail, _myTeamIds));
 
             _result = InstanceListFilter.Apply(allForFacets, BuildQuery());
             _lastUpdatedUtc = DateTime.UtcNow;
@@ -467,7 +543,7 @@ else
 
     private Task ClearFilters()
     {
-        _search = ""; _engine = ""; _health = ""; _role = ""; _envTier = ""; _company = ""; _department = ""; _owner = ""; _tag = ""; _myInstancesOnly = false; _page = 1;
+        _search = ""; _engine = ""; _health = ""; _role = ""; _envTier = ""; _company = ""; _department = ""; _owner = ""; _tag = ""; _region = ""; _cluster = ""; _myInstancesOnly = false; _page = 1;
         return NavigateWithCurrentFilters(replace: false);
     }
 
@@ -489,6 +565,7 @@ else
         }
         Add("s", _search); Add("engine", _engine); Add("health", _health); Add("role", _role); Add("env", _envTier);
         Add("company", _company); Add("dept", _department); Add("owner", _owner); Add("tag", _tag);
+        Add("reg", _region); Add("cluster", _cluster);
         if (_myInstancesOnly) parts.Add("mine=true");
         if (_sortKey != InstanceSortKey.Name) parts.Add($"sort={_sortKey}");
         if (_sortDesc) parts.Add("dir=desc");
@@ -498,7 +575,8 @@ else
 
     private bool HasFilters =>
         _search.Length > 0 || _engine.Length > 0 || _health.Length > 0 || _role.Length > 0 || _envTier.Length > 0 ||
-        _company.Length > 0 || _department.Length > 0 || _owner.Length > 0 || _tag.Length > 0 || _myInstancesOnly;
+        _company.Length > 0 || _department.Length > 0 || _owner.Length > 0 || _tag.Length > 0 ||
+        _region.Length > 0 || _cluster.Length > 0 || _myInstancesOnly;
 
     private string SortIndicator(InstanceSortKey key) => _sortKey == key ? (_sortDesc ? "▼" : "▲") : "";
 
@@ -530,12 +608,23 @@ else
         _savedViews = await SavedViews.ListAsync(_userId, "Instances");
     }
 
+    // U20: Escape closes the Views dropdown and returns focus to its toggle button.
+    private async Task OnViewsKeyDown(KeyboardEventArgs e)
+    {
+        if (_viewsOpen && e.Key == "Escape")
+        {
+            _viewsOpen = false;
+            await _viewsButtonRef.FocusAsync();
+        }
+    }
+
     private void ToggleSelected(int id, bool selected)
     {
         if (selected) _selectedIds.Add(id); else _selectedIds.Remove(id);
     }
 
     private void GoToBulkEdit() => Nav.NavigateTo("/instances/bulk-edit?ids=" + string.Join(",", _selectedIds));
+    private void GoToApplyPolicy() => Nav.NavigateTo("/instances/apply-policy?ids=" + string.Join(",", _selectedIds));
 
     private static string FilterLabel(BackupHealth health) => health switch
     {

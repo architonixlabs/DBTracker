@@ -18,6 +18,10 @@ public class NotificationSubscription
     /// <summary>Set when Scope is Company.</summary>
     public string Company { get; set; } = string.Empty;
 
+    /// <summary>Set when Scope is Team (U21) — instances owned by this team.</summary>
+    public int? TeamId { get; set; }
+    public Team? Team { get; set; }
+
     public NotificationChannel Channel { get; set; } = NotificationChannel.InApp;
 
     public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;

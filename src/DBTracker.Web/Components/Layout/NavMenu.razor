@@ -37,6 +37,12 @@
                 <span>Audit</span>
             </NavLink>
         </AuthorizeView>
+        <AuthorizeView Roles="@Roles.CanEditPolicy">
+            <NavLink class="app-nav-link" href="ownership">
+                <i class="bi bi-diagram-3"></i>
+                <span>Ownership</span>
+            </NavLink>
+        </AuthorizeView>
         <AuthorizeView Roles="@Roles.Admin">
             <NavLink class="app-nav-link" href="users">
                 <i class="bi bi-people"></i>

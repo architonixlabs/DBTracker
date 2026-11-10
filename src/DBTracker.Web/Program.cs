@@ -4,6 +4,7 @@ using DBTracker.Infrastructure.Diagnostics;
 using DBTracker.Infrastructure.Identity;
 using DBTracker.Infrastructure.Lifecycle;
 using DBTracker.Infrastructure.Notifications;
+using DBTracker.Infrastructure.Ownership;
 using DBTracker.Infrastructure.Queries;
 using DBTracker.Infrastructure.Scanning;
 using DBTracker.Web.Components;
@@ -60,6 +61,11 @@ builder.Services.AddScoped<AuditRecorder>();
 builder.Services.AddScoped<InstanceArchiveService>();
 builder.Services.AddScoped<InstanceBulkEditService>();
 builder.Services.AddScoped<AccountLifecycleService>();
+
+// U21: owner teams/memberships, reusable backup policies, and contact-correction requests.
+builder.Services.AddScoped<TeamService>();
+builder.Services.AddScoped<BackupPolicyService>();
+builder.Services.AddScoped<ContactCorrectionService>();
 
 // Process-lifetime record of each background worker's last/next run (U15 setup/diagnostics page).
 builder.Services.AddSingleton<WorkerHeartbeatStore>();

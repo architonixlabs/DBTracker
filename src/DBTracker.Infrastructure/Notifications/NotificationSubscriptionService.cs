@@ -46,12 +46,12 @@ public class NotificationSubscriptionService(IDbContextFactory<DBTrackerDbContex
     /// subscriber visibility into an instance they couldn't already see (no row-level security
     /// exists today — see U21).
     /// </summary>
-    public async Task<List<string>> GetEmailSubscriberUserIdsAsync(int instanceId, string company)
+    public async Task<List<string>> GetEmailSubscriberUserIdsAsync(int instanceId, string company, int? ownerTeamId = null)
     {
         using var db = await factory.CreateDbContextAsync();
         var subscriptions = await db.NotificationSubscriptions.AsNoTracking().ToListAsync();
         return subscriptions
-            .Where(s => NotificationSubscriptionMatcher.WantsEmail(s) && NotificationSubscriptionMatcher.Matches(s, instanceId, company))
+            .Where(s => NotificationSubscriptionMatcher.WantsEmail(s) && NotificationSubscriptionMatcher.Matches(s, instanceId, company, ownerTeamId))
             .Select(s => s.UserId)
             .Distinct()
             .ToList();

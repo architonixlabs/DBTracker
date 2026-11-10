@@ -3,18 +3,18 @@
 @inject AuthenticationStateProvider AuthProvider
 @inject NavigationManager Nav
 
-<div class="notif-bell-wrap">
-    <button type="button" class="notif-bell-btn" @onclick="Toggle" aria-haspopup="true" aria-expanded="@_open" aria-label="Notifications">
-        <i class="bi bi-bell"></i>
+<div class="notif-bell-wrap" @onkeydown="OnKeyDown">
+    <button type="button" class="notif-bell-btn" @ref="_bellButtonRef" @onclick="Toggle" aria-haspopup="true" aria-expanded="@_open" aria-label="Notifications@(_unreadCount > 0 ? $", {_unreadCount} unread" : "")">
+        <i class="bi bi-bell" aria-hidden="true"></i>
         @if (_unreadCount > 0)
         {
-            <span class="notif-badge">@(_unreadCount > 9 ? "9+" : _unreadCount.ToString())</span>
+            <span class="notif-badge" aria-hidden="true">@(_unreadCount > 9 ? "9+" : _unreadCount.ToString())</span>
         }
     </button>
 
     @if (_open)
     {
-        <div class="notif-dropdown">
+        <div class="notif-dropdown" role="menu" aria-label="Notifications">
             <div class="notif-dropdown-header">
                 <span>Notifications</span>
                 @if (_unreadCount > 0)
@@ -60,6 +60,7 @@
     private bool _refreshing;
     private Timer? _autoRefreshTimer;
     private string? _userId;
+    private ElementReference _bellButtonRef;
 
     private static readonly TimeSpan AutoRefreshInterval = TimeSpan.FromSeconds(30);
 
@@ -133,6 +134,18 @@
         if (n.DatabaseInstanceId is { } id)
         {
             Nav.NavigateTo($"/instances/{id}");
+        }
+    }
+
+    // U20: Escape closes the dropdown and returns focus to the toggle button — without this, a
+    // keyboard user who opens the dropdown has no way to dismiss it other than tabbing all the way
+    // through its contents, and loses their place on the page.
+    private async Task OnKeyDown(KeyboardEventArgs e)
+    {
+        if (_open && e.Key == "Escape")
+        {
+            _open = false;
+            await _bellButtonRef.FocusAsync();
         }
     }
 

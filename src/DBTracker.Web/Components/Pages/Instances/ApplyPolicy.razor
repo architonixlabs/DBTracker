@@ -1,0 +1,143 @@
+@page "/instances/apply-policy"
+@attribute [Authorize(Roles = Roles.CanEditPolicy)]
+@inject BackupPolicyService Policies
+@inject AuthenticationStateProvider AuthProvider
+@inject NavigationManager Nav
+@inject ToastService Toasts
+
+<PageTitle>Apply policy · DBTracker</PageTitle>
+
+<div class="app-topbar">
+    <div>
+        <div class="eyebrow">Instance record</div>
+        <h1>Apply a backup policy to @_instanceIds.Count instance(s)</h1>
+        <div class="subtitle">Copies the policy's cadence/retention/restore-test values onto each selected instance — review the impact before applying. Instances can still be edited individually afterward.</div>
+    </div>
+    <a class="btn btn-outline-secondary" href="/instances">Cancel</a>
+</div>
+
+@if (_instanceIds.Count == 0)
+{
+    <div class="empty-state"><i class="bi bi-inbox"></i> No instances selected. <a href="/instances">Go back and select some</a>.</div>
+}
+else if (_policies.Count == 0)
+{
+    <div class="empty-state"><i class="bi bi-shield-exclamation"></i> No reusable policies exist yet. <a href="/ownership?tab=policies">Create one</a> first.</div>
+}
+else
+{
+    <div class="dbt-card mb-4" style="max-width:600px;">
+        <h2 class="h6 text-muted text-uppercase mb-3">Choose a policy</h2>
+        <label class="form-label visually-hidden" for="policy-select">Backup policy</label>
+        <select id="policy-select" class="form-select" value="@_selectedPolicyId" @onchange="OnPolicyChanged">
+            @foreach (var p in _policies)
+            {
+                <option value="@p.Id">@p.Name (v@p.Version — every @p.ExpectedBackupIntervalHours h, retain @(p.RetentionPolicyDays?.ToString() ?? "org default") d, restore-test every @(p.RestoreTestIntervalDays?.ToString() ?? "org default") d)</option>
+            }
+        </select>
+        <button class="btn btn-outline-secondary mt-3" @onclick="RefreshPreview" disabled="@(_selectedPolicyId == 0)">
+            <i class="bi bi-eye"></i> Preview impact
+        </button>
+    </div>
+
+    @if (_preview is not null)
+    {
+        var changing = _preview.Where(r => !r.AlreadyUpToDate).ToList();
+        <div class="dbt-card" style="max-width:900px;">
+            <h2 class="h6 text-muted text-uppercase mb-3">Impact preview — @changing.Count of @_instanceIds.Count instance(s) would change</h2>
+            @if (changing.Count == 0)
+            {
+                <div class="empty-state py-3"><i class="bi bi-check-circle"></i>Every selected instance already matches this policy's current version.</div>
+            }
+            else
+            {
+                <div class="dbt-table" role="region" aria-label="Policy apply impact preview" tabindex="0">
+                    <table class="table table-sm mb-3">
+                        <caption class="visually-hidden">Before/after values for each instance this policy would change.</caption>
+                        <thead><tr><th scope="col">Instance</th><th scope="col">Field</th><th scope="col">Before</th><th scope="col">After</th></tr></thead>
+                        <tbody>
+                            @foreach (var row in changing)
+                            {
+                                @foreach (var change in row.Changes)
+                                {
+                                    <tr>
+                                        <td class="small">@row.InstanceName</td>
+                                        <td class="small">@change.Field</td>
+                                        <td class="small text-muted">@(string.IsNullOrEmpty(change.Before) ? "—" : change.Before)</td>
+                                        <td class="small">@(string.IsNullOrEmpty(change.After) ? "—" : change.After)</td>
+                                    </tr>
+                                }
+                            }
+                        </tbody>
+                    </table>
+                </div>
+                <button class="btn btn-primary" @onclick="Apply" disabled="@_applying">@(_applying ? "Applying…" : $"Apply to {changing.Count} instance(s)")</button>
+            }
+        </div>
+    }
+}
+
+@code {
+    [SupplyParameterFromQuery] public string? Ids { get; set; }
+
+    private List<int> _instanceIds = new();
+    private List<BackupPolicy> _policies = new();
+    private int _selectedPolicyId;
+    private IReadOnlyList<PolicyApplyRowPreview>? _preview;
+    private bool _applying;
+    private string? _userId, _userName;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _instanceIds = (Ids ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(s => int.TryParse(s, out var id) ? id : (int?)null)
+            .Where(id => id is not null)
+            .Select(id => id!.Value)
+            .Distinct()
+            .ToList();
+
+        _policies = await Policies.ListAsync();
+        if (_policies.Count > 0)
+        {
+            _selectedPolicyId = _policies[0].Id;
+        }
+
+        var state = await AuthProvider.GetAuthenticationStateAsync();
+        _userId = state.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? "";
+        _userName = state.User.Identity?.Name ?? "unknown";
+    }
+
+    private void OnPolicyChanged(ChangeEventArgs e)
+    {
+        _selectedPolicyId = int.TryParse(e.Value?.ToString(), out var id) ? id : 0;
+        _preview = null;
+    }
+
+    private async Task RefreshPreview()
+    {
+        var policy = _policies.FirstOrDefault(p => p.Id == _selectedPolicyId);
+        if (policy is null)
+        {
+            return;
+        }
+
+        var targets = await Policies.GetTargetsAsync(_instanceIds);
+        _preview = BackupPolicyApplyPreviewBuilder.Preview(targets, policy);
+    }
+
+    private async Task Apply()
+    {
+        if (_selectedPolicyId == 0)
+        {
+            return;
+        }
+
+        _applying = true;
+        var changingIds = _preview?.Where(r => !r.AlreadyUpToDate).Select(r => r.InstanceId).ToList() ?? [];
+        await Policies.ApplyAsync(_selectedPolicyId, changingIds, _userId ?? "", _userName ?? "unknown");
+        _applying = false;
+
+        Toasts.Success($"Policy applied to {changingIds.Count} instance(s).");
+        Nav.NavigateTo("/instances");
+    }
+}

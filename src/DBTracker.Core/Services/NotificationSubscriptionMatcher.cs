@@ -11,17 +11,20 @@ namespace DBTracker.Core.Services;
 /// </summary>
 public static class NotificationSubscriptionMatcher
 {
-    public static bool Matches(NotificationSubscription subscription, int instanceId, string company) => subscription.Scope switch
+    public static bool Matches(NotificationSubscription subscription, int instanceId, string company, int? ownerTeamId = null) => subscription.Scope switch
     {
         SubscriptionScope.AllInstances => true,
         SubscriptionScope.Instance => subscription.DatabaseInstanceId == instanceId,
         SubscriptionScope.Company => !string.IsNullOrWhiteSpace(company) &&
             string.Equals(subscription.Company, company, StringComparison.OrdinalIgnoreCase),
+        // U21: a team subscription is still just a narrowing filter on an already-broadcast alert —
+        // it can't surface an instance the subscriber's role didn't already let them see.
+        SubscriptionScope.Team => ownerTeamId is not null && subscription.TeamId == ownerTeamId,
         _ => false
     };
 
-    public static bool AnyMatches(IEnumerable<NotificationSubscription> subscriptions, int instanceId, string company) =>
-        subscriptions.Any(s => Matches(s, instanceId, company));
+    public static bool AnyMatches(IEnumerable<NotificationSubscription> subscriptions, int instanceId, string company, int? ownerTeamId = null) =>
+        subscriptions.Any(s => Matches(s, instanceId, company, ownerTeamId));
 
     public static bool WantsEmail(NotificationSubscription subscription) =>
         subscription.Channel is NotificationChannel.Email or NotificationChannel.Both;

@@ -49,6 +49,21 @@ public class NotificationSubscriptionMatcherTests
         Assert.False(NotificationSubscriptionMatcher.AnyMatches(subs, 999, "Other"));
     }
 
+    [Fact]
+    public void TeamScope_MatchesOnlyThatTeamId()
+    {
+        var sub = new NotificationSubscription { Scope = SubscriptionScope.Team, TeamId = 3 };
+        Assert.True(NotificationSubscriptionMatcher.Matches(sub, 1, "Acme", ownerTeamId: 3));
+        Assert.False(NotificationSubscriptionMatcher.Matches(sub, 1, "Acme", ownerTeamId: 4));
+    }
+
+    [Fact]
+    public void TeamScope_NullOwnerTeamId_NeverMatches()
+    {
+        var sub = new NotificationSubscription { Scope = SubscriptionScope.Team, TeamId = 3 };
+        Assert.False(NotificationSubscriptionMatcher.Matches(sub, 1, "Acme", ownerTeamId: null));
+    }
+
     [Theory]
     [InlineData(NotificationChannel.Email, true)]
     [InlineData(NotificationChannel.Both, true)]

@@ -60,6 +60,7 @@ public class InstanceOverviewService(IDbContextFactory<DBTrackerDbContext> facto
             .Select(i => new
             {
                 Instance = i,
+                OwnerTeamName = i.OwnerTeam != null ? i.OwnerTeam.Name : "",
                 LatestRecord = i.BackupRecords
                     .Where(r => r.TimestampUtc <= now)
                     .OrderByDescending(r => r.TimestampUtc).ThenByDescending(r => r.Id)
@@ -72,7 +73,7 @@ public class InstanceOverviewService(IDbContextFactory<DBTrackerDbContext> facto
             })
             .ToListAsync();
 
-        return projected.Select(p => ToRow(p.Instance, p.LatestRecord, p.LatestSuccessUtc, now)).ToList();
+        return projected.Select(p => ToRow(p.Instance, p.LatestRecord, p.LatestSuccessUtc, now, p.OwnerTeamName)).ToList();
     }
 
     /// <summary>Filtered/sorted/paged Instances list (U05/U06) built from the same lightweight projection as <see cref="GetAllSummariesAsync"/>.</summary>
@@ -82,7 +83,7 @@ public class InstanceOverviewService(IDbContextFactory<DBTrackerDbContext> facto
         return InstanceListFilter.Apply(rows, query);
     }
 
-    private static InstanceListRow ToRow(DatabaseInstance instance, BackupRecord? latestRecord, DateTime? latestSuccessUtc, DateTime now) =>
+    private static InstanceListRow ToRow(DatabaseInstance instance, BackupRecord? latestRecord, DateTime? latestSuccessUtc, DateTime now, string ownerTeamName = "") =>
         new(
             instance.Id, instance.Name, instance.Engine, instance.Version, instance.Application,
             instance.Company, instance.Department, instance.Tags, instance.ContactName, instance.ContactEmail,
@@ -90,7 +91,9 @@ public class InstanceOverviewService(IDbContextFactory<DBTrackerDbContext> facto
             BackupHealthCalculator.ComputeFromLatest(instance, latestRecord, now),
             latestSuccessUtc,
             instance.MaintenanceUntilUtc,
-            instance.BackupFileLocation, instance.LastScanUtc, instance.LastScanStatus, instance.LastScanError);
+            instance.BackupFileLocation, instance.LastScanUtc, instance.LastScanStatus, instance.LastScanError,
+            instance.OwnerTeamId, ownerTeamName, instance.BackupContactEmail, instance.Region, instance.Cluster, instance.ReplicaSet,
+            OwnershipStatusClassifier.Classify(instance.OwnerTeamId, instance.ContactEmail, instance.BackupContactEmail, instance.OwnershipConfirmedAtUtc));
 
     public async Task<InstanceOverview?> GetByIdAsync(int id)
     {
@@ -100,6 +103,8 @@ public class InstanceOverviewService(IDbContextFactory<DBTrackerDbContext> facto
             .AsNoTracking()
             .Include(i => i.BackupRecords)
             .Include(i => i.RestoreEvents)
+            .Include(i => i.OwnerTeam)
+            .Include(i => i.AppliedPolicy)
             .AsSplitQuery()
             .FirstOrDefaultAsync(i => i.Id == id);
 

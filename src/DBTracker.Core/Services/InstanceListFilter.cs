@@ -27,7 +27,14 @@ public record InstanceListRow(
     string BackupFileLocation,
     DateTime? LastScanUtc,
     ScanStatus LastScanStatus,
-    string LastScanError);
+    string LastScanError,
+    int? OwnerTeamId = null,
+    string OwnerTeamName = "",
+    string BackupContactEmail = "",
+    string Region = "",
+    string Cluster = "",
+    string ReplicaSet = "",
+    OwnershipStatus OwnershipStatus = OwnershipStatus.Missing);
 
 public enum InstanceSortKey
 {
@@ -54,7 +61,10 @@ public record InstanceListQuery(
     InstanceSortKey Sort = InstanceSortKey.Name,
     bool Descending = false,
     int Page = 1,
-    int PageSize = 25);
+    int PageSize = 25,
+    string? Region = null,
+    string? Cluster = null,
+    IReadOnlySet<int>? MyTeamIds = null);
 
 public record InstanceListResult(IReadOnlyList<InstanceListRow> Items, int TotalCount, int Page, int PageSize)
 {
@@ -131,9 +141,22 @@ public static class InstanceListFilter
             items = items.Where(r => SplitTags(r.Tags).Any(t => string.Equals(t, query.Tag, StringComparison.OrdinalIgnoreCase)));
         }
 
-        if (query.MyInstancesOnly && !string.IsNullOrWhiteSpace(query.MyEmail))
+        if (!string.IsNullOrWhiteSpace(query.Region))
         {
-            items = items.Where(r => string.Equals(r.ContactEmail, query.MyEmail, StringComparison.OrdinalIgnoreCase));
+            items = items.Where(r => string.Equals(r.Region, query.Region, StringComparison.OrdinalIgnoreCase));
+        }
+
+        if (!string.IsNullOrWhiteSpace(query.Cluster))
+        {
+            items = items.Where(r => string.Equals(r.Cluster, query.Cluster, StringComparison.OrdinalIgnoreCase));
+        }
+
+        if (query.MyInstancesOnly)
+        {
+            // U21: "mine" now means contact email match (unchanged, Epic 12 behavior) OR team
+            // membership OR being the backup contact — never a broader access grant, just a wider
+            // personalization match than a single free-text email.
+            items = items.Where(r => IsMine(r, query.MyEmail, query.MyTeamIds));
         }
 
         var ordered = OrderBy(items, query.Sort, query.Descending);
@@ -150,6 +173,24 @@ public static class InstanceListFilter
 
     public static IReadOnlyList<string> SplitTags(string tags) =>
         tags.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+    /// <summary>
+    /// U21: whether an instance counts as "mine" for a given viewer — contact email, backup contact
+    /// email, or owner-team membership. Pure/testable so this personalization rule can be verified
+    /// without a database; it is a visibility *filter*, never a grant — it only ever narrows what a
+    /// role-authorized viewer is shown, same note as NotificationSubscriptionMatcher.
+    /// </summary>
+    public static bool IsMine(InstanceListRow row, string? myEmail, IReadOnlySet<int>? myTeamIds)
+    {
+        if (!string.IsNullOrWhiteSpace(myEmail) &&
+            (string.Equals(row.ContactEmail, myEmail, StringComparison.OrdinalIgnoreCase) ||
+             string.Equals(row.BackupContactEmail, myEmail, StringComparison.OrdinalIgnoreCase)))
+        {
+            return true;
+        }
+
+        return row.OwnerTeamId is { } teamId && myTeamIds is not null && myTeamIds.Contains(teamId);
+    }
 
     private static IOrderedEnumerable<InstanceListRow> OrderBy(IEnumerable<InstanceListRow> items, InstanceSortKey sort, bool descending)
     {

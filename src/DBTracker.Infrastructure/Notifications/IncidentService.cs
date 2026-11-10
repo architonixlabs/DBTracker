@@ -22,6 +22,21 @@ public class IncidentService(IDbContextFactory<DBTrackerDbContext> factory)
             .ToListAsync();
     }
 
+    /// <summary>
+    /// Incidents that were open as of a specific past instant (U22 trend comparisons) — opened at or
+    /// before asOfUtc, and either still open or closed after asOfUtc. Uses the incident's own real
+    /// OpenedAtUtc/ClosedAtUtc timestamps rather than recomputing health from today's inventory.
+    /// </summary>
+    public async Task<List<Incident>> ListOpenAsOfAsync(DateTime asOfUtc)
+    {
+        using var db = await factory.CreateDbContextAsync();
+        return await db.Incidents.AsNoTracking()
+            .Include(i => i.DatabaseInstance)
+            .Where(i => i.OpenedAtUtc <= asOfUtc && (i.ClosedAtUtc == null || i.ClosedAtUtc > asOfUtc))
+            .OrderBy(i => i.OpenedAtUtc)
+            .ToListAsync();
+    }
+
     public async Task AcknowledgeAsync(int incidentId, string acknowledgedBy, string note, string ticketReference)
     {
         using var db = await factory.CreateDbContextAsync();

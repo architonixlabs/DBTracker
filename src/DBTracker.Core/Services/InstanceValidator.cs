@@ -25,6 +25,7 @@ public static class InstanceValidator
     private const int PatternsMaxLength = 300;
     private const int TagsMaxLength = 300;
     private const int UrlMaxLength = 500;
+    private const int FacetMaxLength = 100;
 
     private static readonly string[] AllowedLinkSchemes = ["http", "https"];
 
@@ -79,9 +80,22 @@ public static class InstanceValidator
         MaxLen(nameof(instance.Tags), instance.Tags, TagsMaxLength, "Tags");
         MaxLen(nameof(instance.RunbookUrl), instance.RunbookUrl, UrlMaxLength, "Runbook / monitoring link");
 
+        // U21 additions.
+        MaxLen(nameof(instance.BackupContactName), instance.BackupContactName, ShortFieldMaxLength, "Backup contact name");
+        MaxLen(nameof(instance.BackupContactEmail), instance.BackupContactEmail, EmailMaxLength, "Backup contact email");
+        MaxLen(nameof(instance.BackupContactPhone), instance.BackupContactPhone, PhoneMaxLength, "Backup contact phone");
+        MaxLen(nameof(instance.Region), instance.Region, FacetMaxLength, "Region");
+        MaxLen(nameof(instance.Cluster), instance.Cluster, FacetMaxLength, "Cluster");
+        MaxLen(nameof(instance.ReplicaSet), instance.ReplicaSet, FacetMaxLength, "Replica set");
+
         if (!string.IsNullOrEmpty(instance.ContactEmail) && !LooksLikeEmail(instance.ContactEmail))
         {
             errors.Add(new FieldError(nameof(instance.ContactEmail), "Contact email is not a valid email address."));
+        }
+
+        if (!string.IsNullOrEmpty(instance.BackupContactEmail) && !LooksLikeEmail(instance.BackupContactEmail))
+        {
+            errors.Add(new FieldError(nameof(instance.BackupContactEmail), "Backup contact email is not a valid email address."));
         }
 
         if (instance.ExpectedBackupIntervalHours <= 0)

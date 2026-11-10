@@ -5,6 +5,8 @@
 @inject ToastService Toasts
 @inject IJSRuntime JS
 @inject IConfiguration Configuration
+@inject DBTrackerDbContext Db
+@inject IncidentService Incidents
 
 <PageTitle>Reports · DBTracker</PageTitle>
 
@@ -246,6 +248,259 @@ else
             break;
         }
 
+        case ReportType.Trends:
+        {
+            <p class="text-muted mb-3">
+                Compares two time periods using saved <a href="/compliance">Compliance snapshots</a> (U10) for point-in-time
+                health/restore-test coverage, and raw dated backup/restore/incident events for everything else — never by
+                re-running today's health calculator against old data, which would misrepresent instances that didn't exist
+                yet or whose policy has since changed. A period with no snapshot is flagged explicitly, not interpolated.
+                Retention-days values alone are not evidence that backup files still exist on disk (tracked separately, future scope).
+            </p>
+
+            <div class="row g-3 mb-3">
+                <div class="col-md-6">
+                    <div class="dbt-card">
+                        <h2 class="h6 text-muted text-uppercase mb-2">Period A (earlier)</h2>
+                        <div class="d-flex gap-2">
+                            <div class="field"><label class="form-label small" for="trend-a-from">From</label><input id="trend-a-from" type="date" class="form-control form-control-sm" @bind="_trendAFrom" /></div>
+                            <div class="field"><label class="form-label small" for="trend-a-to">To</label><input id="trend-a-to" type="date" class="form-control form-control-sm" @bind="_trendATo" /></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="dbt-card">
+                        <h2 class="h6 text-muted text-uppercase mb-2">Period B (later)</h2>
+                        <div class="d-flex gap-2">
+                            <div class="field"><label class="form-label small" for="trend-b-from">From</label><input id="trend-b-from" type="date" class="form-control form-control-sm" @bind="_trendBFrom" /></div>
+                            <div class="field"><label class="form-label small" for="trend-b-to">To</label><input id="trend-b-to" type="date" class="form-control form-control-sm" @bind="_trendBTo" /></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <button class="btn btn-primary mb-4" @onclick="RunTrendComparison" disabled="@_trendLoading">@(_trendLoading ? "Comparing…" : "Compare periods")</button>
+
+            @if (_trendResult is not null)
+            {
+                var a = _trendResult.PeriodA;
+                var b = _trendResult.PeriodB;
+
+                <div class="dbt-table mb-4" role="region" aria-label="Trend comparison between the two selected periods" tabindex="0">
+                    <table class="table table-sm">
+                        <caption class="visually-hidden">Side-by-side comparison of health coverage, risk, and backup activity for Period A and Period B.</caption>
+                        <thead><tr><th scope="col">Metric</th><th scope="col">Period A (@FormatRange(a))</th><th scope="col">Period B (@FormatRange(b))</th></tr></thead>
+                        <tbody>
+                            <tr>
+                                <td class="small fw-semibold">Inventory (denominator)</td>
+                                <td class="small">@EvidenceCell(a, r => r.InventoryCount?.ToString())</td>
+                                <td class="small">@EvidenceCell(b, r => r.InventoryCount?.ToString())</td>
+                            </tr>
+                            <tr>
+                                <td class="small fw-semibold">On-track coverage</td>
+                                <td class="small">
+                                    @if (a.MissingEvidence || a.OnTrackPct is not { } onTrackPctA)
+                                    {
+                                        <span>No snapshot — missing evidence</span>
+                                    }
+                                    else
+                                    {
+                                        <span aria-hidden="true" style="display:inline-block;width:60px;height:8px;background:var(--dbt-line);vertical-align:middle;margin-right:6px;">
+                                            <span style="display:block;height:8px;width:@(Math.Clamp(onTrackPctA, 0, 100).ToString("N0"))%;background:var(--dbt-ontrack);"></span>
+                                        </span>
+                                        <span>@onTrackPctA.ToString("N0")% on track (@a.OnTrackCount/@a.InventoryCount)</span>
+                                    }
+                                </td>
+                                <td class="small">
+                                    @if (b.MissingEvidence || b.OnTrackPct is not { } onTrackPctB)
+                                    {
+                                        <span>No snapshot — missing evidence</span>
+                                    }
+                                    else
+                                    {
+                                        <span aria-hidden="true" style="display:inline-block;width:60px;height:8px;background:var(--dbt-line);vertical-align:middle;margin-right:6px;">
+                                            <span style="display:block;height:8px;width:@(Math.Clamp(onTrackPctB, 0, 100).ToString("N0"))%;background:var(--dbt-ontrack);"></span>
+                                        </span>
+                                        <span>@onTrackPctB.ToString("N0")% on track (@b.OnTrackCount/@b.InventoryCount)</span>
+                                    }
+                                </td>
+                            </tr>
+                            <tr>
+                                <td class="small fw-semibold">At-risk instances</td>
+                                <td class="small">@EvidenceCell(a, r => r.AtRiskCount?.ToString())</td>
+                                <td class="small">@EvidenceCell(b, r => r.AtRiskCount?.ToString())</td>
+                            </tr>
+                            <tr>
+                                <td class="small fw-semibold">Restore-tested coverage</td>
+                                <td class="small">@EvidenceCell(a, r => r.RestoreTestedPct is { } p ? $"{p:N0}%" : null)</td>
+                                <td class="small">@EvidenceCell(b, r => r.RestoreTestedPct is { } p ? $"{p:N0}%" : null)</td>
+                            </tr>
+                            <tr>
+                                <td class="small fw-semibold">Restore tests performed in period</td>
+                                <td class="small">@a.RestoreTestsPerformed</td>
+                                <td class="small">@b.RestoreTestsPerformed</td>
+                            </tr>
+                            <tr>
+                                <td class="small fw-semibold">Repeated-failure instances (2+ failures)</td>
+                                <td class="small">@a.RepeatedFailureInstanceCount</td>
+                                <td class="small">@b.RepeatedFailureInstanceCount</td>
+                            </tr>
+                            <tr>
+                                <td class="small fw-semibold">Avg backup duration</td>
+                                <td class="small">@(a.AvgBackupDurationMinutes is { } ad ? $"{ad:N0} min" : "—")</td>
+                                <td class="small">@(b.AvgBackupDurationMinutes is { } bd ? $"{bd:N0} min" : "—")</td>
+                            </tr>
+                            <tr>
+                                <td class="small fw-semibold">Avg backup size</td>
+                                <td class="small">@(a.AvgBackupSizeMb is { } asz ? FormatMb(asz) : "—")</td>
+                                <td class="small">@(b.AvgBackupSizeMb is { } bsz ? FormatMb(bsz) : "—")</td>
+                            </tr>
+                            <tr>
+                                <td class="small fw-semibold">Avg outstanding-risk age</td>
+                                <td class="small">@(a.AverageOutstandingRiskAgeHours is { } aage ? FormatHours(aage) : "—")</td>
+                                <td class="small">@(b.AverageOutstandingRiskAgeHours is { } bage ? FormatHours(bage) : "—")</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                @if (a.MissingEvidence || b.MissingEvidence)
+                {
+                    <div class="alert alert-danger mb-4">
+                        <i class="bi bi-exclamation-triangle"></i>
+                        @(a.MissingEvidence && b.MissingEvidence ? "Neither period has a Compliance snapshot at or before its end date" : a.MissingEvidence ? "Period A has no Compliance snapshot at or before its end date" : "Period B has no Compliance snapshot at or before its end date") —
+                        health-coverage and restore-tested percentages are not shown for that period rather than inferred from today's live inventory. Save a snapshot on the <a href="/compliance">Compliance page</a> to establish evidence for future comparisons.
+                    </div>
+                }
+
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <h3 class="h6 text-muted text-uppercase mb-2">Period A — at-risk rows (drill-down)</h3>
+                        @if (a.AtRiskRows.Count == 0)
+                        {
+                            <div class="text-muted small mb-3">None.</div>
+                        }
+                        else
+                        {
+                            <div class="dbt-table mb-3" role="region" aria-label="Period A at-risk instances" tabindex="0">
+                                <table class="table table-sm">
+                                    <thead><tr><th scope="col">Instance</th><th scope="col">Health</th></tr></thead>
+                                    <tbody>
+                                        @foreach (var row in a.AtRiskRows)
+                                        {
+                                            <tr><td class="small">@row.InstanceName</td><td class="small">@row.Health</td></tr>
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+                        }
+
+                        <h3 class="h6 text-muted text-uppercase mb-2 mt-3">Period A — repeated failures</h3>
+                        @if (a.RepeatedFailureRows.Count == 0)
+                        {
+                            <div class="text-muted small mb-3">None.</div>
+                        }
+                        else
+                        {
+                            <div class="dbt-table mb-3" role="region" aria-label="Period A repeated backup failures" tabindex="0">
+                                <table class="table table-sm">
+                                    <thead><tr><th scope="col">Instance</th><th scope="col">Failures</th></tr></thead>
+                                    <tbody>
+                                        @foreach (var row in a.RepeatedFailureRows)
+                                        {
+                                            <tr><td class="small">@row.InstanceName</td><td class="small">@row.FailureCount</td></tr>
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+                        }
+
+                        <h3 class="h6 text-muted text-uppercase mb-2 mt-3">Period A — outstanding risk (open incidents as of period end)</h3>
+                        @if (a.OutstandingRiskRows.Count == 0)
+                        {
+                            <div class="text-muted small mb-3">None open as of period end.</div>
+                        }
+                        else
+                        {
+                            <div class="dbt-table mb-3" role="region" aria-label="Period A outstanding risk" tabindex="0">
+                                <table class="table table-sm">
+                                    <thead><tr><th scope="col">Instance</th><th scope="col">Opened</th><th scope="col">Trigger</th></tr></thead>
+                                    <tbody>
+                                        @foreach (var row in a.OutstandingRiskRows)
+                                        {
+                                            <tr><td class="small">@row.InstanceName</td><td class="small">@row.OpenedAtUtc.ToLocalTime().ToString("MMM d, yyyy h:mm tt")</td><td class="small">@row.TriggerHealth</td></tr>
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+                        }
+                    </div>
+                    <div class="col-md-6">
+                        <h3 class="h6 text-muted text-uppercase mb-2">Period B — at-risk rows (drill-down)</h3>
+                        @if (b.AtRiskRows.Count == 0)
+                        {
+                            <div class="text-muted small mb-3">None.</div>
+                        }
+                        else
+                        {
+                            <div class="dbt-table mb-3" role="region" aria-label="Period B at-risk instances" tabindex="0">
+                                <table class="table table-sm">
+                                    <thead><tr><th scope="col">Instance</th><th scope="col">Health</th></tr></thead>
+                                    <tbody>
+                                        @foreach (var row in b.AtRiskRows)
+                                        {
+                                            <tr><td class="small">@row.InstanceName</td><td class="small">@row.Health</td></tr>
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+                        }
+
+                        <h3 class="h6 text-muted text-uppercase mb-2 mt-3">Period B — repeated failures</h3>
+                        @if (b.RepeatedFailureRows.Count == 0)
+                        {
+                            <div class="text-muted small mb-3">None.</div>
+                        }
+                        else
+                        {
+                            <div class="dbt-table mb-3" role="region" aria-label="Period B repeated backup failures" tabindex="0">
+                                <table class="table table-sm">
+                                    <thead><tr><th scope="col">Instance</th><th scope="col">Failures</th></tr></thead>
+                                    <tbody>
+                                        @foreach (var row in b.RepeatedFailureRows)
+                                        {
+                                            <tr><td class="small">@row.InstanceName</td><td class="small">@row.FailureCount</td></tr>
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+                        }
+
+                        <h3 class="h6 text-muted text-uppercase mb-2 mt-3">Period B — outstanding risk (open incidents as of period end)</h3>
+                        @if (b.OutstandingRiskRows.Count == 0)
+                        {
+                            <div class="text-muted small mb-3">None open as of period end.</div>
+                        }
+                        else
+                        {
+                            <div class="dbt-table mb-3" role="region" aria-label="Period B outstanding risk" tabindex="0">
+                                <table class="table table-sm">
+                                    <thead><tr><th scope="col">Instance</th><th scope="col">Opened</th><th scope="col">Trigger</th></tr></thead>
+                                    <tbody>
+                                        @foreach (var row in b.OutstandingRiskRows)
+                                        {
+                                            <tr><td class="small">@row.InstanceName</td><td class="small">@row.OpenedAtUtc.ToLocalTime().ToString("MMM d, yyyy h:mm tt")</td><td class="small">@row.TriggerHealth</td></tr>
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+            break;
+        }
+
         case ReportType.ManagementSummary:
         {
             <p class="text-muted mb-3">The same leadership-ready roll-up sent on schedule (<code>Reports:IntervalDays</code>) or on demand — plain-text, ready to paste into an email or ticket.</p>
@@ -268,12 +523,12 @@ else
 }
 
 @code {
-    private enum ReportType { BackupActivity, RestoreTesting, OwnershipRollup, ScanActivity, ComplianceSnapshot, ManagementSummary }
+    private enum ReportType { BackupActivity, RestoreTesting, OwnershipRollup, ScanActivity, ComplianceSnapshot, Trends, ManagementSummary }
 
     private static readonly ReportType[] ReportTypeOrder =
     [
         ReportType.BackupActivity, ReportType.RestoreTesting, ReportType.OwnershipRollup,
-        ReportType.ScanActivity, ReportType.ComplianceSnapshot, ReportType.ManagementSummary
+        ReportType.ScanActivity, ReportType.ComplianceSnapshot, ReportType.Trends, ReportType.ManagementSummary
     ];
 
     // Lets the dashboard's scan-issue banner (and any other link) open this page directly on a
@@ -287,6 +542,14 @@ else
     private bool _useCustomRange;
     private DateTime _customFrom = DateTime.Today.AddDays(-7);
     private DateTime _customTo = DateTime.Today;
+
+    // U22: Period A/B default to two adjacent 30-day windows — "this period vs. the one before it".
+    private DateTime _trendAFrom = DateTime.Today.AddDays(-60);
+    private DateTime _trendATo = DateTime.Today.AddDays(-30);
+    private DateTime _trendBFrom = DateTime.Today.AddDays(-30);
+    private DateTime _trendBTo = DateTime.Today;
+    private bool _trendLoading;
+    private TrendComparisonResult? _trendResult;
 
     private int ScanIntervalMinutes => Configuration.GetValue("BackupScan:IntervalMinutes", 15);
     private int StaleAfterMultiplier => Configuration.GetValue("BackupScan:StaleAfterMultiplier", 3);
@@ -321,6 +584,61 @@ else
         return (fromLocal.ToUniversalTime(), toLocal.ToUniversalTime());
     }
 
+    private static (DateTime FromUtc, DateTime ToUtc) ToUtcRange(DateTime fromLocal, DateTime toLocal) =>
+        (fromLocal.Date.ToUniversalTime(), toLocal.Date.AddDays(1).AddTicks(-1).ToUniversalTime());
+
+    private async Task RunTrendComparison()
+    {
+        _trendLoading = true;
+        var (aFromUtc, aToUtc) = ToUtcRange(_trendAFrom, _trendATo);
+        var (bFromUtc, bToUtc) = ToUtcRange(_trendBFrom, _trendBTo);
+
+        var inputA = await BuildTrendPeriodInputAsync(aFromUtc, aToUtc);
+        var inputB = await BuildTrendPeriodInputAsync(bFromUtc, bToUtc);
+        _trendResult = TrendsReportBuilder.Compare(inputA, inputB);
+        _trendLoading = false;
+    }
+
+    /// <summary>
+    /// Gathers one trend period's inputs (U22): the nearest saved Compliance snapshot at or before
+    /// the period's end for point-in-time health/restore-tested coverage (null — "missing evidence"
+    /// — if none exists), plus raw dated BackupRecord/RestoreEvent/Incident rows within the period.
+    /// </summary>
+    private async Task<TrendPeriodInput> BuildTrendPeriodInputAsync(DateTime fromUtc, DateTime toUtc)
+    {
+        var snapshot = await Db.ComplianceSnapshots.AsNoTracking()
+            .Where(s => s.EffectiveAsOfUtc <= toUtc)
+            .OrderByDescending(s => s.EffectiveAsOfUtc)
+            .FirstOrDefaultAsync();
+        var snapshotRows = snapshot is null ? null : ComplianceSnapshotBuilder.Deserialize(snapshot.RowsJson);
+
+        var backupEvents = await Db.BackupRecords.AsNoTracking()
+            .Where(r => r.TimestampUtc >= fromUtc && r.TimestampUtc <= toUtc)
+            .Select(r => new { r.DatabaseInstance!.Name, r.TimestampUtc, r.Status, r.SizeMb, r.DurationMinutes })
+            .ToListAsync();
+
+        var restoreTestTimestamps = await Db.RestoreEvents.AsNoTracking()
+            .Where(r => r.Outcome == RestoreOutcome.Success && r.TimestampUtc >= fromUtc && r.TimestampUtc <= toUtc)
+            .Select(r => r.TimestampUtc)
+            .ToListAsync();
+
+        var openIncidents = await Incidents.ListOpenAsOfAsync(toUtc);
+
+        return new TrendPeriodInput(
+            fromUtc, toUtc, snapshotRows, snapshot?.EffectiveAsOfUtc,
+            backupEvents.Select(e => new TrendBackupEvent(e.Name, e.TimestampUtc, e.Status, e.SizeMb, e.DurationMinutes)).ToList(),
+            restoreTestTimestamps,
+            openIncidents.Select(i => new TrendOutstandingRisk(i.DatabaseInstance?.Name ?? $"Instance #{i.DatabaseInstanceId}", i.OpenedAtUtc, i.TriggerHealth)).ToList());
+    }
+
+    private static string FormatRange(TrendPeriodResult r) => $"{r.FromUtc.ToLocalTime():MMM d}–{r.ToUtc.ToLocalTime():MMM d, yyyy}";
+
+    private static string FormatHours(double hours) =>
+        hours >= 24 ? $"{hours / 24:N1} d" : $"{hours:N0} h";
+
+    private static string EvidenceCell(TrendPeriodResult r, Func<TrendPeriodResult, string?> format) =>
+        r.MissingEvidence ? "No snapshot — missing evidence" : format(r) ?? "—";
+
     private static string RecencyClass(RestoreTestRecency recency) => recency switch
     {
         RestoreTestRecency.Current => "OnTrack",
@@ -350,6 +668,7 @@ else
         ReportType.OwnershipRollup => "Ownership roll-up",
         ReportType.ScanActivity => "Scan activity",
         ReportType.ComplianceSnapshot => "Compliance snapshot",
+        ReportType.Trends => "Trends",
         ReportType.ManagementSummary => "Management summary",
         _ => type.ToString()
     };

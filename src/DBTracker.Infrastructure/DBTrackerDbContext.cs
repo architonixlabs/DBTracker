@@ -25,6 +25,10 @@ public class DBTrackerDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<RestoreEventCorrection> RestoreEventCorrections => Set<RestoreEventCorrection>();
     public DbSet<ComplianceSnapshot> ComplianceSnapshots => Set<ComplianceSnapshot>();
     public DbSet<AuditEvent> AuditEvents => Set<AuditEvent>();
+    public DbSet<Team> Teams => Set<Team>();
+    public DbSet<TeamMembership> TeamMemberships => Set<TeamMembership>();
+    public DbSet<BackupPolicy> BackupPolicies => Set<BackupPolicy>();
+    public DbSet<ContactCorrectionRequest> ContactCorrectionRequests => Set<ContactCorrectionRequest>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -62,10 +66,32 @@ public class DBTrackerDbContext : IdentityDbContext<ApplicationUser>
             entity.Property(e => e.ConnectivityHostOverride).HasMaxLength(255);
             entity.Property(e => e.RowVersion).IsRowVersion();
 
+            // U21 additions.
+            entity.Property(e => e.BackupContactName).HasMaxLength(200);
+            entity.Property(e => e.BackupContactEmail).HasMaxLength(320);
+            entity.Property(e => e.BackupContactPhone).HasMaxLength(50);
+            entity.Property(e => e.OwnershipConfirmedBy).HasMaxLength(320);
+            entity.Property(e => e.Region).HasMaxLength(100);
+            entity.Property(e => e.Cluster).HasMaxLength(100);
+            entity.Property(e => e.ReplicaSet).HasMaxLength(100);
+
+            entity.HasOne(e => e.OwnerTeam)
+                .WithMany()
+                .HasForeignKey(e => e.OwnerTeamId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne(e => e.AppliedPolicy)
+                .WithMany()
+                .HasForeignKey(e => e.AppliedPolicyId)
+                .OnDelete(DeleteBehavior.SetNull);
+
             entity.HasIndex(e => e.Application);
             entity.HasIndex(e => e.Company);
             entity.HasIndex(e => e.Engine);
             entity.HasIndex(e => e.IsArchived);
+            entity.HasIndex(e => e.OwnerTeamId);
+            entity.HasIndex(e => e.Region);
+            entity.HasIndex(e => e.Cluster);
         });
 
         modelBuilder.Entity<BackupRecord>(entity =>
@@ -170,6 +196,7 @@ public class DBTrackerDbContext : IdentityDbContext<ApplicationUser>
 
             entity.HasIndex(e => e.CreatedAtUtc);
             entity.HasIndex(e => e.IsRead);
+            entity.HasIndex(e => e.OwnerTeamId);
         });
 
         modelBuilder.Entity<DeviceLinkToken>(entity =>
@@ -232,7 +259,68 @@ public class DBTrackerDbContext : IdentityDbContext<ApplicationUser>
                 .HasForeignKey(e => e.DatabaseInstanceId)
                 .OnDelete(DeleteBehavior.Cascade);
 
+            entity.HasOne(e => e.Team)
+                .WithMany()
+                .HasForeignKey(e => e.TeamId)
+                .OnDelete(DeleteBehavior.Cascade);
+
             entity.HasIndex(e => e.UserId);
+        });
+
+        modelBuilder.Entity<Team>(entity =>
+        {
+            entity.Property(e => e.Name).HasMaxLength(200).IsRequired();
+            entity.Property(e => e.PrimaryContactName).HasMaxLength(200);
+            entity.Property(e => e.PrimaryContactEmail).HasMaxLength(320);
+            entity.Property(e => e.BackupContactName).HasMaxLength(200);
+            entity.Property(e => e.BackupContactEmail).HasMaxLength(320);
+
+            entity.HasIndex(e => e.Name).IsUnique();
+        });
+
+        modelBuilder.Entity<TeamMembership>(entity =>
+        {
+            entity.Property(e => e.UserId).HasMaxLength(450).IsRequired();
+
+            entity.HasOne(e => e.Team)
+                .WithMany(t => t.Memberships)
+                .HasForeignKey(e => e.TeamId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // A user can't be added to the same team twice.
+            entity.HasIndex(e => new { e.TeamId, e.UserId }).IsUnique();
+            entity.HasIndex(e => e.UserId);
+        });
+
+        modelBuilder.Entity<BackupPolicy>(entity =>
+        {
+            entity.Property(e => e.Name).HasMaxLength(200).IsRequired();
+            entity.Property(e => e.UpdatedBy).HasMaxLength(320);
+
+            entity.HasIndex(e => e.Name).IsUnique();
+        });
+
+        modelBuilder.Entity<ContactCorrectionRequest>(entity =>
+        {
+            entity.Property(e => e.RequestedByUserId).HasMaxLength(450);
+            entity.Property(e => e.RequestedByName).HasMaxLength(320);
+            entity.Property(e => e.ProposedContactName).HasMaxLength(200);
+            entity.Property(e => e.ProposedContactEmail).HasMaxLength(320);
+            entity.Property(e => e.ProposedContactPhone).HasMaxLength(50);
+            entity.Property(e => e.ProposedBackupContactName).HasMaxLength(200);
+            entity.Property(e => e.ProposedBackupContactEmail).HasMaxLength(320);
+            entity.Property(e => e.ProposedBackupContactPhone).HasMaxLength(50);
+            entity.Property(e => e.Note).HasMaxLength(1000);
+            entity.Property(e => e.ReviewedByUserId).HasMaxLength(450);
+            entity.Property(e => e.ReviewedByName).HasMaxLength(320);
+            entity.Property(e => e.ReviewNote).HasMaxLength(1000);
+
+            entity.HasOne(e => e.DatabaseInstance)
+                .WithMany()
+                .HasForeignKey(e => e.DatabaseInstanceId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(e => new { e.DatabaseInstanceId, e.Status });
         });
 
         modelBuilder.Entity<Incident>(entity =>

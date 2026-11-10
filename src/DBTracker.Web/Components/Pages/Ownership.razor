@@ -1,0 +1,316 @@
+@page "/ownership"
+@attribute [Authorize(Roles = Roles.CanEditPolicy)]
+@using Microsoft.AspNetCore.Identity
+@inject TeamService Teams
+@inject BackupPolicyService Policies
+@inject ContactCorrectionService Corrections
+@inject UserManager<ApplicationUser> UserManager
+@inject AuthenticationStateProvider AuthProvider
+@inject NavigationManager Nav
+@inject ToastService Toasts
+
+<PageTitle>Ownership &amp; policies · DBTracker</PageTitle>
+
+<div class="app-topbar">
+    <div>
+        <div class="eyebrow">Organization</div>
+        <h1>Ownership &amp; policies</h1>
+        <div class="subtitle">
+            Owner teams, reusable backup policies and contact-correction review (U21).
+            Personalization only — team membership narrows what a user sees as relevant; it never grants or restricts
+            access beyond what their role already allows.
+        </div>
+    </div>
+</div>
+
+<div class="filter-bar">
+    @foreach (var tab in TabOrder)
+    {
+        <button type="button" class="btn @(tab == _selected ? "btn-primary" : "btn-outline-secondary")" @onclick="() => _selected = tab">
+            @Label(tab)
+        </button>
+    }
+</div>
+
+@switch (_selected)
+{
+    case Tab.Teams:
+    {
+        <div class="row g-3">
+            <div class="col-md-5">
+                <div class="dbt-card">
+                    <h2 class="h6 text-muted text-uppercase mb-3">Create a team</h2>
+                    <div class="mb-2">
+                        <label class="form-label small" for="team-name">Name</label>
+                        <input id="team-name" class="form-control form-control-sm" @bind="_newTeamName" @bind:event="oninput" />
+                    </div>
+                    <div class="row g-2 mb-2">
+                        <div class="col-6"><input class="form-control form-control-sm" placeholder="Primary contact name" @bind="_newTeamPrimaryName" @bind:event="oninput" /></div>
+                        <div class="col-6"><input class="form-control form-control-sm" placeholder="Primary contact email" @bind="_newTeamPrimaryEmail" @bind:event="oninput" /></div>
+                    </div>
+                    <div class="row g-2 mb-3">
+                        <div class="col-6"><input class="form-control form-control-sm" placeholder="Backup contact name" @bind="_newTeamBackupName" @bind:event="oninput" /></div>
+                        <div class="col-6"><input class="form-control form-control-sm" placeholder="Backup contact email" @bind="_newTeamBackupEmail" @bind:event="oninput" /></div>
+                    </div>
+                    <button class="btn btn-primary btn-sm" @onclick="CreateTeam" disabled="@string.IsNullOrWhiteSpace(_newTeamName)">Create team</button>
+                </div>
+            </div>
+            <div class="col-md-7">
+                @if (_teams.Count == 0)
+                {
+                    <div class="empty-state"><i class="bi bi-people"></i>No teams yet.</div>
+                }
+                else
+                {
+                    @foreach (var t in _teams)
+                    {
+                        <div class="dbt-card mb-3">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <h2 class="h6 mb-0">@t.Team.Name</h2>
+                                <span class="small text-muted">@t.InstanceCount instance(s) owned · @t.MemberCount member(s)</span>
+                            </div>
+                            <p class="small text-muted mb-2">Primary: @t.Team.PrimaryContactName @t.Team.PrimaryContactEmail</p>
+                            @if (_memberLists.TryGetValue(t.Team.Id, out var members))
+                            {
+                                @foreach (var m in members)
+                                {
+                                    <div class="d-flex justify-content-between align-items-center small mb-1">
+                                        <span>@m.DisplayName (@m.Email)</span>
+                                        <button class="btn btn-link btn-sm text-danger p-0" @onclick="() => RemoveMember(t.Team.Id, m.UserId)">Remove</button>
+                                    </div>
+                                }
+                            }
+                            <div class="d-flex gap-2 mt-2">
+                                <select class="form-select form-select-sm" style="max-width:260px;" @bind="_addMemberUserId[t.Team.Id]">
+                                    @foreach (var u in _allUsers)
+                                    {
+                                        <option value="@u.Id">@u.DisplayName (@u.Email)</option>
+                                    }
+                                </select>
+                                <button class="btn btn-outline-secondary btn-sm" @onclick="() => AddMember(t.Team.Id)">Add member</button>
+                            </div>
+                        </div>
+                    }
+                }
+            </div>
+        </div>
+        break;
+    }
+
+    case Tab.Policies:
+    {
+        <div class="row g-3">
+            <div class="col-md-5">
+                <div class="dbt-card">
+                    <h2 class="h6 text-muted text-uppercase mb-3">Create a policy</h2>
+                    <div class="mb-2">
+                        <label class="form-label small" for="policy-name">Name</label>
+                        <input id="policy-name" class="form-control form-control-sm" @bind="_newPolicyName" @bind:event="oninput" />
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label small" for="policy-interval">Expected backup interval (hours)</label>
+                        <input id="policy-interval" type="number" class="form-control form-control-sm" @bind="_newPolicyIntervalHours" @bind:event="oninput" />
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label small" for="policy-retention">Retention (days, optional)</label>
+                        <input id="policy-retention" type="number" class="form-control form-control-sm" @bind="_newPolicyRetentionDays" @bind:event="oninput" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small" for="policy-restore">Restore-test interval (days, optional)</label>
+                        <input id="policy-restore" type="number" class="form-control form-control-sm" @bind="_newPolicyRestoreDays" @bind:event="oninput" />
+                    </div>
+                    <button class="btn btn-primary btn-sm" @onclick="CreatePolicy" disabled="@string.IsNullOrWhiteSpace(_newPolicyName)">Create policy</button>
+                </div>
+            </div>
+            <div class="col-md-7">
+                @if (_policies.Count == 0)
+                {
+                    <div class="empty-state"><i class="bi bi-shield"></i>No reusable policies yet.</div>
+                }
+                else
+                {
+                    <div class="dbt-table" role="region" aria-label="Backup policies" tabindex="0">
+                        <table class="table table-sm">
+                            <thead><tr><th scope="col">Name</th><th scope="col">Version</th><th scope="col">Cadence</th><th scope="col">Retention</th><th scope="col">Restore-test</th><th scope="col">Updated</th></tr></thead>
+                            <tbody>
+                                @foreach (var p in _policies)
+                                {
+                                    <tr>
+                                        <td class="fw-semibold small">@p.Name</td>
+                                        <td class="small">v@p.Version</td>
+                                        <td class="small">every @p.ExpectedBackupIntervalHours h</td>
+                                        <td class="small">@(p.RetentionPolicyDays?.ToString() ?? "org default") d</td>
+                                        <td class="small">@(p.RestoreTestIntervalDays?.ToString() ?? "org default") d</td>
+                                        <td class="small text-muted">@p.UpdatedAtUtc.ToLocalTime().ToString("MMM d, yyyy") by @p.UpdatedBy</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                    <p class="small text-muted mt-2">Edit a policy's values from here to bump its version (recorded in the <a href="/audit">audit trail</a>); apply it to instances from the Instances list's "Apply policy" action after selecting rows.</p>
+                }
+            </div>
+        </div>
+        break;
+    }
+
+    case Tab.Corrections:
+    {
+        @if (_pendingCorrections.Count == 0)
+        {
+            <div class="empty-state"><i class="bi bi-check-circle"></i>No pending contact-correction requests.</div>
+        }
+        else
+        {
+            @foreach (var req in _pendingCorrections)
+            {
+                <div class="dbt-card mb-3">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <div>
+                            <a href="/instances/@req.DatabaseInstanceId">@(req.DatabaseInstance?.Name ?? $"Instance #{req.DatabaseInstanceId}")</a>
+                            <div class="small text-muted">Requested by @req.RequestedByName on @req.RequestedAtUtc.ToLocalTime().ToString("MMM d, h:mm tt")</div>
+                        </div>
+                    </div>
+                    <p class="small mb-2">"@req.Note"</p>
+                    @if (!string.IsNullOrWhiteSpace(req.ProposedContactName)) { <p class="small mb-1">Proposed name: @req.ProposedContactName</p> }
+                    @if (!string.IsNullOrWhiteSpace(req.ProposedContactEmail)) { <p class="small mb-1">Proposed email: @req.ProposedContactEmail</p> }
+                    <div class="d-flex gap-2">
+                        <button class="btn btn-outline-secondary btn-sm" @onclick="() => ApproveCorrection(req.Id)">Approve</button>
+                        <button class="btn btn-link btn-sm text-danger" @onclick="() => RejectCorrection(req.Id)">Reject</button>
+                    </div>
+                </div>
+            }
+        }
+        break;
+    }
+}
+
+@code {
+    private enum Tab { Teams, Policies, Corrections }
+    private static readonly Tab[] TabOrder = [Tab.Teams, Tab.Policies, Tab.Corrections];
+
+    [Parameter, SupplyParameterFromQuery(Name = "tab")] public string? TabParam { get; set; }
+
+    private Tab _selected = Tab.Teams;
+    private List<TeamSummary> _teams = new();
+    private Dictionary<int, List<TeamMemberInfo>> _memberLists = new();
+    private Dictionary<int, string> _addMemberUserId = new();
+    private List<ApplicationUser> _allUsers = new();
+    private List<BackupPolicy> _policies = new();
+    private List<ContactCorrectionRequest> _pendingCorrections = new();
+
+    private string _newTeamName = "", _newTeamPrimaryName = "", _newTeamPrimaryEmail = "", _newTeamBackupName = "", _newTeamBackupEmail = "";
+    private string _newPolicyName = "";
+    private int _newPolicyIntervalHours = 24;
+    private int? _newPolicyRetentionDays;
+    private int? _newPolicyRestoreDays;
+
+    private string? _userId, _userName;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (Enum.TryParse<Tab>(TabParam, true, out var requested))
+        {
+            _selected = requested;
+        }
+
+        var state = await AuthProvider.GetAuthenticationStateAsync();
+        _userId = state.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? "";
+        _userName = state.User.Identity?.Name ?? "unknown";
+
+        _allUsers = UserManager.Users.OrderBy(u => u.DisplayName).ToList();
+        await LoadTeams();
+        await LoadPolicies();
+        await LoadCorrections();
+    }
+
+    private async Task LoadTeams()
+    {
+        _teams = await Teams.ListAsync();
+        _memberLists = new();
+        foreach (var t in _teams)
+        {
+            _memberLists[t.Team.Id] = await Teams.ListMembersAsync(t.Team.Id);
+            if (!_addMemberUserId.ContainsKey(t.Team.Id) && _allUsers.Count > 0)
+            {
+                _addMemberUserId[t.Team.Id] = _allUsers[0].Id;
+            }
+        }
+    }
+
+    private async Task LoadPolicies() => _policies = await Policies.ListAsync();
+
+    private async Task LoadCorrections() => _pendingCorrections = await Corrections.ListPendingAsync();
+
+    private async Task CreateTeam()
+    {
+        var ok = await Teams.CreateAsync(_newTeamName, _newTeamPrimaryName, _newTeamPrimaryEmail, _newTeamBackupName, _newTeamBackupEmail);
+        if (ok)
+        {
+            Toasts.Success($"Team \"{_newTeamName}\" created.");
+            _newTeamName = _newTeamPrimaryName = _newTeamPrimaryEmail = _newTeamBackupName = _newTeamBackupEmail = "";
+            await LoadTeams();
+        }
+        else
+        {
+            Toasts.Error("A team with that name already exists.");
+        }
+    }
+
+    private async Task AddMember(int teamId)
+    {
+        if (!_addMemberUserId.TryGetValue(teamId, out var userId) || string.IsNullOrEmpty(userId))
+        {
+            return;
+        }
+        var ok = await Teams.AddMemberAsync(teamId, userId);
+        if (ok)
+        {
+            Toasts.Success("Member added.");
+        }
+        await LoadTeams();
+    }
+
+    private async Task RemoveMember(int teamId, string userId)
+    {
+        await Teams.RemoveMemberAsync(teamId, userId);
+        await LoadTeams();
+    }
+
+    private async Task CreatePolicy()
+    {
+        var ok = await Policies.CreateAsync(_newPolicyName, _newPolicyIntervalHours, _newPolicyRetentionDays, _newPolicyRestoreDays, _userName ?? "unknown");
+        if (ok)
+        {
+            Toasts.Success($"Policy \"{_newPolicyName}\" created.");
+            _newPolicyName = "";
+            await LoadPolicies();
+        }
+        else
+        {
+            Toasts.Error("A policy with that name already exists.");
+        }
+    }
+
+    private async Task ApproveCorrection(int requestId)
+    {
+        await Corrections.ApproveAsync(requestId, _userId ?? "", _userName ?? "unknown", "Approved from ownership hub");
+        Toasts.Success("Correction approved and applied.");
+        await LoadCorrections();
+    }
+
+    private async Task RejectCorrection(int requestId)
+    {
+        await Corrections.RejectAsync(requestId, _userId ?? "", _userName ?? "unknown", "Rejected from ownership hub");
+        Toasts.Success("Correction request rejected.");
+        await LoadCorrections();
+    }
+
+    private static string Label(Tab tab) => tab switch
+    {
+        Tab.Teams => "Teams",
+        Tab.Policies => "Backup policies",
+        Tab.Corrections => "Correction requests",
+        _ => tab.ToString()
+    };
+}

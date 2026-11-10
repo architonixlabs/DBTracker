@@ -8,6 +8,7 @@
 @inject AuthenticationStateProvider AuthProvider
 @inject BackupFileScanner Scanner
 @inject AuditRecorder Audit
+@inject TeamService Teams
 @inject IJSRuntime JS
 
 <PageTitle>@(Id is null ? "Add instance" : "Edit instance") · DBTracker</PageTitle>
@@ -102,6 +103,23 @@ else
                     <label class="form-label">Department</label>
                     <InputText class="form-control" @bind-Value="_model.Department" />
                 </div>
+                <div class="col-md-6">
+                    <label class="form-label" for="owner-team">Owner team (U21)</label>
+                    <InputSelect id="owner-team" class="form-select" @bind-Value="_model.OwnerTeamId">
+                        <option value="">No team assigned</option>
+                        @foreach (var t in _teams)
+                        {
+                            <option value="@t.Id">@t.Name</option>
+                        }
+                    </InputSelect>
+                    <div class="form-text">Powers "My instances" and team-scoped notification subscriptions. A personalization grouping only — it never grants access beyond a user's role.</div>
+                </div>
+                <div class="col-md-6 d-flex align-items-end">
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="ownership-confirmed" @bind="_confirmOwnership" />
+                        <label class="form-check-label" for="ownership-confirmed">Ownership/contact information above is current</label>
+                    </div>
+                </div>
             </div>
 
             <h2 class="h6 text-muted text-uppercase mb-3">Contact</h2>
@@ -118,6 +136,19 @@ else
                 <div class="col-md-4">
                     <label class="form-label">Contact phone</label>
                     <InputText class="form-control" @bind-Value="_model.ContactPhone" />
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Backup contact name</label>
+                    <InputText class="form-control" @bind-Value="_model.BackupContactName" />
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Backup contact email</label>
+                    <InputText class="form-control" @bind-Value="_model.BackupContactEmail" />
+                    <ValidationMessage For="() => _model.BackupContactEmail" />
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Backup contact phone</label>
+                    <InputText class="form-control" @bind-Value="_model.BackupContactPhone" />
                 </div>
             </div>
 
@@ -148,6 +179,18 @@ else
                 <div class="col-md-3">
                     <label class="form-label">Server IP</label>
                     <InputText class="form-control" @bind-Value="_model.ServerIp" />
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Region</label>
+                    <InputText class="form-control" @bind-Value="_model.Region" placeholder="us-east-1" />
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Cluster</label>
+                    <InputText class="form-control" @bind-Value="_model.Cluster" placeholder="cluster-a" />
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Replica set</label>
+                    <InputText class="form-control" @bind-Value="_model.ReplicaSet" placeholder="rs0" />
                 </div>
             </div>
 
@@ -295,6 +338,8 @@ else
     private byte[] _loadedRowVersion = [];
     private IDisposable? _navigationLock;
     private string? _userDisplayName;
+    private List<Team> _teams = new();
+    private bool _confirmOwnership;
 
     private string CancelUrl => Id is null ? "/instances" : $"/instances/{Id}";
 
@@ -319,6 +364,7 @@ else
     protected override async Task OnInitializedAsync()
     {
         _userDisplayName = (await AuthProvider.GetAuthenticationStateAsync()).User.Identity?.Name ?? "unknown";
+        _teams = (await Teams.ListAsync()).Select(s => s.Team).OrderBy(t => t.Name).ToList();
 
         if (Id is not null)
         {
@@ -330,6 +376,7 @@ else
                 return;
             }
             _model = existing;
+            _confirmOwnership = existing.OwnershipConfirmedAtUtc is not null;
             _loadedRowVersion = existing.RowVersion;
         }
 
@@ -389,6 +436,19 @@ else
         _concurrencyConflict = false;
         var now = DateTime.UtcNow;
         _model.UpdatedAtUtc = now;
+
+        // U21: the checkbox only ever sets/clears the confirmation stamp — it never auto-confirms
+        // just because a save happened, and unchecking it explicitly clears a stale confirmation.
+        if (_confirmOwnership)
+        {
+            _model.OwnershipConfirmedAtUtc = now;
+            _model.OwnershipConfirmedBy = _userDisplayName ?? "unknown";
+        }
+        else
+        {
+            _model.OwnershipConfirmedAtUtc = null;
+            _model.OwnershipConfirmedBy = "";
+        }
 
         try
         {
