@@ -27,6 +27,7 @@ public static class InstanceChangeLogBuilder
             ("ServerIp", before.ServerIp, after.ServerIp),
             ("ExpectedBackupIntervalHours", before.ExpectedBackupIntervalHours.ToString(), after.ExpectedBackupIntervalHours.ToString()),
             ("BackupFileLocation", before.BackupFileLocation, after.BackupFileLocation),
+            ("BackupFileNamePatterns", before.BackupFileNamePatterns, after.BackupFileNamePatterns),
             ("RetentionPolicyDays", before.RetentionPolicyDays?.ToString() ?? "", after.RetentionPolicyDays?.ToString() ?? ""),
             ("Tags", before.Tags, after.Tags),
             ("RunbookUrl", before.RunbookUrl, after.RunbookUrl),

@@ -150,7 +150,7 @@ public class NewFeaturesTests
         await GotoAsync("/");
         await _page.WaitForSelectorAsync(".stat-strip");
 
-        await Assertions.Expect(_page.Locator("text=scan(s) erroring or never completed")).ToBeVisibleAsync();
+        await Assertions.Expect(_page.Locator("text=scan(s) erroring, stale or never completed")).ToBeVisibleAsync();
         await _page.ClickAsync("a:has-text('View scan activity')");
         await _page.WaitForURLAsync(url => url.Contains("/reports"));
     }

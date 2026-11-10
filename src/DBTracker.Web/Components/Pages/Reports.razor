@@ -3,6 +3,7 @@
 @inject ComplianceReportService ReportService
 @inject ToastService Toasts
 @inject IJSRuntime JS
+@inject IConfiguration Configuration
 
 <PageTitle>Reports · DBTracker</PageTitle>
 
@@ -164,10 +165,11 @@ else
 
         case ReportType.ScanActivity:
         {
-            var rows = ScanActivityReportBuilder.Build(_overviews.Select(o =>
-                new ScanActivityInput(o.Instance.Name, o.Instance.BackupFileLocation, o.Instance.LastScanUtc, o.Instance.LastScanStatus, o.Instance.LastScanError)));
+            var rows = ScanActivityReportBuilder.Build(
+                _overviews.Select(o => new ScanActivityInput(o.Instance.Name, o.Instance.BackupFileLocation, o.Instance.LastScanUtc, o.Instance.LastScanStatus, o.Instance.LastScanError)),
+                ScanIntervalMinutes, StaleAfterMultiplier, DateTime.UtcNow);
 
-            <p class="text-muted mb-3">Shared-drive scan status for every instance with a backup file location configured — evidence the automated scan is actually running.</p>
+            <p class="text-muted mb-3">Shared-drive scan status for every instance with a backup file location configured — evidence the automated scan is actually running. A scan that hasn't succeeded in a while shows as <strong>Stale</strong> even if its last result was a success — the scanner itself may have stopped.</p>
 
             <div class="d-flex justify-content-end mb-3">
                 <button class="btn btn-outline-primary" @onclick="() => ExportScanActivity(rows)" disabled="@(rows.Count == 0)">
@@ -183,7 +185,7 @@ else
             {
                 <div class="dbt-table">
                     <table class="table">
-                        <thead><tr><th>Instance</th><th>Backup file location</th><th>Last scanned</th><th>Status</th><th>Error</th></tr></thead>
+                        <thead><tr><th>Instance</th><th>Backup file location</th><th>Last scanned</th><th>Status</th><th>Next expected</th><th>Detail</th></tr></thead>
                         <tbody>
                             @foreach (var r in rows)
                             {
@@ -191,8 +193,9 @@ else
                                     <td class="fw-semibold">@r.InstanceName</td>
                                     <td class="text-muted">@r.BackupFileLocation</td>
                                     <td>@(r.LastScanUtc is null ? "Never" : r.LastScanUtc.Value.ToLocalTime().ToString("MMM d, h:mm tt"))</td>
-                                    <td><span class="badge-health dot @(r.LastScanStatus == ScanStatus.Error ? "Failed" : r.LastScanStatus == ScanStatus.Success ? "OnTrack" : "NeverBackedUp")">@r.LastScanStatus</span></td>
-                                    <td class="text-danger">@r.LastScanError</td>
+                                    <td><span class="badge-health dot @ScannerFreshnessClass(r.Scanner.Freshness)">@r.Scanner.Freshness</span></td>
+                                    <td class="small text-muted">@(r.Scanner.NextExpectedCheckUtc is null ? "—" : r.Scanner.NextExpectedCheckUtc.Value.ToLocalTime().ToString("MMM d, h:mm tt"))</td>
+                                    <td class="small @(r.LastScanStatus == ScanStatus.Error ? "text-danger" : "text-muted")">@(r.LastScanStatus == ScanStatus.Error ? r.LastScanError : r.Scanner.RecoveryHint)</td>
                                 </tr>
                             }
                         </tbody>
@@ -248,10 +251,21 @@ else
     private int _rangeDays = 7;
     private bool _sendingReport;
 
+    private int ScanIntervalMinutes => Configuration.GetValue("BackupScan:IntervalMinutes", 15);
+    private int StaleAfterMultiplier => Configuration.GetValue("BackupScan:StaleAfterMultiplier", 3);
+
     protected override async Task OnInitializedAsync()
     {
         _overviews = await OverviewService.GetAllAsync();
     }
+
+    private static string ScannerFreshnessClass(ScannerFreshness freshness) => freshness switch
+    {
+        ScannerFreshness.Error => "Failed",
+        ScannerFreshness.Stale => "Overdue",
+        ScannerFreshness.Healthy => "OnTrack",
+        _ => "NeverBackedUp"
+    };
 
     private static string Label(ReportType type) => type switch
     {

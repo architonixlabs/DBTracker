@@ -5,6 +5,7 @@
 @inject NavigationManager Nav
 @inject ToastService Toasts
 @inject AuthenticationStateProvider AuthProvider
+@inject BackupFileScanner Scanner
 
 <PageTitle>@(Id is null ? "Add instance" : "Edit instance") · DBTracker</PageTitle>
 
@@ -130,6 +131,68 @@ else
                 </div>
             </div>
 
+            @if (!string.IsNullOrWhiteSpace(_model.BackupFileLocation))
+            {
+                <div class="row g-3 mb-4">
+                    <div class="col-md-8">
+                        <label class="form-label">Backup file name pattern(s)</label>
+                        <InputText class="form-control" @bind-Value="_model.BackupFileNamePatterns" placeholder="*.bak;*.trn" />
+                        <div class="form-text">Semicolon-separated glob patterns deciding which files on the shared drive count as evidence. Leave blank to match every file. Zero-length and still-being-written files are always excluded.</div>
+                    </div>
+                    <div class="col-md-4 d-flex align-items-end">
+                        <button type="button" class="btn btn-outline-secondary" @onclick="PreviewScan" disabled="@_previewing">
+                            <i class="bi bi-eye"></i> @(_previewing ? "Checking…" : "Preview scan")
+                        </button>
+                    </div>
+                </div>
+
+                @if (_previewError is not null)
+                {
+                    <div class="alert alert-danger mb-4">@_previewError</div>
+                }
+                else if (_preview is not null)
+                {
+                    <div class="dbt-card mb-4">
+                        <h3 class="h6 text-muted text-uppercase mb-3">Scan preview</h3>
+                        @if (_preview.Count == 0)
+                        {
+                            <div class="empty-state py-3"><i class="bi bi-inbox"></i>No files found at this location.</div>
+                        }
+                        else
+                        {
+                            <table class="table table-sm mb-0 dbt-table">
+                                <thead><tr><th>File</th><th>Size</th><th>Last modified</th><th>Result</th></tr></thead>
+                                <tbody>
+                                    @foreach (var f in _preview)
+                                    {
+                                        <tr>
+                                            <td class="small">@f.FileName</td>
+                                            <td class="small">@($"{f.SizeBytes / 1024.0 / 1024.0:N1} MB")</td>
+                                            <td class="small">@f.LastWriteUtc.ToLocalTime().ToString("MMM d, h:mm tt")</td>
+                                            <td class="small">
+                                                @if (f.AlreadyKnown)
+                                                {
+                                                    <span class="text-muted">Already recorded</span>
+                                                }
+                                                else if (f.Eligibility == FileEligibility.Eligible)
+                                                {
+                                                    <span class="badge-health dot OnTrack">Would be recorded</span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="badge-health dot NeverBackedUp">Excluded</span>
+                                                    <span class="text-muted small"> — @f.Reason</span>
+                                                }
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        }
+                    </div>
+                }
+            }
+
             <h2 class="h6 text-muted text-uppercase mb-3">Reference</h2>
             <div class="row g-3 mb-4">
                 <div class="col-md-5">
@@ -159,8 +222,29 @@ else
 
     private DatabaseInstance _model = new();
     private bool _loading = true;
+    private bool _previewing;
+    private string? _previewError;
+    private IReadOnlyList<FilePreview>? _preview;
 
     private string CancelUrl => Id is null ? "/instances" : $"/instances/{Id}";
+
+    private async Task PreviewScan()
+    {
+        _previewing = true;
+        _previewError = null;
+        _preview = null;
+
+        try
+        {
+            _preview = await Scanner.PreviewAsync(_model.BackupFileLocation, _model.BackupFileNamePatterns, Id);
+        }
+        catch (Exception ex)
+        {
+            _previewError = ex.Message;
+        }
+
+        _previewing = false;
+    }
 
     protected override async Task OnInitializedAsync()
     {

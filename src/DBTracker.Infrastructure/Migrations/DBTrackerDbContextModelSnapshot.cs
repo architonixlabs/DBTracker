@@ -44,6 +44,9 @@ namespace DBTracker.Infrastructure.Migrations
                         .HasMaxLength(2000)
                         .HasColumnType("nvarchar(2000)");
 
+                    b.Property<long?>("ObservedFileBytes")
+                        .HasColumnType("bigint");
+
                     b.Property<double?>("SizeMb")
                         .HasColumnType("float");
 
@@ -68,6 +71,10 @@ namespace DBTracker.Infrastructure.Migrations
 
                     b.HasIndex("DatabaseInstanceId", "TimestampUtc");
 
+                    b.HasIndex("DatabaseInstanceId", "SourceFile", "ObservedFileBytes")
+                        .IsUnique()
+                        .HasFilter("[Source] = 1 AND [ObservedFileBytes] IS NOT NULL");
+
                     b.ToTable("BackupRecords");
                 });
 
@@ -88,6 +95,11 @@ namespace DBTracker.Infrastructure.Migrations
                         .IsRequired()
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("BackupFileNamePatterns")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("nvarchar(300)");
 
                     b.Property<string>("Company")
                         .IsRequired()

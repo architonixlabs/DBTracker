@@ -23,5 +23,8 @@ public class BackupRecord
     /// <summary>File name matched on the shared drive, for Discovered records — used to avoid re-importing the same file.</summary>
     public string SourceFile { get; set; } = string.Empty;
 
+    /// <summary>Exact file size in bytes at discovery time, for Discovered records — the dedup signature (with SourceFile) that lets a changed file reusing the same name be recorded as new evidence rather than silently skipped or duplicated. Null for Manual records and for Discovered records predating U01.</summary>
+    public long? ObservedFileBytes { get; set; }
+
     public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
 }

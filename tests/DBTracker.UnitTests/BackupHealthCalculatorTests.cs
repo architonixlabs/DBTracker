@@ -146,4 +146,123 @@ public class BackupHealthCalculatorTests
 
         Assert.Equal(BackupHealth.OnTrack, health);
     }
+
+    [Fact]
+    public void FutureDatedRecord_IsIgnoredWhenEvaluatingAnEarlierInstant()
+    {
+        // A record timestamped after asOfUtc can't yet be used as evidence for that earlier instant
+        // (U04) — otherwise a backdated snapshot could be fooled by data that didn't exist yet.
+        var records = new[]
+        {
+            new BackupRecord { Id = 1, TimestampUtc = Now.AddHours(-30), Status = BackupStatus.Success },
+            new BackupRecord { Id = 2, TimestampUtc = Now.AddHours(5), Status = BackupStatus.Success } // future relative to Now
+        };
+
+        var health = BackupHealthCalculator.Compute(Instance(expectedIntervalHours: 24), records, Now);
+
+        Assert.Equal(BackupHealth.Overdue, health);
+    }
+
+    [Fact]
+    public void FutureDatedFailure_DoesNotMakeAPastInstantLookFailed()
+    {
+        var records = new[]
+        {
+            new BackupRecord { Id = 1, TimestampUtc = Now.AddHours(-2), Status = BackupStatus.Success },
+            new BackupRecord { Id = 2, TimestampUtc = Now.AddHours(5), Status = BackupStatus.Failed } // future
+        };
+
+        var health = BackupHealthCalculator.Compute(Instance(expectedIntervalHours: 24), records, Now);
+
+        Assert.Equal(BackupHealth.OnTrack, health);
+    }
+
+    [Fact]
+    public void OnlyFutureDatedRecordsExist_IsNeverBackedUpAsOfNow()
+    {
+        var records = new[]
+        {
+            new BackupRecord { TimestampUtc = Now.AddDays(1), Status = BackupStatus.Success }
+        };
+
+        var health = BackupHealthCalculator.Compute(Instance(), records, Now);
+
+        Assert.Equal(BackupHealth.NeverBackedUp, health);
+    }
+
+    [Fact]
+    public void TiedTimestamps_BreakByIdDescending_ForDeterministicOrdering()
+    {
+        var records = new[]
+        {
+            new BackupRecord { Id = 1, TimestampUtc = Now.AddHours(-1), Status = BackupStatus.Success },
+            new BackupRecord { Id = 2, TimestampUtc = Now.AddHours(-1), Status = BackupStatus.Failed }
+        };
+
+        var health = BackupHealthCalculator.Compute(Instance(), records, Now);
+
+        // Id 2 (inserted later) wins the tie, so a failure logged at the same instant as an earlier
+        // success is treated as the authoritative latest attempt.
+        Assert.Equal(BackupHealth.Failed, health);
+    }
+
+    [Fact]
+    public void Explain_ReportsLastSuccessNextDueAndOverdueBy()
+    {
+        var records = new[]
+        {
+            new BackupRecord { Id = 1, TimestampUtc = Now.AddHours(-30), Status = BackupStatus.Success }
+        };
+
+        var explanation = BackupHealthCalculator.Explain(Instance(expectedIntervalHours: 24), records, Now);
+
+        Assert.Equal(BackupHealth.Overdue, explanation.Health);
+        Assert.Equal(Now.AddHours(-30), explanation.LastSuccessUtc);
+        Assert.Equal(Now.AddHours(-30).AddHours(24), explanation.NextDueUtc);
+        Assert.NotNull(explanation.OverdueBy);
+        Assert.Equal(TimeSpan.FromHours(6), explanation.OverdueBy);
+        Assert.False(explanation.IsSuppressedByMaintenance);
+    }
+
+    [Fact]
+    public void Explain_OnTrack_HasNoOverdueDuration()
+    {
+        var records = new[]
+        {
+            new BackupRecord { Id = 1, TimestampUtc = Now.AddHours(-4), Status = BackupStatus.Success }
+        };
+
+        var explanation = BackupHealthCalculator.Explain(Instance(expectedIntervalHours: 24), records, Now);
+
+        Assert.Null(explanation.OverdueBy);
+    }
+
+    [Fact]
+    public void Explain_SeparatesMaintenanceSuppressionFromHealthItself()
+    {
+        var instance = Instance(expectedIntervalHours: 24);
+        instance.MaintenanceUntilUtc = Now.AddHours(1);
+        var records = new[]
+        {
+            new BackupRecord { Id = 1, TimestampUtc = Now.AddHours(-30), Status = BackupStatus.Success }
+        };
+
+        var explanation = BackupHealthCalculator.Explain(instance, records, Now);
+
+        // Health stays truthfully Overdue even while maintenance suppresses alerting — the two are
+        // reported as separate facts, not folded together.
+        Assert.Equal(BackupHealth.Overdue, explanation.Health);
+        Assert.True(explanation.IsSuppressedByMaintenance);
+    }
+
+    [Fact]
+    public void Explain_NeverBackedUp_HasNullSuccessAndNextDue()
+    {
+        var explanation = BackupHealthCalculator.Explain(Instance(), Array.Empty<BackupRecord>(), Now);
+
+        Assert.Equal(BackupHealth.NeverBackedUp, explanation.Health);
+        Assert.Null(explanation.LastSuccessUtc);
+        Assert.Null(explanation.NextDueUtc);
+        Assert.Null(explanation.OverdueBy);
+    }
 }

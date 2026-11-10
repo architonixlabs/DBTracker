@@ -1,6 +1,8 @@
 ﻿@page "/"
+@implements IDisposable
 @inject InstanceOverviewService OverviewService
 @inject NavigationManager Nav
+@inject IConfiguration Configuration
 
 <PageTitle>Dashboard · DBTracker</PageTitle>
 
@@ -29,10 +31,31 @@
 }
 else
 {
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+        <div class="small text-muted" role="status">
+            @if (_refreshError is not null)
+            {
+                <span style="color:var(--dbt-failed)"><i class="bi bi-exclamation-circle"></i> Refresh failed: @_refreshError — showing data as of last successful load.</span>
+            }
+            else
+            {
+                <span>Updated @FormatAge(_lastUpdatedUtc)</span>
+            }
+        </div>
+        <div class="d-flex gap-2">
+            <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="RefreshNow" disabled="@_refreshing">
+                <i class="bi bi-arrow-clockwise"></i> @(_refreshing ? "Refreshing…" : "Refresh")
+            </button>
+            <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="ToggleAutoRefresh" title="Auto-refreshes every 30s while on">
+                <i class="bi @(_autoRefreshPaused ? "bi-play-fill" : "bi-pause-fill")"></i> Auto-refresh @(_autoRefreshPaused ? "paused" : "on")
+            </button>
+        </div>
+    </div>
+
     @if (_scanIssueCount > 0)
     {
         <div class="alert alert-danger mb-4 d-flex justify-content-between align-items-center flex-wrap gap-2">
-            <span><i class="bi bi-exclamation-triangle"></i> @_scanIssueCount shared-drive scan(s) erroring or never completed.</span>
+            <span><i class="bi bi-exclamation-triangle"></i> @_scanIssueCount shared-drive scan(s) erroring, stale or never completed.</span>
             <a class="btn btn-outline-secondary btn-sm" href="/reports">View scan activity</a>
         </div>
     }
@@ -118,14 +141,71 @@ else
     private List<InstanceOverview>? _overviews;
     private BackupHealth? _filterHealth;
     private int _scanIssueCount;
+    private DateTime _lastUpdatedUtc;
+    private string? _refreshError;
+    private bool _refreshing;
+    private bool _autoRefreshPaused;
+    private Timer? _autoRefreshTimer;
+
+    private static readonly TimeSpan AutoRefreshInterval = TimeSpan.FromSeconds(30);
 
     protected override async Task OnInitializedAsync()
     {
-        _overviews = await OverviewService.GetAllAsync();
+        await Load();
+        _autoRefreshTimer = new Timer(async _ => await AutoRefreshTickAsync(), null, AutoRefreshInterval, AutoRefreshInterval);
+    }
 
-        var scanRows = ScanActivityReportBuilder.Build(_overviews.Select(o => new ScanActivityInput(
-            o.Instance.Name, o.Instance.BackupFileLocation, o.Instance.LastScanUtc, o.Instance.LastScanStatus, o.Instance.LastScanError)));
-        _scanIssueCount = scanRows.Count(r => r.LastScanStatus is ScanStatus.Error or ScanStatus.NeverScanned);
+    private async Task Load()
+    {
+        try
+        {
+            // Preserves the current filter (a separate field, untouched by this reload) so a
+            // manual or periodic refresh doesn't reset what the user was looking at.
+            _overviews = await OverviewService.GetAllAsync();
+            _lastUpdatedUtc = DateTime.UtcNow;
+            _refreshError = null;
+
+            var scanRows = ScanActivityReportBuilder.Build(
+                _overviews.Select(o => new ScanActivityInput(
+                    o.Instance.Name, o.Instance.BackupFileLocation, o.Instance.LastScanUtc, o.Instance.LastScanStatus, o.Instance.LastScanError)),
+                Configuration.GetValue("BackupScan:IntervalMinutes", 15),
+                Configuration.GetValue("BackupScan:StaleAfterMultiplier", 3),
+                DateTime.UtcNow);
+            _scanIssueCount = scanRows.Count(r => r.Scanner.Freshness is ScannerFreshness.Error or ScannerFreshness.NeverScanned or ScannerFreshness.Stale);
+        }
+        catch (Exception ex)
+        {
+            _refreshError = ex.Message;
+        }
+    }
+
+    private async Task RefreshNow()
+    {
+        _refreshing = true;
+        await Load();
+        _refreshing = false;
+    }
+
+    private async Task AutoRefreshTickAsync()
+    {
+        if (_autoRefreshPaused)
+        {
+            return;
+        }
+
+        await InvokeAsync(async () =>
+        {
+            await Load();
+            StateHasChanged();
+        });
+    }
+
+    private void ToggleAutoRefresh() => _autoRefreshPaused = !_autoRefreshPaused;
+
+    private static string FormatAge(DateTime lastUpdatedUtc)
+    {
+        var age = DateTime.UtcNow - lastUpdatedUtc;
+        return age.TotalSeconds < 5 ? "just now" : $"{lastUpdatedUtc.ToLocalTime():h:mm:ss tt} ({(int)age.TotalSeconds}s ago)";
     }
 
     private int Count(BackupHealth health) => _overviews?.Count(o => o.Health == health) ?? 0;
@@ -158,4 +238,6 @@ else
         BackupHealth.NeverBackedUp => "Never backed up",
         _ => "All"
     };
+
+    public void Dispose() => _autoRefreshTimer?.Dispose();
 }

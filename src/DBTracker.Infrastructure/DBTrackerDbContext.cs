@@ -36,6 +36,7 @@ public class DBTrackerDbContext : IdentityDbContext<ApplicationUser>
             entity.Property(e => e.ServerIp).HasMaxLength(100);
             entity.Property(e => e.Notes).HasMaxLength(2000);
             entity.Property(e => e.BackupFileLocation).HasMaxLength(500);
+            entity.Property(e => e.BackupFileNamePatterns).HasMaxLength(300);
             entity.Property(e => e.LastScanError).HasMaxLength(1000);
             entity.Property(e => e.Tags).HasMaxLength(300);
             entity.Property(e => e.RunbookUrl).HasMaxLength(500);
@@ -57,6 +58,13 @@ public class DBTrackerDbContext : IdentityDbContext<ApplicationUser>
                 .OnDelete(DeleteBehavior.Cascade);
 
             entity.HasIndex(e => new { e.DatabaseInstanceId, e.TimestampUtc });
+
+            // Guards against duplicate Discovered evidence from two concurrent scans racing each
+            // other (U01): the filter only applies to rows with a known byte signature, so legacy
+            // Discovered records (ObservedFileBytes null, predating this column) aren't constrained.
+            entity.HasIndex(e => new { e.DatabaseInstanceId, e.SourceFile, e.ObservedFileBytes })
+                .IsUnique()
+                .HasFilter("[Source] = 1 AND [ObservedFileBytes] IS NOT NULL");
         });
 
         modelBuilder.Entity<RestoreEvent>(entity =>

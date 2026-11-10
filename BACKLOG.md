@@ -297,6 +297,40 @@ authenticated role already, same as the rest of the app, so no separate "my apps
   `Update()` tried to attach the freshly-loaded model — caught by `EditingInstance_RecordsChangeHistory`,
   diagnosed from the actual server-side exception log (not guessed), fixed, and the same `Clear()`
   added to the CSV import save path too. Full suite: 98/98 (70 unit + 28 E2E).
+- 2026-11-10 — Built Epic 13 (U01-U04) from the usability roadmap: per-instance backup file
+  name-pattern rules with a scan preview (eligible/excluded/already-recorded, with the reason) on
+  the instance editor; evidence levels (Discovered / Reported success / Restore-tested — promoted
+  only once a later successful restore actually proves the chain, never silently upgrading a bare
+  file) shown per backup record on the instance detail page; stale-scanner detection
+  (`ScannerStalenessClassifier`) separate from backup health, with a dashboard banner and
+  Scan Activity report columns for next-expected-check and a recovery hint; and a "Health
+  explanation" panel (last success, latest attempt, governing interval, next due, overdue-by,
+  maintenance suppression called out separately) on the instance detail page. Dashboard,
+  Instances list and the notification bell now show a last-updated time with manual refresh and a
+  pausable 30s auto-refresh, reading through `InstanceOverviewService`'s own `IDbContextFactory`
+  context (same isolation pattern as `NotificationService`) so a refresh never races a page's own
+  mutations. Concurrent-scan-safe by construction: Discovered evidence is matched by file name
+  *and* exact byte size (a new `ObservedFileBytes` column), guarded by a unique filtered DB index,
+  so a changed file reusing an old name is recorded as new evidence instead of being silently
+  skipped or duplicated, and two scans racing the same new file never double-insert. "Still
+  changing" detection stats each candidate file twice, 250ms apart, rather than using a wall-clock
+  recency guess. Found and fixed two real bugs along the way: `BackupHealthCalculator.Compute`
+  didn't exclude future-dated records, so a backdated/clock-skewed record could make an earlier
+  instant look healthier (or worse) than the evidence available at that instant actually supported
+  — fixed by filtering to `TimestampUtc <= asOfUtc` before picking the most recent record, with an
+  explicit Id-descending tiebreak for same-instant records; and the staleness threshold math
+  originally used `Math.Max(1, scanIntervalMinutes)`, which meant the Testing environment's
+  `BackupScan:IntervalMinutes: 0` (background scan intentionally disabled) floored to a 1-minute
+  interval and flagged every seeded instance's decades-old scan as "Stale" — fixed so an interval
+  of 0 or less is treated as manual-only scanning (no periodic schedule to go stale against),
+  matching `BackupScanHostedService`'s own convention for that setting. 22 new unit tests
+  (`BackupEvidenceClassifierTests`, `BackupFileFilterTests`, `ScannerStalenessClassifierTests`,
+  plus additions to `BackupHealthCalculatorTests` and `ScanActivityReportBuilderTests`) and 5 new
+  E2E tests (`EvidenceAndHealthExplanationTests`). Stale-scanner *UI* rendering is covered at the
+  unit/report-builder level rather than E2E, since the Testing environment's manual-only scan
+  config (needed to keep seeded fixture data from registering as falsely stale) makes a live
+  "Stale" badge impractical to reproduce in the browser without a dedicated test server
+  configuration — a gap worth closing if U02's UI regresses. Full suite: 141/141 (107 unit + 34 E2E).
 
 ### Epic 12 — Handiness features (user-prioritized)
 *Every item below was proposed as a shortlist and picked by the user, not decided unilaterally.*
@@ -340,3 +374,464 @@ authenticated role already, same as the rest of the app, so no separate "my apps
 - Scheduled/recurring exports (e.g. Backup Activity auto-emailed weekly) — today every Epic 11
   report is generated on demand when the page is opened
 - Report date-range beyond 7/30/90-day presets (custom from/to picker) on Backup Activity
+
+## Usability roadmap — 2026-11-10 review
+
+Source and rationale: [project usability review](USABILITY_REVIEW.md), including implementation
+evidence, persona challenges, scope decisions, dependencies, and proposed user-task validation.
+All items below are **proposed and unimplemented**. Persona agreement is a structured assessment,
+not user interviews or a claim of stakeholder approval. Existing Epics 1–12 remain delivery history.
+
+Priority: **P1** = next delivery candidates (trust/task blockers); **P2** = subsequent usability
+improvements; **P3** = later enhancement. Effort **S/M/L** is relative, not a time commitment.
+The U identifiers are canonical: references from existing epics describe the same work.
+
+### Epic 13 — Explainable health and trustworthy evidence
+
+- [x] **U01 · P1 · L — Distinguish discovered files from verified backups.**
+  Priya/Angela agree that file presence alone must not imply a valid full backup. Dev wants one
+  understandable summary with evidence details available on demand.
+  **Acceptance:** configure per-instance filename/type rules with preview; exclude unrelated,
+  zero-length and still-changing files; distinguish discovered, reported-success and restore-tested
+  evidence. Surface filename, size, observed time and verification level. Detect changed files with
+  reused names without duplicating unchanged evidence; concurrent scans do not duplicate it.
+  Existing discovered records retain provenance and are not silently upgraded to verified status.
+
+- [x] **U02 · P1 · M — Detect stale scanners and explain recovery.**
+  Priya/Noor need to know when monitoring has stopped; Angela wants scan health kept separate from
+  backup health.
+  **Acceptance:** an old successful scan becomes Stale after a configurable threshold tied to the
+  scan interval; show last attempt, last success, next expected check, disabled status and a useful
+  recovery hint. Dashboard links directly to affected Scan Activity rows. Scanner recovery clears
+  the warning; a stale scanner never turns an otherwise failed backup green. Depends on U05 for
+  shareable report/filter URLs, but age-based detection can ship first.
+
+- [x] **U03 · P1 · M — Refresh operational views with visible data age.**
+  Priya/Noor need current information while a page stays open; Alex requires stable focus.
+  **Acceptance:** dashboard, inventory and notification counts show last-updated time plus manual
+  refresh; periodic refresh can be paused. Health changes when a deadline passes and when another
+  session logs evidence. Refresh preserves filters/focus and does not reset in-progress forms;
+  reconnect/error state is visible. Use isolated reads to avoid shared-context query races.
+
+- [x] **U04 · P1 · M — Explain each health result and the next deadline.**
+  Priya wants the reason and next action; Dev wants plain language; Angela wants traceable inputs.
+  **Acceptance:** show last success, latest attempt/failure, governing interval, next due time and
+  overdue duration. Separate backup status, scan freshness and maintenance suppression. Ignore
+  future-dated evidence when evaluating an earlier instant; define timestamp tie handling. Manual,
+  discovered and verified evidence labels stay consistent with U01 across UI, alerts and reports.
+
+### Epic 14 — Faster navigation and triage
+
+- [ ] **U05 · P2 · M — Saved, shareable views and consistent filtering.**
+  Priya/Marcus want repeatable production/team views; Dev wants My instances as a saved default.
+  **Acceptance:** persist filters, sort, report type and date window in validated URLs; add dedicated
+  owner/department/tag facets and column sort controls. Back navigation restores the prior list.
+  Dashboard counts and drill-down use the same scope; Scan Activity can open directly. Saved views
+  can be renamed/reset and respect each viewer's permissions; personal filters grant no access.
+
+- [ ] **U06 · P2 · L — Bounded inventory and history browsing.**
+  Priya/Marcus want usable large inventories; Alex wants predictable controls over endless rows.
+  **Acceptance:** query-side filtering/sorting/paging with counts and stable ordering; overview
+  queries fetch required summaries rather than all histories. Backup/restore/change history is
+  paged and filterable. Export covers the entire selected result, with explicit scope. Benchmark
+  the representative dataset in the review and agree response-time targets from that baseline.
+
+- [ ] **U07 · P1 · M — Personal notification inbox and preferences.**
+  Extends Epic 8's existing open preference item. Dev wants relevant notifications; Noor needs
+  direct navigation; Angela requires reading to remain separate from operational acknowledgement.
+  **Acceptance:** per-user read state, single/all-read actions, instance links and paged history;
+  one user's read action never clears another's inbox. Subscribe by instance/company/ownership and
+  channel with understandable defaults. Define migration of existing shared notifications/read
+  flags explicitly; subscriptions always respect authorization. Shared incident state belongs to U08.
+
+- [ ] **U08 · P2 · L — Acknowledge, assign and hand off outstanding risk.**
+  Priya/Noor need to avoid duplicate response; Marcus wants accountable owners; Angela rejects
+  acknowledgement as evidence of recovery.
+  **Acceptance:** track assignee, acknowledgement, note/runbook/ticket reference and activity log;
+  acknowledgement leaves health unchanged. Configure reminders/escalation and NeverBackedUp
+  alerts after an onboarding grace period; recovery closes the incident and can notify subscribers.
+  Define re-alerting after maintenance, including instances already alerted before maintenance.
+  Quiet hours/maintenance must expose suppression and escalation behavior. Depends on U07/U19.
+
+### Epic 15 — Reporting that matches user intent
+
+- [ ] **U09 · P1 · M — Make report scope and delivery outcomes explicit.**
+  Marcus/Angela need to know what was sent to whom; Sam needs useful delivery diagnostics.
+  **Acceptance:** preview filters, generation time and permitted recipients before sending; make
+  current filtered scope versus full inventory explicit and send exactly the confirmed scope.
+  Download/preview/send share one dataset. Show disabled, queued/accepted, failed and partial
+  outcomes accurately: a no-op sender cannot produce a sent-success message. Never equate provider
+  acceptance with recipient delivery; retain attempt status for diagnosis. Builds on U15's diagnostics.
+
+- [ ] **U10 · P2 · L — Reproducible compliance snapshots and custom report dates.**
+  Angela wants repeatable evidence; Marcus wants review-period exports; Priya wants incident windows.
+  **Acceptance:** custom from/to ranges with explicit timezone and boundary rules; store generated
+  snapshots with ID, actor, scope, generation/effective time, policy version and evidence provenance.
+  Reopening/exporting a snapshot preserves its values after later edits, archives or backdated entries.
+  Initial release supports retained snapshots, not arbitrary past inventory reconstruction. A future
+  historical-as-of view needs versioned inventory/policy and excludes later backup/restore events.
+  Depends on U01/U04/U11/U19. Promotes the former custom-date future item into this roadmap.
+
+- [ ] **U11 · P2 · M — Record actual event time and inspect complete evidence.**
+  Priya needs to log a backup after an incident; Angela needs event time distinguished from entry.
+  **Acceptance:** backup/restore entry defaults to now but allows an explicit past occurrence time
+  with timezone; retain entry time and authenticated recorder separately from performed-by. Validate
+  values and future times. History reveals notes, source file and evidence references; reasoned
+  append-only corrections preserve the original. Common entry remains short; use U13 validation
+  and U19 audit conventions. Backdating never silently changes a retained U10 snapshot.
+
+- [ ] **U12 · P2 · M — Restore-test recency and evidence linkage.**
+  Angela wants recent proof; Marcus wants an actionable drill list; Priya wants realistic policies.
+  **Acceptance:** configurable test interval by policy/instance, last success, next due date and
+  Never tested/Current/Overdue states. Link tests to backup evidence when known; retain tester,
+  evidence reference and optional duration/target recovery time. Missing linkage stays explicit,
+  rather than invalidating old records or claiming every backup was tested. Report expired coverage
+  separately from backup health. Depends on U11; policy templates can follow under U21.
+
+### Epic 16 — Safer entry, recovery and administration
+
+- [ ] **U13 · P1 · M — Prevent lost edits and recover from failed saves.**
+  Priya/Dev need safe editing; Sam wants errors users can correct; Alex needs accessible feedback.
+  **Acceptance:** shared form/import validation for required fields, storage lengths, positive
+  intervals/retention and nonnegative measurements; validate supported link schemes and enum values.
+  Associate field errors with controls and show a summary. Guard dirty navigation, disable duplicate
+  submits and preserve inputs after failures. Detect concurrent edits and offer reload/review without
+  overwriting newer changes. Missing instance IDs produce a useful not-found state, not endless load.
+
+- [ ] **U14 · P1 · M — Archive preview, archive browser and unarchive.**
+  Sam/Priya need recovery from accidental archiving; Angela needs preserved evidence and attribution.
+  **Acceptance:** preview effects on scans, alerts and current reports; confirm with a reason.
+  Authorized users can browse/search archived records and restore them. Preserve history; record
+  actor/reason/time; exclude archived instances from normal sweeps and indicate them clearly on
+  direct links. Recompute health and alert eligibility on unarchive. Uses U19 audit conventions.
+
+- [ ] **U15 · P2 · M — Guided setup and monitoring diagnostics.**
+  Sam wants to diagnose setup without database/log access; Dev wants actionable empty states.
+  **Acceptance:** Admin setup checklist for instance import/create, file-path access under the
+  service identity, scan/alert/report enablement and distribution list. Show last/next worker run,
+  configuration problems and send-attempt outcomes. Explicitly triggered test delivery reports
+  accepted/failed/disabled accurately. Mask credentials and restrict sensitive paths/details to
+  appropriate roles. Empty states link to a permitted next action. Use existing mail integration.
+
+- [ ] **U16 · P1 · M — Complete account lifecycle and password recovery.**
+  Refines Epic 5's open item. Sam needs offboarding without database edits; Dev needs recovery from
+  a forgotten or temporary password; Angela needs an accountable role-change history.
+  **Acceptance:** change roles, deactivate/reactivate, change own password and recover access via
+  expiring single-use reset/invitation links using the configured mail integration. Require changing
+  a temporary credential; prevent removing the last active Admin. Define active-session and pending
+  device-link revocation on deactivation/role downgrade; audit changes. Neutral reset responses and
+  actionable disabled-mail guidance avoid misleading confirmations. Enterprise SSO remains deferred.
+
+- [ ] **U17 · P2 · L — Safe repeatable imports and reviewed bulk edits.**
+  Priya/Sam want to onboard and maintain many records; Angela requires visible, attributable changes.
+  **Acceptance:** choose an explicit stable identity/matching rule; preview create/update/skip and
+  ambiguous duplicates within a file and existing inventory. Repeating an import does not duplicate
+  instances. Support quoted commas/newlines, malformed-row errors and downloadable corrections.
+  Validate like U13, handle file limits gracefully and define transaction/partial-success behavior.
+  Bulk owner/tag/policy changes show selected count and before/after diff; recheck permission and
+  conflicts at apply time and audit the batch. Archive remains a separate consequential action.
+
+- [ ] **U18 · P2 · S — Configurable connectivity endpoints.**
+  Priya needs valid checks for nondefault ports; Dev needs an understandable result.
+  **Acceptance:** optional host/DNS and validated port override with engine defaults; show actual
+  host:port, check time, timeout and actionable failure. Disable checks when no endpoint is set.
+  State that TCP reachability does not prove database login, backup success or recoverability.
+
+- [ ] **U19 · P2 · L — Extend audit coverage across operational changes.**
+  Angela/Sam want consistent accountability; Priya needs event corrections without erased history.
+  **Acceptance:** record actor, time, reason, target and before/after where relevant for creation,
+  edits, archive/unarchive, maintenance, imports/bulk edits, account changes, incident actions and
+  manual evidence/corrections. Distinguish system actors from people. Append-only application
+  workflow, authorized searchable/exportable history and documented retention. Do not describe an
+  application audit table as tamper-proof against database administrators. Define the shared audit
+  schema early so U08/U11/U14/U16/U17 can use it without waiting for the audit-browser UI.
+
+### Epic 17 — Inclusive workflows and organizational context
+
+- [ ] **U20 · P1 · M — Accessible mobile workflows within the current theme.**
+  Alex/Noor need equivalent task access; Priya wants the familiar ops console preserved.
+  **Acceptance:** semantic instance/report links, named form/filter inputs, keyboard sorting and
+  visible focus; dropdown Escape/focus handling; announced save/error/refresh feedback. At 360px
+  and 200% zoom, primary actions remain reachable and tables scroll within labelled regions or
+  offer concise stacked rows. Check text/status contrast and touch controls. Preserve existing
+  reduced-motion support and status text. Verify core tasks by keyboard, screen reader and mobile
+  viewport; no theme replacement is required.
+
+- [ ] **U21 · P2 · L — Team ownership, structured facets and reusable policies.**
+  Refines Epic 7's open environment-tag item. Marcus needs ownership beyond one email; Dev wants
+  a useful personal view and a safe way to correct contacts; Priya wants fewer repeated settings.
+  **Acceptance:** owner team, primary/backup contacts and explicit user/team memberships power
+  My instances and subscriptions; support region/cluster/replica-set facets alongside existing tags.
+  Version reusable cadence/retention/restore-test policies with per-instance overrides and an impact
+  preview. Show missing/unconfirmed ownership and allow contact correction requests with authorized
+  review. Preserve existing contact data on migration. Personalization does not establish row-level
+  security; organization isolation requires a separately designed authorization feature.
+
+- [ ] **U22 · P3 · L — Trends and review-ready risk summaries.**
+  Marcus wants to see whether risk improves; Priya wants repeated failures and duration growth;
+  Angela wants clear denominators and evidence limitations.
+  **Acceptance:** compare periods for health coverage, outstanding risk age, repeated failures,
+  backup duration/size and restore-test recency; drill into scoped supporting rows. Include inventory
+  denominator, missing evidence and policy changes. Use U10 snapshots/U19 events for historical
+  status rather than inferring past health from today's inventory. Accessible tables accompany any
+  charts; retention values alone do not claim that files remain available on disk.
+
+### Proposed sequencing and completion standard
+
+Start with U01-U04, U07, U09, U13-U14 and U20; prioritize U16 alongside these for account lifecycle
+needs. Then deliver saved views, scalable browsing, incident handling, event entry, restore recency,
+setup, imports and endpoints. Define U19's common audit schema early; develop snapshots and
+organizational policies before historical trend claims. Dependencies above describe integration
+requirements, not permission to leave earlier features with misleading status.
+
+For each implemented item: complete its acceptance criteria, verify relevant role boundaries,
+add focused regression tests for changed behavior and run the associated persona task from
+[USABILITY_REVIEW.md](USABILITY_REVIEW.md#recommended-delivery-and-validation). Establish task-time
+and performance baselines before claiming improvements. These planning checkboxes remain open
+until implementation and verification are complete.
+
+Review log: 2026-11-10 — Reviewed current code and test sources from seven persona perspectives;
+added 22 prioritized work items, acceptance criteria and sequencing, refined existing unfinished
+items, and corrected sorting/shared-filter/scan-freshness claims. Documentation only; no features
+were implemented or reclassified as shipped by this review.
+
+## Backlog update history - 2026-11-10
+
+Tracking convention: preserve existing backlog entries and checkbox states. Record every new
+feature or change as a separate dated entry with a unique reference. For changes, identify the
+original epic/item or U identifier, describe the new scope/status, and state whether the entry
+clarifies, extends, or supersedes the earlier entry. Earlier wording remains historical context.
+
+- 2026-11-10 | UPDATE-001 | Clarifies Epic 1, filterable/sortable grid: current inventory is name-sorted; interactive column sorting and dedicated department/owner facets are proposed in U05. The original completed entry is preserved.
+- 2026-11-10 | UPDATE-002 | Clarifies Epic 3, shared combined filter bar: dashboard and inventory currently have separate, unequal controls; consistent shared filtering/state is proposed in U05. The original completed entry is preserved.
+- 2026-11-10 | UPDATE-003 | Extends Epic 5, deactivate/change user role: U16 adds acceptance criteria and related account recovery/session lifecycle work. The original open item remains open; U16 links the refinement rather than representing a second implementation of role management.
+- 2026-11-10 | UPDATE-004 | Extends Epic 7, custom environment tags: U21 specifies structured facets and broader ownership/policy improvements. Free-text Tags already exist; structured facets remain proposed.
+- 2026-11-10 | UPDATE-005 | Extends Epic 8, notification preferences: U07 specifies subscriptions and personal read state. The original preference item remains open.
+- 2026-11-10 | UPDATE-006 | Extends Design, further polish: U20 specifies functional mobile/accessibility acceptance criteria. Light mode and illustrations remain optional polish; the original item is preserved.
+- 2026-11-10 | UPDATE-007 | Clarifies Epic 12, scan-staleness indicator: delivered behavior covers Error/NeverScanned, while elapsed-time staleness is proposed in U02 and direct report/filter navigation in U05. The original completed entry is preserved.
+- 2026-11-10 | UPDATE-008 | Supersedes the prioritization of the future custom report date-range item: it is now a proposed P2 item within U10. The original future entry is retained as history; implementation remains incomplete.
+- 2026-11-10 | UPDATE-009 | Tracking correction: the review log above describes corrections/refinements from the usability review. Their authoritative clarification is now recorded in these separate update entries; original backlog wording has been restored and preserved.
+- 2026-11-10 | NEW-001 | Added U01-U22 under Epics 13-17 as separate proposed features/refinements, with priorities, effort, persona rationale and acceptance criteria. These remain unimplemented; see USABILITY_REVIEW.md for supporting evidence.
+
+## DBA lifecycle roadmap - 2026-11-10
+
+2026-11-10 | NEW-002 | Added this separate DBA-focused roadmap after reviewing database release
+availability, support lifecycle, upgrades/migrations and operational readiness. Existing backlog
+lines and checkbox states remain unchanged. Detailed evidence, official vendor references, persona
+challenges and validation scenarios: [DBA_LIFECYCLE_REVIEW.md](DBA_LIFECYCLE_REVIEW.md).
+
+All D items below are proposed and unimplemented. Each has its own dated tracking line. P1/P2/P3
+and S/M/L use the earlier relative priority/effort definitions; priorities are not assertions of
+actual fleet risk. Persona assessments represent structured design review, not stakeholder approval.
+Release availability, lifecycle risk, security exposure and backup health must remain distinct.
+A newer release alone does not make migration required. No automatic upgrade execution is proposed.
+
+### Epic 18 - Database identity, releases and support lifecycle
+
+- [ ] **2026-11-10 | D01 | NEW | P1 | M - Structured installed-version identity.**
+  DBA/platform/security personas need an exact product match before evaluating support or patches.
+  **Acceptance:** retain raw Version text while adding normalized family/major/minor/build,
+  edition/distribution, patch train and hosting/provider context. Record observation source/time,
+  attestation and unresolved mappings; unknown/unrecognized data cannot appear compliant. Separate
+  hosting engine, database compatibility state and cluster-node versions. Preserve IDs and current
+  imports; changing a text field alone never proves an upgrade occurred. Foundation for D02-D09.
+
+- [ ] **2026-11-10 | D02 | NEW | P1 | L - Reviewed release and support catalogue.**
+  DBA/auditor/platform personas need current, attributable facts, including offline installations.
+  **Acceptance:** curate/import official product releases, GA/preview/channel, patch/build branches,
+  support phases and milestones with source references, applicability, date precision/timezone,
+  retrieved/reviewed time and revision history. Context includes edition/distribution/provider where
+  relevant. Distinguish vendor facts from internal policy and contractual coverage. Support manual
+  override with reason, review and expiry. Conflicts/TBD dates stay explicit; refresh failure retains
+  last-known facts with a staleness warning. No fixed universal EOL formula. Depends on D01.
+
+- [ ] **2026-11-10 | D03 | NEW | P1 | M - Support runway and deadline notifications.**
+  DBA/security/service-owner personas need enough lead time to act; auditor rejects implied paid
+  coverage or suppressed risk.
+  **Acceptance:** show standard support phases, applicable extended/ESU coverage evidence, days to
+  next relevant milestone and Unknown/Needs review separately. Configurable 365/180/90/30-day
+  notices route to owners, deduplicate and escalate; overdue work remains visible. Date revisions
+  and contract expiry trigger reevaluation. Planned maintenance does not erase lifecycle risk.
+  Link each decision to upgrade/patch/replace/retire/exception action. Depends on D01-D02; uses U07/U08.
+
+- [ ] **2026-11-10 | D04 | NEW | P1 | M - Release availability and approved patch baselines.**
+  DBA wants relevant patch options; application owner wants certified targets instead of forced
+  adoption of the newest version.
+  **Acceptance:** display installed, latest applicable branch patch, newest relevant GA and approved
+  organizational target separately, with release notes and comparison rationale. Respect CU/GDR,
+  LTS/Innovation, distribution builds and provider availability; exclude previews by default. Show
+  Available/Applicable/Approved/Required-by as separate facts. Unsupported/unreviewed targets are
+  not recommended automatically; a patch within a supported branch is distinct from major migration.
+  Depends on D01-D02; policy ownership integrates with U21.
+
+- [ ] **2026-11-10 | D05 | NEW | P2 | L - Advisory applicability and patch remediation.**
+  Security/DBA personas need exposure assessment; auditor needs uncertainty and exceptions visible.
+  **Acceptance:** ingest/reference official advisories with vendor IDs, affected builds/configurations,
+  fixed builds and provenance. Classify Potential/Confirmed/Not applicable/Unknown with reviewer
+  evidence; respect distribution backports and managed-service responsibilities. Prioritize using
+  severity, service criticality and exposure; version matching alone cannot confirm vulnerability.
+  Track owner, remediation deadline, target patch and verification; use D14 for temporary exceptions.
+  Support imported results and shared vulnerability-service references without duplicating that platform.
+
+- [ ] **2026-11-10 | D06 | NEW | P2 | L - Version attestation and optional metadata collection.**
+  DBA/platform personas want trustworthy inventory without mandatory credentials in the tracker.
+  **Acceptance:** manual attestation and documented metadata import work first; optional read-only
+  engine/provider collectors are explicitly configured later. Record actual build/edition/node and
+  compatibility state, source/time, permission failures and drift against declared values. No failed
+  connection overwrites last-good evidence or marks an asset retired. Use least-privilege collection,
+  approved secret references and bounded schedules; never request broad credentials for simple inventory.
+  Share U17 import validation/audit patterns. Depends on D01; does not run upgrade commands.
+
+### Epic 19 - Dependency assessment and migration planning
+
+- [ ] **2026-11-10 | D07 | NEW | P1 | L - Technical dependencies and migration impact.**
+  DBA/app-owner/SRE personas need the whole service boundary, beyond an active/passive label.
+  **Acceptance:** link deployments, nodes and hosted databases to applications, owners, drivers,
+  extensions/plugins, jobs, linked services, replicas/HA groups and backup tooling. Record OS/runtime
+  and managed-provider constraints with evidence and last review. Show downstream consumers and
+  unresolved dependencies before changing a shared engine; allow mixed-version transition states.
+  Use U21 for teams/facets rather than rebuilding ownership; manual mapping is sufficient initially.
+
+- [ ] **2026-11-10 | D08 | NEW | P1 | L - Supported source-to-target path assessment.**
+  DBA/platform personas need vendor-supported methods; app owner rejects a generic version jump.
+  **Acceptance:** record source/target product, exact builds, edition, platform, topology and method
+  (patch, in-place, side-by-side, dump/load or replication where supported). Link reviewed vendor
+  guidance, required intermediate versions and known downgrade constraints. Classify Supported,
+  Blocked or Unknown; absent rules never imply support. Treat relocation and cross-engine conversion
+  as distinct change types needing their own assessment. Depends on D01/D02/D07; no generated
+  executable migration scripts or assumption of zero downtime.
+
+- [ ] **2026-11-10 | D09 | NEW | P1 | L - Upgrade readiness and application certification.**
+  DBA/app-owner/security personas need specific blockers and accountable approvals.
+  **Acceptance:** check driver/ORM, application-vendor certification, extensions, deprecated features,
+  collation/encoding, OS, edition features, backup tooling and engine compatibility state as applicable.
+  Attach/reference engine-native assessment outputs with source/target/time, reviewer and remediation
+  owner; missing checks are Unknown, not Passed. Summarize blocking findings without hiding details.
+  Expired evidence and changed targets invalidate affected checks. Depends on D07-D08; initial delivery
+  accepts reviewed evidence without promising automated compatibility analysis.
+
+- [ ] **2026-11-10 | D10 | NEW | P2 | L - Migration campaigns, owners and alternatives.**
+  DBA/service-owner/procurement personas need a plan that can meet a real deadline.
+  **Acceptance:** group affected deployments into waves with source/target, reason, chosen method,
+  accountable DBA/app/platform owners, blockers, milestones, effort/cost estimates and change-ticket
+  reference. States include Proposed/Assessing/Blocked/Ready/Scheduled/In progress/Validating/Completed/
+  Rolled back/Cancelled. Compare upgrade, patch, replacement, retirement and documented support-extension
+  alternatives. Store approval and change history; scheduling alone cannot clear risk. Depends on D03/D08/D09.
+
+### Epic 20 - Rehearsal, cutover, acceptance and exceptions
+
+- [ ] **2026-11-10 | D11 | NEW | P1 | M - Rehearsal, recovery and rollback evidence.**
+  DBA/SRE/app-owner personas need a tested recovery route, not just a recent backup.
+  **Acceptance:** attach rehearsal results for a named source/target and representative dataset,
+  method, duration, backup restore, correctness/performance checks and rollback decision points.
+  Record RPO/RTO targets, measured results, prerequisites, recovery/key dependencies and test freshness.
+  Define how post-cutover writes would be reconciled or lost; never imply a newer-format backup can
+  always restore to an older engine. Failed/missing rehearsal blocks normal readiness or requires
+  a scoped D14 exception. Reuse U11/U12 restore evidence; depends on D08-D09, integrates with D16.
+
+- [ ] **2026-11-10 | D12 | NEW | P2 | L - Scheduled change windows and cutover journal.**
+  DBA/SRE/change-manager personas need coordinated work and clear stop conditions.
+  **Acceptance:** plan future timezone-labelled windows, outage estimates, freeze/conflict checks,
+  communication owners, approvals and runbook/checklist steps. Track externally performed actions,
+  timestamps, traffic/write state, go/no-go decisions, point of no return and rollback outcome.
+  Require explicit role/scope checks on approvals; allow recorded emergency exceptions via D14.
+  Integrate existing maintenance suppression without hiding health or lifecycle exposure. Depends
+  on D10-D11/U19; no cutover or notifications are executed merely by creating a plan.
+
+- [ ] **2026-11-10 | D13 | NEW | P1 | M - Post-change validation and version history.**
+  DBA/app-owner/auditor personas need proof that the service works on the intended target.
+  **Acceptance:** capture observed target/node builds and compatibility state, application tests,
+  integrity checks, representative performance comparison, jobs/permissions, HA/replication and a new
+  successful backup/restore-evidence requirement appropriate to policy. Assigned reviewers sign off
+  within their scope; failures stay visible and completion is gated. Keep before/after evidence,
+  validation time and rollback-retention deadline. A Version text edit alone cannot complete a change.
+  Depends on D09-D11; uses U19 audit/U10 snapshots and supports documented D14 exceptions.
+
+- [ ] **2026-11-10 | D14 | NEW | P1 | M - Expiring support and readiness exceptions.**
+  Security/change-manager/service-owner personas need explicit risk acceptance when work cannot finish.
+  **Acceptance:** record affected assets, precise waived policy/gate, reason, compensating controls,
+  accountable owner, permitted approver, evidence and expiry/review date. Distinguish an internal
+  waiver from actual paid vendor coverage; neither changes vendor facts or clears underlying risk.
+  Expiry/revocation reopens action and alerts owners. Preserve rejection/renewal history and separate
+  preparer/approver where required by policy. Supports D03/D05/D09-D13; uses U19 authorization/audit.
+
+- [ ] **2026-11-10 | D15 | NEW | P1 | M - DBA lifecycle workspace and planning reports.**
+  DBA/manager/auditor personas need a usable prioritized work list with evidence drill-down.
+  **Acceptance:** filters for engine/branch, support phase, deadline horizon, coverage, unknown/stale
+  identity, criticality, owner and campaign state; show affected deployments and hosted databases
+  without double-counting cluster nodes. Report support runway, patch-baseline coverage, expiring
+  exceptions and blocked/late migrations. Separate backup health from lifecycle/security/readiness.
+  Display source freshness, denominator and unknown counts; share/export the same scoped results.
+  Lifecycle MVP depends on D01-D04; campaign/advisory columns follow their respective models, using U05/U09/U10.
+
+### Epic 21 - DBA recovery and operational assurance
+
+- [ ] **2026-11-10 | D16 | NEW | P1 | L - Recovery objectives and backup-chain coverage.**
+  DBA/SRE/service-owner personas need to know achievable data loss and recovery time.
+  **Acceptance:** record business RPO/RTO, engine-specific backup-type cadence and required base/log/
+  WAL/binlog/archival dependencies where applicable. Track recoverable point/window from sufficient
+  evidence, missing chain members and measured restore duration; unknown chain coverage stays Unknown.
+  A fresh log backup does not prove a valid base or end-to-end recovery. Support encryption-key and
+  offsite-copy dependencies. Extends U01/U04/U11/U12/U21 with chain-level semantics; no automatic restore
+  execution or RPO compliance claim from timestamps alone.
+
+- [ ] **2026-11-10 | D17 | NEW | P2 | M - Backup-copy availability and retention evidence.**
+  DBA/security/auditor personas need evidence that required recovery copies still exist.
+  **Acceptance:** track storage/copy locations, offsite/immutable/encryption expectations, observed
+  presence and last verification with accessible/cannot verify/missing distinctions. Compare retained
+  recovery coverage with policy and legal-hold references; historical discovery alone is not current
+  availability or proof of immutability. Surface gaps and stale checks; mask sensitive paths by role.
+  Reuse U01 evidence/U21 policies. No automatic backup deletion or storage-provider reconfiguration.
+
+- [ ] **2026-11-10 | D18 | NEW | P2 | M - Integrity, HA and maintenance-job evidence.**
+  DBA/SRE personas need to track assurance beyond whether a port accepts a connection.
+  **Acceptance:** record/import integrity-check, replication/failover-drill and required maintenance-job
+  results with node/deployment, tool/version, schedule, run time, source and outcomes. Flag missing,
+  failed and stale checks separately from backup health. Allow reviewed external monitoring/ticket
+  links first; distinguish a recorded result from continuously measured HA health. Depends on D07
+  and U19; does not run repairs, index rebuilds, failovers or arbitrary SQL jobs.
+
+- [ ] **2026-11-10 | D19 | NEW | P3 | M - Capacity and performance planning evidence.**
+  DBA/platform/service-owner personas need migration headroom and regression awareness.
+  **Acceptance:** import/reference timestamped database/storage growth, free space, workload and
+  performance baselines with source, units, measurement period and freshness. Record migration space
+  estimates and compare pre/post representative workloads; forecasts expose assumptions and missing
+  data rather than promising a precise exhaustion date. Link actions to a campaign. Integrate existing
+  monitoring instead of adding a continuous query profiler or automatic tuning. Supports D09/D11/D13.
+
+- [ ] **2026-11-10 | D20 | NEW | P2 | M - Certificate and recovery-key dependency reminders.**
+  DBA/security/platform personas need to avoid outages and unusable encrypted backups.
+  **Acceptance:** record certificate expiry, ownership and secret-store references for TLS and
+  recovery-key/certificate dependencies as applicable; show verified backup/restore access and last
+  check without storing private material. Notify relevant owners before deadlines and track renewal
+  evidence across replicas/clients. Distinguish key rotation from certificate expiry; integrate approved
+  secret-management systems. No passwords/private keys in inventory, CSV exports or reports.
+
+### Epic 22 - Support entitlement and safe retirement
+
+- [ ] **2026-11-10 | D21 | NEW | P2 | M - Support contracts and edition-cost readiness.**
+  Procurement/manager/DBA personas need verified coverage and target-edition implications.
+  **Acceptance:** link support agreement references to products/deployments, coverage type, dates,
+  owner and renewal evidence; flag missing/expired entitlement separately from product lifecycle.
+  Capture reviewed target-edition feature/licensing constraints and estimated extended-support or
+  migration cost with currency/date/assumptions. Restrict commercial evidence appropriately; no
+  automatic legal/license compliance certification. Depends on D01-D03; feeds D10 alternatives/D14.
+
+- [ ] **2026-11-10 | D22 | NEW | P2 | M - Decommission and source-retirement checklist.**
+  DBA/app-owner/auditor personas need a safe end state after replacement or migration.
+  **Acceptance:** validate consumers moved, jobs/replicas removed or redirected, final recoverable
+  backup/key evidence retained, rollback window closed and retention/hold obligations reviewed.
+  Record application/platform sign-off, externally performed access/monitoring cleanup and cost/
+  contract review. Unresolved dependencies block normal retirement or require a scoped exception.
+  Archive only after gates pass; preserve lineage and history. Extends U14 archive recovery with
+  retirement workflow, depends on D07/D13/D16-D17/D20-D21; no automated data or backup deletion.
+
+### Dated scope extensions and implementation order
+
+- 2026-11-10 | UPDATE-010 | Extends U21: D01/D07 add engine/deployment/node identity and technical dependency evidence; existing U21 team/region/policy scope is retained.
+- 2026-11-10 | UPDATE-011 | Extends U01/U04/U11/U12: D11/D16/D17 add migration rehearsal, recovery objectives, backup-chain interpretation and current-copy availability; existing health/evidence proposals remain open and unchanged.
+- 2026-11-10 | UPDATE-012 | Extends U08/U19: D03/D05/D12/D14 add lifecycle/security-specific actions, approvals and expiring exceptions using the shared incident/audit foundations.
+- 2026-11-10 | UPDATE-013 | Extends U05/U09/U10/U22: D15 adds scoped lifecycle views and evidence-aware reporting; original reporting/trend items are preserved.
+- 2026-11-10 | UPDATE-014 | Extends U14: D22 adds retirement gates before archive; archive/unarchive itself remains the original U14 proposal.
+- 2026-11-10 | PLAN-001 | Start D01-D04 and lifecycle-only D15 with manual catalogue/attestation; establish U19 audit conventions early. Then D07-D14 migration readiness and D16 recovery evidence. Optional collectors/advisory integrations and wider operations follow; dependencies can constrain portions of an item without preventing an honest Unknown status.
+- 2026-11-10 | VALIDATION-001 | Before closing a D item, run its acceptance criteria and the synthetic boundary/applicability/rollback/role scenarios in DBA_LIFECYCLE_REVIEW.md. Verify engine-specific behavior against current authoritative guidance. This review made documentation changes only and does not establish fleet support status or migration readiness.

@@ -5,6 +5,7 @@
 @inject ConnectivityChecker Connectivity
 @inject NavigationManager Nav
 @inject ToastService Toasts
+@inject IConfiguration Configuration
 
 <PageTitle>@(_overview?.Instance.Name ?? "Instance") · DBTracker</PageTitle>
 
@@ -61,6 +62,61 @@ else
         </p>
     }
 
+    <div class="row g-0 mb-4">
+        <div class="col-12">
+            <div class="dbt-card">
+                <h2 class="h6 text-muted text-uppercase mb-3">Health explanation</h2>
+                <dl class="row mb-0 small">
+                    <dt class="col-sm-3">Last successful backup</dt>
+                    <dd class="col-sm-9">@(_explanation!.LastSuccessUtc is { } ls ? ls.ToLocalTime().ToString("MMM d, yyyy h:mm tt") : "Never")</dd>
+
+                    <dt class="col-sm-3">Latest attempt</dt>
+                    <dd class="col-sm-9">
+                        @(_explanation.LastAttemptUtc is { } la
+                            ? $"{la.ToLocalTime():MMM d, yyyy h:mm tt} — {_explanation.LastAttemptStatus}"
+                            : "No backup evidence recorded yet")
+                    </dd>
+
+                    <dt class="col-sm-3">Governing interval</dt>
+                    <dd class="col-sm-9">every @_explanation.GoverningIntervalHours h</dd>
+
+                    <dt class="col-sm-3">Next due</dt>
+                    <dd class="col-sm-9">@(_explanation.NextDueUtc is { } due ? due.ToLocalTime().ToString("MMM d, yyyy h:mm tt") : "—")</dd>
+
+                    @if (_explanation.OverdueBy is { } overdueBy)
+                    {
+                        <dt class="col-sm-3">Overdue by</dt>
+                        <dd class="col-sm-9" style="color:var(--dbt-overdue)">@FormatDuration(overdueBy)</dd>
+                    }
+
+                    <dt class="col-sm-3">Alert suppression</dt>
+                    <dd class="col-sm-9">
+                        @if (_explanation.IsSuppressedByMaintenance)
+                        {
+                            <span><i class="bi bi-cone-striped"></i> Suppressed by active maintenance window — the health badge above stays truthful regardless.</span>
+                        }
+                        else
+                        {
+                            <span class="text-muted">Not suppressed</span>
+                        }
+                    </dd>
+
+                    @if (!string.IsNullOrWhiteSpace(instance.BackupFileLocation))
+                    {
+                        <dt class="col-sm-3">Scan freshness</dt>
+                        <dd class="col-sm-9">
+                            <span class="badge-health dot @ScannerFreshnessClass(_scannerHealth!.Freshness)">@_scannerHealth.Freshness</span>
+                            @if (!string.IsNullOrWhiteSpace(_scannerHealth.RecoveryHint))
+                            {
+                                <div class="text-muted small mt-1">@_scannerHealth.RecoveryHint</div>
+                            }
+                        </dd>
+                    }
+                </dl>
+            </div>
+        </div>
+    </div>
+
     <div class="row g-0 mb-4 kv-row">
         <div class="col-md-6">
             <div class="dbt-card h-100">
@@ -106,22 +162,22 @@ else
                     {
                         <dt class="col-5">Last scanned</dt>
                         <dd class="col-7">
-                            @switch (instance.LastScanStatus)
+                            @if (instance.LastScanUtc is null)
                             {
-                                case ScanStatus.NeverScanned:
-                                    <span class="text-muted">Never scanned</span>
-                                    break;
-                                case ScanStatus.Success:
-                                    <span>@instance.LastScanUtc!.Value.ToLocalTime().ToString("MMM d, h:mm tt")</span>
-                                    <span class="badge-health dot OnTrack ms-1">OK</span>
-                                    break;
-                                case ScanStatus.Error:
-                                    <span>@instance.LastScanUtc!.Value.ToLocalTime().ToString("MMM d, h:mm tt")</span>
-                                    <span class="badge-health dot Failed ms-1">Error</span>
+                                <span class="text-muted">Never scanned</span>
+                            }
+                            else
+                            {
+                                <span>@instance.LastScanUtc.Value.ToLocalTime().ToString("MMM d, h:mm tt")</span>
+                                <span class="badge-health dot @ScannerFreshnessClass(_scannerHealth!.Freshness) ms-1">@_scannerHealth.Freshness</span>
+                                @if (instance.LastScanStatus == ScanStatus.Error)
+                                {
                                     <div class="text-danger small mt-1">@instance.LastScanError</div>
-                                    break;
+                                }
                             }
                         </dd>
+                        <dt class="col-5">Name pattern(s)</dt>
+                        <dd class="col-7">@(string.IsNullOrWhiteSpace(instance.BackupFileNamePatterns) ? "All files" : instance.BackupFileNamePatterns)</dd>
                     }
                 </dl>
             </div>
@@ -226,18 +282,29 @@ else
                 {
                     <table class="table table-sm mb-0 dbt-table">
                         <thead>
-                            <tr><th>When</th><th>Type</th><th>Status</th><th>Size</th><th>Duration</th><th>Source</th></tr>
+                            <tr><th>When</th><th>Type</th><th>Status</th><th>Size</th><th>Duration</th><th>Evidence</th><th>File</th></tr>
                         </thead>
                         <tbody>
-                            @foreach (var r in instance.BackupRecords.OrderByDescending(r => r.TimestampUtc))
+                            @foreach (var r in instance.BackupRecords.OrderByDescending(r => r.TimestampUtc).ThenByDescending(r => r.Id))
                             {
+                                var evidence = BackupEvidenceClassifier.Classify(r, instance.RestoreEvents.ToList());
                                 <tr>
                                     <td class="small">@r.TimestampUtc.ToLocalTime().ToString("MMM d, h:mm tt")</td>
                                     <td class="small">@r.Type</td>
                                     <td><span class="badge-health dot @StatusClass(r.Status)">@r.Status</span></td>
                                     <td class="small">@(r.SizeMb is null ? "—" : $"{r.SizeMb:N0} MB")</td>
                                     <td class="small">@(r.DurationMinutes is null ? "—" : $"{r.DurationMinutes:N0} min")</td>
-                                    <td class="small text-muted">@(r.Source == BackupSource.Discovered ? "Discovered" : "Logged")</td>
+                                    <td class="small">
+                                        @if (evidence is { } level)
+                                        {
+                                            <span class="badge-health dot @EvidenceClass(level)" title="@EvidenceTooltip(level)">@BackupEvidenceClassifier.Describe(level)</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="text-muted">—</span>
+                                        }
+                                    </td>
+                                    <td class="small text-muted">@(string.IsNullOrWhiteSpace(r.SourceFile) ? "—" : r.SourceFile)</td>
                                 </tr>
                             }
                         </tbody>
@@ -368,6 +435,8 @@ else
     private bool _scanning;
     private bool _testingConnection;
     private ConnectivityResult? _connectivityResult;
+    private HealthExplanation? _explanation;
+    private ScannerHealth? _scannerHealth;
 
     protected override async Task OnInitializedAsync() => await Load();
 
@@ -380,6 +449,19 @@ else
             .Where(c => c.DatabaseInstanceId == Id)
             .OrderByDescending(c => c.ChangedAtUtc)
             .ToListAsync();
+
+        if (_overview is not null)
+        {
+            var now = DateTime.UtcNow;
+            _explanation = BackupHealthCalculator.Explain(_overview.Instance, _overview.Instance.BackupRecords.ToList(), now);
+            _scannerHealth = ScannerStalenessClassifier.Classify(
+                backupFileLocationConfigured: !string.IsNullOrWhiteSpace(_overview.Instance.BackupFileLocation),
+                lastScanUtc: _overview.Instance.LastScanUtc,
+                lastScanStatus: _overview.Instance.LastScanStatus,
+                scanIntervalMinutes: Configuration.GetValue("BackupScan:IntervalMinutes", 15),
+                staleAfterMultiplier: Configuration.GetValue("BackupScan:StaleAfterMultiplier", 3),
+                nowUtc: now);
+        }
     }
 
     private async Task LogBackup()
@@ -504,4 +586,30 @@ else
         BackupStatus.Missed => "Failed",
         _ => "NeverBackedUp"
     };
+
+    private static string EvidenceClass(EvidenceLevel level) => level switch
+    {
+        EvidenceLevel.RestoreTested => "OnTrack",
+        EvidenceLevel.ReportedSuccess => "Overdue",
+        _ => "NeverBackedUp"
+    };
+
+    private static string EvidenceTooltip(EvidenceLevel level) => level switch
+    {
+        EvidenceLevel.Discovered => "A file was found on the shared drive — presence only, not confirmed by anyone.",
+        EvidenceLevel.ReportedSuccess => "Manually logged as successful — a report, not file proof.",
+        EvidenceLevel.RestoreTested => "A restore has since succeeded from this instance, proving the chain recoverable.",
+        _ => ""
+    };
+
+    private static string ScannerFreshnessClass(ScannerFreshness freshness) => freshness switch
+    {
+        ScannerFreshness.Error => "Failed",
+        ScannerFreshness.Stale => "Overdue",
+        ScannerFreshness.Healthy => "OnTrack",
+        _ => "NeverBackedUp"
+    };
+
+    private static string FormatDuration(TimeSpan span) =>
+        span.TotalDays >= 1 ? $"{span.TotalDays:N1} days" : $"{span.TotalHours:N1} hours";
 }

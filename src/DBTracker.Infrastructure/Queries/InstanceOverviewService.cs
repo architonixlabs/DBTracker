@@ -3,10 +3,18 @@ using Microsoft.EntityFrameworkCore;
 
 namespace DBTracker.Infrastructure.Queries;
 
-public class InstanceOverviewService(DBTrackerDbContext db)
+/// <summary>
+/// Uses its own short-lived DbContext per call (via the factory) rather than the ambient scoped
+/// one — pages that support manual/periodic refresh (U03) call this repeatedly while their own
+/// scoped context may be mid-mutation (e.g. logging a backup), so a shared context would race the
+/// same way NotificationService's comment elsewhere in this app describes.
+/// </summary>
+public class InstanceOverviewService(IDbContextFactory<DBTrackerDbContext> factory)
 {
     public async Task<List<InstanceOverview>> GetAllAsync(bool includeArchived = false)
     {
+        using var db = await factory.CreateDbContextAsync();
+
         var instances = await db.DatabaseInstances
             .AsNoTracking()
             .Where(i => includeArchived || !i.IsArchived)
@@ -35,6 +43,8 @@ public class InstanceOverviewService(DBTrackerDbContext db)
 
     public async Task<InstanceOverview?> GetByIdAsync(int id)
     {
+        using var db = await factory.CreateDbContextAsync();
+
         var instance = await db.DatabaseInstances
             .AsNoTracking()
             .Include(i => i.BackupRecords)

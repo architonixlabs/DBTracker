@@ -34,6 +34,9 @@ public class DatabaseInstance
 
     /// <summary>UNC path or local folder the scanner checks for backup files. Empty = scanning disabled.</summary>
     public string BackupFileLocation { get; set; } = string.Empty;
+
+    /// <summary>Semicolon/comma-separated glob patterns (e.g. "*.bak;*.trn") deciding which files on BackupFileLocation count as evidence. Empty = match every file (pre-U01 behavior).</summary>
+    public string BackupFileNamePatterns { get; set; } = string.Empty;
     public DateTime? LastScanUtc { get; set; }
     public ScanStatus LastScanStatus { get; set; } = ScanStatus.NeverScanned;
     public string LastScanError { get; set; } = string.Empty;

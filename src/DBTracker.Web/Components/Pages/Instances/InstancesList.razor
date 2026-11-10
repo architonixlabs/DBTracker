@@ -1,4 +1,5 @@
 @page "/instances"
+@implements IDisposable
 @inject InstanceOverviewService OverviewService
 @inject NavigationManager Nav
 @inject AuthenticationStateProvider AuthProvider
@@ -11,16 +12,34 @@
         <h1>Database Instances</h1>
         <div class="subtitle">@(_overviews is null ? "" : $"{Filtered().Count()} of {_overviews.Count} instances")</div>
     </div>
-    <AuthorizeView Roles="@Roles.CanEditPolicy">
-        <div class="d-flex gap-2">
-            <a class="btn btn-outline-secondary" href="/instances/import">
-                <i class="bi bi-upload"></i> Import CSV
-            </a>
-            <a class="btn btn-primary" href="/instances/new">
-                <i class="bi bi-plus-lg"></i> Add instance
-            </a>
+    <div class="d-flex gap-2 align-items-center flex-wrap">
+        <div class="small text-muted" role="status">
+            @if (_refreshError is not null)
+            {
+                <span style="color:var(--dbt-failed)"><i class="bi bi-exclamation-circle"></i> Refresh failed: @_refreshError</span>
+            }
+            else
+            {
+                <span>Updated @_lastUpdatedUtc.ToLocalTime().ToString("h:mm:ss tt")</span>
+            }
         </div>
-    </AuthorizeView>
+        <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="RefreshNow" disabled="@_refreshing">
+            <i class="bi bi-arrow-clockwise"></i> @(_refreshing ? "Refreshing…" : "Refresh")
+        </button>
+        <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="ToggleAutoRefresh" title="Auto-refreshes every 30s while on">
+            <i class="bi @(_autoRefreshPaused ? "bi-play-fill" : "bi-pause-fill")"></i> Auto-refresh @(_autoRefreshPaused ? "paused" : "on")
+        </button>
+        <AuthorizeView Roles="@Roles.CanEditPolicy">
+            <div class="d-flex gap-2">
+                <a class="btn btn-outline-secondary" href="/instances/import">
+                    <i class="bi bi-upload"></i> Import CSV
+                </a>
+                <a class="btn btn-primary" href="/instances/new">
+                    <i class="bi bi-plus-lg"></i> Add instance
+                </a>
+            </div>
+        </AuthorizeView>
+    </div>
 </div>
 
 @if (_overviews is null)
@@ -162,14 +181,65 @@ else
     private string? _myEmail;
     private bool _hasOwnInstances;
 
+    private DateTime _lastUpdatedUtc;
+    private string? _refreshError;
+    private bool _refreshing;
+    private bool _autoRefreshPaused;
+    private Timer? _autoRefreshTimer;
+
+    private static readonly TimeSpan AutoRefreshInterval = TimeSpan.FromSeconds(30);
+
     protected override async Task OnInitializedAsync()
     {
-        _overviews = await OverviewService.GetAllAsync();
         var state = await AuthProvider.GetAuthenticationStateAsync();
         _myEmail = state.User.Identity?.Name;
-        _hasOwnInstances = !string.IsNullOrWhiteSpace(_myEmail) &&
-            _overviews.Any(o => string.Equals(o.Instance.ContactEmail, _myEmail, StringComparison.OrdinalIgnoreCase));
+
+        await Load();
+        _autoRefreshTimer = new Timer(async _ => await AutoRefreshTickAsync(), null, AutoRefreshInterval, AutoRefreshInterval);
     }
+
+    private async Task Load()
+    {
+        try
+        {
+            // Filters (_search, _engine, etc.) are separate fields this reload never touches, so a
+            // refresh preserves whatever the user had selected instead of resetting the view.
+            _overviews = await OverviewService.GetAllAsync();
+            _lastUpdatedUtc = DateTime.UtcNow;
+            _refreshError = null;
+            _hasOwnInstances = !string.IsNullOrWhiteSpace(_myEmail) &&
+                _overviews.Any(o => string.Equals(o.Instance.ContactEmail, _myEmail, StringComparison.OrdinalIgnoreCase));
+        }
+        catch (Exception ex)
+        {
+            _refreshError = ex.Message;
+        }
+    }
+
+    private async Task RefreshNow()
+    {
+        _refreshing = true;
+        await Load();
+        _refreshing = false;
+    }
+
+    private async Task AutoRefreshTickAsync()
+    {
+        if (_autoRefreshPaused)
+        {
+            return;
+        }
+
+        await InvokeAsync(async () =>
+        {
+            await Load();
+            StateHasChanged();
+        });
+    }
+
+    private void ToggleAutoRefresh() => _autoRefreshPaused = !_autoRefreshPaused;
+
+    public void Dispose() => _autoRefreshTimer?.Dispose();
 
     private IEnumerable<string> Companies =>
         _overviews?.Select(o => o.Instance.Company).Where(c => !string.IsNullOrWhiteSpace(c)).Distinct().OrderBy(c => c)
