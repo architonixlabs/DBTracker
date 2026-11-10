@@ -14,6 +14,24 @@ public class NotificationsAndUsersTests
     }
 
     [Test]
+    public async Task LogOut_ReturnsToLoginPage_AndEndsTheSession()
+    {
+        _page = await GlobalSetup.Server.Browser.NewPageAsync();
+        await LoginAsync("priya.nair@architonixlabs.com");
+
+        await GotoAsync("/");
+        await _page.WaitForSelectorAsync(".user-chip");
+        await WaitForCircuitAsync();
+
+        await _page.ClickAsync("form[action='Account/Logout'] button");
+        await _page.WaitForURLAsync(url => url.Contains("/Account/Login"));
+
+        // Session must actually be gone — a protected page should bounce back to login, not just the chrome.
+        await GotoAsync("/instances");
+        await _page.WaitForURLAsync(url => url.Contains("/Account/Login"));
+    }
+
+    [Test]
     public async Task NotificationBell_ShowsUnreadSeedData_AndMarkAllReadClearsBadge()
     {
         _page = await GlobalSetup.Server.Browser.NewPageAsync();

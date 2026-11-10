@@ -17,7 +17,9 @@ internal static class IdentityComponentsEndpointRouteBuilderExtensions
             [FromForm] string returnUrl) =>
         {
             await signInManager.SignOutAsync();
-            return TypedResults.LocalRedirect($"~/{returnUrl}");
+            // returnUrl already carries a leading "/" (e.g. "/Account/Login"); prepending another
+            // "~/" produced "~//Account/Login", which IsLocalUrl rejects as protocol-relative.
+            return TypedResults.LocalRedirect(returnUrl.StartsWith('/') ? $"~{returnUrl}" : $"~/{returnUrl}");
         });
 
         return accountGroup;
