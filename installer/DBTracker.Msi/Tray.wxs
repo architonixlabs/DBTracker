@@ -1,0 +1,42 @@
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util">
+  <Fragment>
+    <!-- The tray app lives outside the IIS site folder, so nothing it ships sits in the web root. -->
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="ArchitonixLabsFolder" Name="Architonix Labs">
+        <Directory Id="TRAYFOLDER" Name="DBTracker Tray" />
+      </Directory>
+    </StandardDirectory>
+
+    <ComponentGroup Id="TrayFiles" Directory="TRAYFOLDER">
+      <!-- Everything installer/build.ps1 built into out\tray (exe, exe.config, DBTracker.Tray.Core.dll). -->
+      <Files Include="$(var.TrayDir)**" />
+
+      <!-- Starts the tray for every user at sign-in; a user can opt out from its menu (HKCU flag). -->
+      <Component Id="TrayAutoStart" Guid="AF3E2FC3-FC0A-421B-82C4-2593DB610C8E">
+        <RegistryValue Root="HKLM" Key="SOFTWARE\Microsoft\Windows\CurrentVersion\Run" Name="DBTracker Tray"
+                       Type="string" Value="&quot;[TRAYFOLDER]DBTrackerTray.exe&quot; --autostart" KeyPath="yes" />
+      </Component>
+    </ComponentGroup>
+
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Component Id="TrayStartMenuShortcut" Guid="5D4DD9D0-C248-41BE-8FB4-D03855A1028E">
+        <Shortcut Id="TrayShortcut" Name="DBTracker Tray" Description="Status, shortcuts and admin tasks for DBTracker"
+                  Target="[TRAYFOLDER]DBTrackerTray.exe" WorkingDirectory="TRAYFOLDER" />
+        <RegistryValue Root="HKLM" Key="SOFTWARE\Architonix Labs\DBTracker Tray" Name="StartMenuShortcut" Type="integer" Value="1" KeyPath="yes" />
+      </Component>
+    </StandardDirectory>
+
+    <!-- The tray's "Deployment guide" item opens this copy. -->
+    <Component Id="DeploymentGuide" Directory="INSTALLFOLDER" Guid="477BA864-5DAE-4EB1-BF53-B2C702AA9D9F">
+      <File Id="DeploymentGuideFile" Source="$(var.RepoRoot)DEPLOYMENT.md" KeyPath="yes" />
+    </Component>
+
+    <!-- Close running trays before files are replaced or removed (install over, upgrade, repair,
+         uninstall): WM_CLOSE first, which the tray handles with a clean exit, then end any copy that
+         is still running, including other users' copies. -->
+    <util:CloseApplication Id="CloseTray" Target="DBTrackerTray.exe" CloseMessage="yes" ElevatedCloseMessage="yes"
+                           TerminateProcess="1" Timeout="5" RebootPrompt="no"
+                           Description="DBTracker Tray is closing so its files can be updated." />
+  </Fragment>
+</Wix>

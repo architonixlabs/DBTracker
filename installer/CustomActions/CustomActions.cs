@@ -281,6 +281,77 @@ namespace DBTracker.CustomActions
             return ActionResult.Success;
         }
 
+        // Immediate, after the install. Starts the tray app for the installing user, unelevated, so it
+        // doesn't run with the installer's admin rights. Never fails the install.
+        [CustomAction]
+        public static ActionResult LaunchTray(Session session)
+        {
+            try
+            {
+                var exe = Path.Combine(session["TRAYFOLDER"], "DBTrackerTray.exe");
+                if (!File.Exists(exe))
+                {
+                    session.Log("DBTracker: tray app not found at " + exe);
+                    return ActionResult.Success;
+                }
+                OpenUnelevated(session, exe);
+                session.Log("DBTracker: started " + exe);
+            }
+            catch (Exception ex)
+            {
+                session.Log("DBTracker: could not start the tray app: " + ex.Message);
+            }
+            return ActionResult.Success;
+        }
+
+        // Deferred (system), right after InstallInitialize, so it runs before RemoveFiles. util:CloseApplication
+        // already asked the installing user's tray to close; this gives every copy a moment, then ends
+        // whatever is still running in any session (its own terminate step runs only after RemoveFiles).
+        [CustomAction]
+        public static ActionResult EndTrayProcesses(Session session)
+        {
+            const string name = "DBTrackerTray";
+            try
+            {
+                var deadline = DateTime.UtcNow.AddSeconds(3);
+                while (DateTime.UtcNow < deadline && AnyRunning(name))
+                {
+                    Thread.Sleep(250);
+                }
+                foreach (var process in Process.GetProcessesByName(name))
+                {
+                    using (process)
+                    {
+                        try
+                        {
+                            process.Kill();
+                            process.WaitForExit(5000);
+                            session.Log("DBTracker: ended tray app process " + process.Id + " (session " + process.SessionId + ")");
+                        }
+                        catch (Exception ex) when (ex is InvalidOperationException || ex is System.ComponentModel.Win32Exception)
+                        {
+                            session.Log("DBTracker: could not end tray app process " + process.Id + ": " + ex.Message);
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                session.Log("DBTracker: could not check for running tray apps: " + ex.Message);
+            }
+            return ActionResult.Success;
+        }
+
+        private static bool AnyRunning(string processName)
+        {
+            var processes = Process.GetProcessesByName(processName);
+            foreach (var p in processes)
+            {
+                p.Dispose();
+            }
+            return processes.Length > 0;
+        }
+
         private static void WarmUp(Session session, string url, TimeSpan timeout)
         {
             var deadline = DateTime.UtcNow + timeout;
