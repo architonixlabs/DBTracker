@@ -1,0 +1,28 @@
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Fragment>
+    <!-- Everything `dotnet publish` produced; installer/build.ps1 fills PublishDir. -->
+    <ComponentGroup Id="AppFiles" Directory="INSTALLFOLDER">
+      <Files Include="$(var.PublishDir)**">
+        <!-- EF Core design-time tooling (Microsoft.EntityFrameworkCore.Design); never used at run time. -->
+        <Exclude Files="$(var.PublishDir)BuildHost-net472\**" />
+        <Exclude Files="$(var.PublishDir)BuildHost-netcore\**" />
+      </Files>
+    </ComponentGroup>
+
+    <!-- Holds the setup key, the saved configuration and the Data Protection keys. Permanent, so an
+         upgrade or uninstall never removes it; uninstall with REMOVE_DATA=1 deletes it. -->
+    <Component Id="AppDataFolder" Directory="APPDATAFOLDER" Guid="19E737EA-28AA-48B3-86D3-DD60F37711F6" Permanent="yes">
+      <CreateFolder />
+    </Component>
+
+    <!-- Remembered so repair, upgrade and uninstall act on the same folder, site and pool. -->
+    <Component Id="RememberSettings" Directory="INSTALLFOLDER" Guid="7F405A86-4DE4-424F-8F29-2F02ACB8F949">
+      <RegistryKey Root="HKLM" Key="SOFTWARE\Architonix Labs\DBTracker">
+        <RegistryValue Name="InstallFolder" Type="string" Value="[INSTALLFOLDER]" KeyPath="yes" />
+        <RegistryValue Name="SiteName" Type="string" Value="[SITE_NAME]" />
+        <RegistryValue Name="AppPoolName" Type="string" Value="[APPPOOL_NAME]" />
+        <RegistryValue Name="SitePort" Type="string" Value="[SITE_PORT]" />
+      </RegistryKey>
+    </Component>
+  </Fragment>
+</Wix>

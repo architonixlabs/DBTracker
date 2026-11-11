@@ -5,6 +5,110 @@ wizard, upgrades, and the problems you are most likely to hit. Throughout, the s
 `DBTracker`, the app pool is called `DBTracker`, and the site folder is `C:\inetpub\DBTracker`.
 Substitute your own names.
 
+The quickest route is the installer described next. Sections 1 to 5 describe the same steps done by
+hand, and the rest of the guide applies either way.
+
+## Install with Setup.exe or the MSI
+
+There are two installer files:
+
+- **`DBTracker-Setup.exe` (recommended).** Checks the prerequisites, lists what is missing, and after
+  you confirm installs them: the IIS features DBTracker needs (including WebSocket Protocol), the .NET
+  10 Hosting Bundle, and optionally SQL Server Express. Downloads come from Microsoft and are checked
+  against a pinned SHA-512 before they run. It then runs `DBTracker.msi` and opens the setup wizard.
+- **`DBTracker.msi`.** Installs DBTracker itself: copies the app to `C:\inetpub\DBTracker`, creates the
+  `DBTracker` app pool (No Managed Code, ApplicationPoolIdentity) and site, gives the app pool identity
+  Modify rights on `App_Data`, and can create the SQL Server login for it. It does not install
+  prerequisites. Run on its own, it stops with a message naming exactly what is missing: IIS 10, the IIS
+  WebSocket Protocol feature, or the .NET 10 Hosting Bundle (ASP.NET Core 10 runtime plus ASP.NET Core
+  Module V2 version 20 or later).
+
+Both need administrator rights. When the install finishes, the browser opens
+`http://localhost:<port>/install` and the setup key file (`App_Data\setup-key.txt`) opens in your
+default text editor, so you can paste the key straight into the wizard (section 6). On an upgrade the
+site's home page opens instead.
+
+### Setup.exe options
+
+The Options page has the install folder, the port, the SQL Server for the login, and **Install SQL
+Server Express**, which only appears when no local SQL Server instance exists. From the command line:
+
+```powershell
+DBTracker-Setup.exe /quiet SitePort=8200 InstallFolder="D:\Sites\DBTracker" SqlLoginServer=. LaunchWizard=0
+DBTracker-Setup.exe /quiet InstallSqlExpress=1
+```
+
+`/quiet` installs without prompts, and `/norestart` suppresses the restart prompt. Turning on IIS
+features, the Hosting Bundle or SQL Server Express sometimes needs a restart (exit code 3010); Setup.exe
+offers it at the end and never forces it. Logs: `%TEMP%\DBTracker-Setup_*.log` for the bundle and
+`%TEMP%\DBTracker-SetupHelper.log` for its prerequisite helper.
+
+### MSI properties
+
+| Property | Default | Meaning |
+|---|---|---|
+| `INSTALLFOLDER` | `C:\inetpub\DBTracker` | Site folder. |
+| `SITE_NAME` | `DBTracker` | IIS site name. |
+| `APPPOOL_NAME` | `DBTracker` | IIS app pool name; its identity is `IIS APPPOOL\<name>`. |
+| `SITE_PORT` | `8150` | HTTP port. Architonix app services use the 8xxx and 9xxx bands. The install stops if another IIS site already uses the port. |
+| `SQL_SERVER` | empty | SQL Server to create the app pool's login on, for example `.` or `.\SQLEXPRESS`. |
+| `SQL_GRANT_LOGIN` | empty | `1` creates the login and adds it to `dbcreator`. |
+| `LAUNCH_WIZARD` | `1` | `0` skips opening the browser at the end. |
+| `OPEN_SETUP_KEY` | `1` | `0` skips opening the setup key file. |
+| `REMOVE_DATA` | empty | On uninstall only: `1` also deletes `App_Data`. |
+
+Names may use letters, digits, spaces, dots, hyphens and underscores. The installer remembers the
+folder, site, pool and port (in `HKLM\SOFTWARE\Architonix Labs\DBTracker`), so repairs, upgrades and
+uninstall act on the same ones; to move the site to another port later, change the binding in IIS
+Manager.
+
+```powershell
+# Interactive, with a verbose log
+msiexec /i DBTracker.msi /l*v install.log
+
+# Unattended, on another port, creating the SQL login on the local default instance
+msiexec /i DBTracker.msi /qn /l*v install.log SITE_PORT=8150 SQL_SERVER=. SQL_GRANT_LOGIN=1
+
+# Uninstall, keeping App_Data (the default)
+msiexec /x DBTracker.msi /qn /l*v uninstall.log
+
+# Uninstall and delete App_Data (saved configuration, encryption keys, setup key)
+msiexec /x DBTracker.msi /qn /l*v uninstall.log REMOVE_DATA=1
+```
+
+The SQL login is created with your Windows credentials, so you need permission to create logins on
+that server. For SQL Server on the same machine the login is `IIS APPPOOL\<pool>`; for a server on
+another machine it is the IIS server's computer account (`DOMAIN\SERVER$`), which needs the IIS server
+to be in a domain. If creating the login fails, the installer shows a warning, logs it, and finishes
+the install anyway; create the login by hand with the statements in section 5.
+
+**Upgrades.** Run the newer `DBTracker-Setup.exe` or `DBTracker.msi`. It stops the app pool, replaces
+the program files, keeps `App_Data`, and starts the pool again; pending database migrations apply on
+the next request. Installing an older version over a newer one is blocked.
+
+**Uninstall** (Settings > Apps, or `msiexec /x`) removes the site, the app pool and the program files.
+`App_Data` stays unless you pass `REMOVE_DATA=1`. The database is never touched. Prerequisites that
+Setup.exe installed (IIS features, the Hosting Bundle, SQL Server Express) also stay installed.
+
+**Known gap.** If the .NET Hosting Bundle was installed before IIS, the ASP.NET Core Module files exist
+but IIS does not know about them, and neither installer can detect that. The site then fails with HTTP
+500.19. Run the Hosting Bundle installer again, choose Repair, and run `iisreset`.
+
+### Build the installer
+
+On a Windows build machine with the .NET 10 SDK, from the repository root:
+
+```powershell
+.\installer\build.ps1 -Version 1.0.0
+```
+
+It publishes the app, builds `installer\out\DBTracker.msi`, refreshes the pinned prerequisite
+downloads and hashes from Microsoft's release metadata, and builds `installer\out\DBTracker-Setup.exe`.
+`-SkipBundle` builds only the MSI. The installer builds with WiX Toolset 5.0.2 (MS-RL, restored from
+NuGet, nothing to install) and is deliberately not on WiX 6 or later, which ship under the Open Source
+Maintenance Fee EULA. Windows Installer's ICE validation needs an elevated prompt, so a normal build
+skips it; run `.\installer\build.ps1 -Validate` from an elevated prompt to include it.
+
 ## 1. Prerequisites
 
 On the IIS server:

@@ -1,0 +1,30 @@
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:iis="http://wixtoolset.org/schemas/v4/wxs/iis">
+  <Fragment>
+    <!-- On IIS 7 and later the extension writes through the IIS configuration API; it does not need
+         IIS 6 Metabase Compatibility. No Managed Code is set afterwards by ConfigureAppPoolAndData,
+         because the extension can't express an empty runtime version. -->
+    <ComponentGroup Id="IisConfiguration" Directory="INSTALLFOLDER">
+      <Component Id="IisAppPool" Guid="F870615A-DA29-439E-BC9D-DF658971C8F4">
+        <iis:WebAppPool Id="DBTrackerAppPool"
+                        Name="[APPPOOL_NAME]"
+                        Identity="applicationPoolIdentity"
+                        ManagedPipelineMode="Integrated" />
+        <CreateFolder />
+      </Component>
+
+      <Component Id="IisWebSite" Guid="FC6920DD-A864-41A8-8B8D-E5767982E21F">
+        <iis:WebSite Id="DBTrackerSite"
+                     Description="[SITE_NAME]"
+                     Directory="INSTALLFOLDER"
+                     AutoStart="yes"
+                     StartOnInstall="yes"
+                     ConfigureIfExists="yes">
+          <iis:WebAddress Id="DBTrackerHttp" IP="*" Port="[SITE_PORT]" />
+          <iis:WebApplication Id="DBTrackerRootApp" Name="[SITE_NAME]" WebAppPool="DBTrackerAppPool" />
+        </iis:WebSite>
+        <CreateFolder />
+      </Component>
+    </ComponentGroup>
+  </Fragment>
+</Wix>

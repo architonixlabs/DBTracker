@@ -1,0 +1,26 @@
+<!-- Pinned to WiX 5 on purpose: WiX 6 and later ship under the Open Source Maintenance Fee EULA. Ask the owner before upgrading. -->
+<Project Sdk="WixToolset.Sdk/5.0.2">
+
+  <PropertyGroup>
+    <OutputName>DBTracker</OutputName>
+    <Platform>x64</Platform>
+    <InstallerPlatform>x64</InstallerPlatform>
+    <ProductVersion Condition="'$(ProductVersion)' == ''">1.0.0</ProductVersion>
+    <PublishDir Condition="'$(PublishDir)' == ''">$(MSBuildThisFileDirectory)..\out\publish\</PublishDir>
+    <DefineConstants>ProductVersion=$(ProductVersion);PublishDir=$(PublishDir)</DefineConstants>
+    <Cultures>en-US</Cultures>
+    <!-- ICE validation needs an elevated prompt (WIX1105 otherwise). build.ps1 -Validate turns it on. -->
+    <SuppressValidation Condition="'$(SuppressValidation)' == ''">true</SuppressValidation>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="WixToolset.Iis.wixext" Version="5.0.2" />
+    <PackageReference Include="WixToolset.Util.wixext" Version="5.0.2" />
+    <PackageReference Include="WixToolset.UI.wixext" Version="5.0.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\CustomActions\DBTracker.CustomActions.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -26,7 +26,8 @@ integrated security — no secrets required.
 
 ## Deploying to IIS
 See [DEPLOYMENT.md](DEPLOYMENT.md). A first-run wizard at `/install` creates the database and the
-first Admin account.
+first Admin account. `installer\build.ps1` builds `DBTracker-Setup.exe` (installs prerequisites, then
+the app) and `DBTracker.msi` (the app only) into `installer\out`.
 
 ## Project layout
 - `src/DBTracker.Core` — domain entities and backup-health logic
