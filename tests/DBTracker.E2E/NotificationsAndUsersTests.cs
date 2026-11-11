@@ -119,7 +119,7 @@ public class NotificationsAndUsersTests
 
         // Never claims success (e.g. "accepted"/"Report sent to") when nothing was actually delivered.
         await Assertions.Expect(_page.Locator(".dbt-toast")).Not.ToContainTextAsync("accepted");
-        await Assertions.Expect(_page.Locator(".dbt-toast")).ToContainTextAsync("no email provider configured");
+        await Assertions.Expect(_page.Locator(".dbt-toast")).ToContainTextAsync("Not sent: email sending is turned off");
     }
 
     private Task LoginAsync(string email) => LoginAsync(email, "ArxDemo#2026!");

@@ -2013,6 +2013,21 @@ tests were updated for the archive choice and the explicit checklist start.
     instance detail on the phone (0.110), opened as G33.
   - **Other fixes from the post-merge E2E run:** popover anchors, and four test issues: a test user's display name
     containing "Deactivated", a sign-in selector, a 360 px row click, and the inbox tests' menu close.
+- 2026-11-12 | UPDATE-033 | G32 delivered (track G), except the owner's decision on U06 response-time targets.
+  - **Delivery and audit:**
+    - Webhook sends are stored as delivery attempts; the URL is never stored, and nothing is written when no webhook is set.
+    - The alert worker audits incident open, escalate and close as system actions.
+  - **Inbox:** filtering, counts and paging now run in SQL, matching the in-app rules exactly (unit-tested).
+  - **Report errors:** non-Admin report senders get a next step they can take; only Admins are pointed to `/setup`.
+  - **Time zones:** no server-zone `ToLocalTime()` is left in the Web project.
+  - **Evidence:**
+    - Manual backup and restore entries are audited with their entered values.
+    - Restore corrections are honoured for restore-tested, while as-of views ignore later corrections.
+  - **Lifecycle:** instances with no version identity get one Unknown notice. The dedupe state is the audit record, not an
+    invented identity, to keep Angela's provenance rule.
+  - **Assurance:** the retirement gate counts hosted databases, and maintenance results can be backdated.
+  - **CSV:** one CSV reader (`CsvRecordSplitter` removed).
+  - **Checks:** no migration needed; 1053 unit tests pass. New findings are in G34.
 - 2026-11-11 | UPDATE-025 | Clarifies the Progress log's D22 entry (see UPDATE-022): after G01, "NotApplicable is not treated as passing" is replaced by "NotApplicable only when proven" and "no second archive path" holds for retirements. The D21 entry's "a DBA can record a contract" is true after G06. Earlier wording is kept as history.
 
 ### Epic 25 - Finish partly built features
@@ -2249,7 +2264,7 @@ fallback.
   **Acceptance:** container queries on the stat row, detail cards and key-value lists, with the
   existing media queries as fallback. Check at 360 px and at 200% zoom.
 
-- [ ] **2026-11-11 | G32 | NEW | P2 | M - Follow-ups found while closing G09-G15 and G23.**
+- [x] **2026-11-11 | G32 | NEW | P2 | M - Follow-ups found while closing G09-G15 and G23.**
   The four delivery tracks reported these gaps, which no earlier item covered.
   - **Monitoring and alerts:**
     - Webhook sends are not stored as delivery attempts (email is).
@@ -2279,6 +2294,26 @@ fallback.
   0.008). Noor sees the page jump as later sections load.
   **Acceptance:** find the shifting element with the Layout Shift API or DevTools, reserve its space, and re-measure with
   `CoreWebVitalsBaseline` to below 0.1.
+
+- [ ] **2026-11-12 | G34 | NEW | P3 | S - Follow-ups found while closing G32.**
+  - Post-change evidence candidates (`ChangeValidationService`) and `ChangeEvidenceRules` still use the original restore
+    outcome, ignoring corrections (Angela).
+  - Capacity measurement times on the assurance page are entered and shown as plain UTC with no zone choice. The capacity
+    table, saved capacity limit and forecast dates print UTC timestamps with no label (Priya, Noor).
+  - Support-runway notice emails are not stored as delivery attempts (Sam).
+
+- [x] **2026-11-12 | G35 | NEW | P1 | S - An installed app must survive a database that starts after it.**
+  Found by the first Hyper-V upgrade run (G18). After the VM restarted, IIS started DBTracker while SQL Server Express was
+  still `StartPending`. The one start-up migration failed, and the site answered HTTP 500 until someone recycled it.
+  Sam needs it to recover by itself, Priya needs the app back after a reboot, and Angela needs no half-applied state.
+  **Delivered:**
+  - Start-up retries the migration four times with a short backoff.
+  - If the database still doesn't answer, the site starts anyway and pages answer 503 with a plain "waiting for its
+    database" explanation and `Retry-After: 15`. `/healthz` reports degraded, so the tray light turns amber.
+  - `DatabaseReadinessService` retries every 15 seconds and opens the site once migrations are applied.
+  - Development and Testing still fail loudly.
+  - The E2E test `DatabaseUnavailableAtStartupTests` starts a Production-mode copy against a missing SQL Server and checks
+    the 503, `Retry-After` and degraded health.
 
 ### Audit corrections to existing text
 

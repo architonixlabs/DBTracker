@@ -208,6 +208,7 @@ app.UseWhen(
     branch => branch.UseHttpsRedirection());
 
 app.UseInstallGate(installState);
+app.UseDatabaseReadinessGate(installState, app.Services.GetRequiredService<DBTracker.Web.Install.DatabaseReadiness>());
 
 app.UseAuthentication();
 app.UseAuthorization();
