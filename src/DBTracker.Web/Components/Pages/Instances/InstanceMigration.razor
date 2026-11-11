@@ -18,14 +18,21 @@
 
 <PageTitle>@(_instance?.Name ?? "Instance") migration planning · DBTracker</PageTitle>
 
-@if (!_loaded)
+@if (_loadFailed)
 {
-    <div class="spinner-ring"></div>
+    <div class="dbt-card" style="max-width:600px;">
+        <div class="empty-state py-4" role="alert"><i class="bi bi-exclamation-triangle" aria-hidden="true"></i> Couldn't load migration planning. The database may be unreachable.</div>
+        <button type="button" class="btn btn-outline-secondary" @onclick="Retry">Try again</button>
+    </div>
+}
+else if (!_loaded)
+{
+    <div class="spinner-ring" role="status"><span class="visually-hidden">Loading migration planning…</span></div>
 }
 else if (_instance is null)
 {
     <div class="dbt-card" style="max-width:600px;">
-        <div class="empty-state py-4"><i class="bi bi-question-diamond"></i> Instance #@Id doesn't exist.</div>
+        <div class="empty-state py-4"><i class="bi bi-question-diamond" aria-hidden="true"></i> Instance #@Id doesn't exist.</div>
         <a class="btn btn-outline-secondary" href="/instances">Back to instances</a>
     </div>
 }
@@ -33,38 +40,37 @@ else
 {
     <div class="app-topbar">
         <div>
-            <div class="eyebrow">Dependency assessment and migration planning</div>
             <h1>@_instance.Name</h1>
             <div class="subtitle">
-                @_instance.Engine · <a href="/instances/@Id">Back to instance detail</a> · <a href="/instances/@Id/lifecycle">Lifecycle (D01-D06)</a> ·
-                Manual mapping/evaluation only — no auto-discovery and no generated executable migration scripts.
+                Dependencies and migration planning · @_instance.Engine · <a href="/instances/@Id">Back to instance detail</a> · <a href="/instances/@Id/lifecycle">Lifecycle</a><br />
+                Everything here is mapped and assessed by hand. DBTracker doesn't discover dependencies or generate migration scripts.
             </div>
         </div>
     </div>
 
     @if (_impact is { HasUnresolvedConcerns: true } or { DownstreamConsumerCount: > 0 })
     {
-        <div class="dbt-card mb-3" data-testid="dependency-impact-banner" style="border-color:var(--dbt-overdue);">
-            <strong style="color:var(--dbt-overdue);"><i class="bi bi-exclamation-triangle"></i> Before changing this shared engine:</strong>
-            <span class="small"> @_impact!.UnresolvedCount unresolved dependenc@(_impact.UnresolvedCount == 1 ? "y" : "ies"), @_impact.DownstreamConsumerCount downstream consumer(s) recorded. Review the Dependencies section below.</span>
+        <div class="dbt-card mb-3" data-testid="dependency-impact-banner" role="status" style="border-color:var(--dbt-overdue);">
+            <strong style="color:var(--dbt-overdue);"><i class="bi bi-exclamation-triangle" aria-hidden="true"></i> Before changing this shared engine:</strong>
+            <span class="small"> @_impact!.UnresolvedCount unresolved dependenc@(_impact.UnresolvedCount == 1 ? "y" : "ies"), @_impact.DownstreamConsumerCount downstream consumer(s) recorded. Review the dependencies listed below.</span>
         </div>
     }
 
     <div class="row g-3">
         <div class="col-12">
             <div class="dbt-card">
-                <h2 class="h6 text-muted text-uppercase mb-3">Technical dependencies (D07)</h2>
-                <p class="small text-muted">Deployments, nodes, hosted databases, drivers, extensions/plugins, jobs, linked services, replicas/HA groups and backup tooling this instance relies on — or that rely on it. Manual entry; no auto-discovery.</p>
+                <h2 class="h6 text-muted text-uppercase mb-3">Technical dependencies</h2>
+                <p class="small text-muted">Deployments, nodes, hosted databases, drivers, extensions and plugins, jobs, linked services, replicas and HA groups, and backup tooling that this instance relies on, or that rely on it.</p>
 
                 @if (_dependencies.Count == 0)
                 {
-                    <div class="empty-state py-3"><i class="bi bi-diagram-3"></i> No dependencies recorded yet.</div>
+                    <div class="empty-state py-3"><i class="bi bi-diagram-3" aria-hidden="true"></i> No dependencies recorded yet.</div>
                 }
                 else
                 {
-                    <div class="table-responsive" role="region" aria-label="Technical dependencies">
+                    <div class="table-responsive" role="region" aria-label="Technical dependencies" tabindex="0">
                         <table class="table table-sm dbt-table mb-0" data-testid="dependency-table">
-                            <thead><tr><th>Kind</th><th>Direction</th><th>Name</th><th>Version state</th><th>Owner team</th><th>Resolved</th><th></th></tr></thead>
+                            <thead><tr><th scope="col">Kind</th><th scope="col">Direction</th><th scope="col">Name</th><th scope="col">Version state</th><th scope="col">Owner team</th><th scope="col">Resolved</th><th scope="col"><span class="visually-hidden">Actions</span></th></tr></thead>
                             <tbody>
                                 @foreach (var d in _dependencies)
                                 {
@@ -73,7 +79,7 @@ else
                                         <td class="small">@d.Direction</td>
                                         <td class="small">@d.Name @(string.IsNullOrWhiteSpace(d.RecordedVersionText) ? "" : $"({d.RecordedVersionText})")</td>
                                         <td class="small">@d.VersionState</td>
-                                        <td class="small">@(d.OwnerTeam?.Name ?? "—")</td>
+                                        <td class="small">@(d.OwnerTeam?.Name ?? "None")</td>
                                         <td class="small">
                                             @if (d.IsResolved)
                                             {
@@ -86,7 +92,7 @@ else
                                         </td>
                                         <td class="small">
                                             <AuthorizeView Roles="@Roles.CanEditPolicy">
-                                                <button class="btn btn-link btn-sm p-0" @onclick="() => ToggleResolved(d)">@(d.IsResolved ? "Mark unresolved" : "Mark resolved")</button>
+                                                <button type="button" class="btn btn-link btn-sm p-0" @onclick="() => ToggleResolved(d)">@(d.IsResolved ? "Mark unresolved" : "Mark resolved")</button>
                                             </AuthorizeView>
                                         </td>
                                     </tr>
@@ -98,9 +104,10 @@ else
 
                 <AuthorizeView Roles="@Roles.CanEditPolicy">
                     <hr />
-                    <div class="row g-2 mb-2">
+                    <div class="row g-2 mb-2 align-items-end">
                         <div class="col-md-2">
-                            <select class="form-select form-select-sm" @bind="_depKind">
+                            <label class="form-label small mb-1" for="dep-kind">Kind</label>
+                            <select id="dep-kind" class="form-select form-select-sm" @bind="_depKind">
                                 @foreach (var k in Enum.GetValues<DependencyKind>())
                                 {
                                     <option value="@k">@k</option>
@@ -108,16 +115,18 @@ else
                             </select>
                         </div>
                         <div class="col-md-2">
-                            <select class="form-select form-select-sm" @bind="_depDirection">
+                            <label class="form-label small mb-1" for="dep-direction">Direction</label>
+                            <select id="dep-direction" class="form-select form-select-sm" @bind="_depDirection">
                                 @foreach (var dir in Enum.GetValues<DependencyDirection>())
                                 {
                                     <option value="@dir">@dir</option>
                                 }
                             </select>
                         </div>
-                        <div class="col-md-3"><input class="form-control form-control-sm" placeholder="Name" @bind="_depName" @bind:event="oninput" /></div>
+                        <div class="col-md-3"><label class="form-label small mb-1" for="dep-name">Name (required)</label><input id="dep-name" class="form-control form-control-sm" placeholder="Name" @bind="_depName" @bind:event="oninput" /></div>
                         <div class="col-md-2">
-                            <select class="form-select form-select-sm" @bind="_depVersionState">
+                            <label class="form-label small mb-1" for="dep-version-state">Version state</label>
+                            <select id="dep-version-state" class="form-select form-select-sm" @bind="_depVersionState">
                                 @foreach (var vs in Enum.GetValues<DependencyVersionState>())
                                 {
                                     <option value="@vs">@vs</option>
@@ -125,7 +134,8 @@ else
                             </select>
                         </div>
                         <div class="col-md-3">
-                            <select class="form-select form-select-sm" @bind="_depOwnerTeamId">
+                            <label class="form-label small mb-1" for="dep-owner-team">Owner team</label>
+                            <select id="dep-owner-team" class="form-select form-select-sm" @bind="_depOwnerTeamId">
                                 <option value="0">No owner team</option>
                                 @foreach (var t in _teams)
                                 {
@@ -135,33 +145,33 @@ else
                         </div>
                     </div>
                     <div class="row g-2 mb-2">
-                        <div class="col-md-3"><input class="form-control form-control-sm" placeholder="Recorded version (e.g. driver 4.2.1)" @bind="_depVersionText" @bind:event="oninput" /></div>
-                        <div class="col-md-3"><input class="form-control form-control-sm" placeholder="OS/runtime constraint" @bind="_depOsConstraint" @bind:event="oninput" /></div>
-                        <div class="col-md-3"><input class="form-control form-control-sm" placeholder="Managed-provider constraint" @bind="_depProviderConstraint" @bind:event="oninput" /></div>
-                        <div class="col-md-3"><input class="form-control form-control-sm" placeholder="Evidence URL/reference" @bind="_depEvidenceUrl" @bind:event="oninput" /></div>
+                        <div class="col-md-3"><label class="form-label small mb-1" for="dep-version-text">Recorded version</label><input id="dep-version-text" class="form-control form-control-sm" placeholder="Recorded version (e.g. driver 4.2.1)" @bind="_depVersionText" @bind:event="oninput" /></div>
+                        <div class="col-md-3"><label class="form-label small mb-1" for="dep-os">OS or runtime constraint</label><input id="dep-os" class="form-control form-control-sm" placeholder="OS/runtime constraint" @bind="_depOsConstraint" @bind:event="oninput" /></div>
+                        <div class="col-md-3"><label class="form-label small mb-1" for="dep-provider">Managed-provider constraint</label><input id="dep-provider" class="form-control form-control-sm" placeholder="Managed-provider constraint" @bind="_depProviderConstraint" @bind:event="oninput" /></div>
+                        <div class="col-md-3"><label class="form-label small mb-1" for="dep-evidence">Evidence URL or reference</label><input id="dep-evidence" class="form-control form-control-sm" placeholder="Evidence URL/reference" @bind="_depEvidenceUrl" @bind:event="oninput" /></div>
                     </div>
-                    <button class="btn btn-primary btn-sm" @onclick="AddDependency" disabled="@string.IsNullOrWhiteSpace(_depName)">Record dependency</button>
+                    <button type="button" class="btn btn-primary btn-sm" @onclick="AddDependency" disabled="@string.IsNullOrWhiteSpace(_depName)">Record dependency</button>
                 </AuthorizeView>
             </div>
         </div>
 
         <div class="col-lg-6">
             <div class="dbt-card h-100">
-                <h2 class="h6 text-muted text-uppercase mb-3">Source-to-target path assessment (D08)</h2>
-                <p class="small text-muted">Classified Supported / Blocked / Unknown against a curated, reviewed rule set — the absence of a matching rule is always Unknown, never Supported.</p>
+                <h2 class="h6 text-muted text-uppercase mb-3">Source-to-target path assessment</h2>
+                <p class="small text-muted">Each path is classified Supported, Blocked or Unknown against a reviewed rule set. A path with no matching rule is always Unknown, never Supported.</p>
 
                 @if (_pathAssessments.Count > 0)
                 {
-                    <div class="table-responsive mb-3" role="region" aria-label="Path assessments">
+                    <div class="table-responsive mb-3" role="region" aria-label="Path assessments" tabindex="0">
                         <table class="table table-sm dbt-table mb-0" data-testid="path-assessment-table">
-                            <thead><tr><th>Type</th><th>Method</th><th>Source → Target</th><th>Status</th></tr></thead>
+                            <thead><tr><th scope="col">Type</th><th scope="col">Method</th><th scope="col">Source to target</th><th scope="col">Status</th></tr></thead>
                             <tbody>
                                 @foreach (var a in _pathAssessments)
                                 {
                                     <tr data-testid="path-assessment-row">
                                         <td class="small">@a.AssessmentType</td>
                                         <td class="small">@a.Method</td>
-                                        <td class="small">@a.SourceProduct @a.SourceBuild → @a.TargetProduct @a.TargetBuild</td>
+                                        <td class="small">@a.SourceProduct @a.SourceBuild <span aria-hidden="true">→</span><span class="visually-hidden">to</span> @a.TargetProduct @a.TargetBuild</td>
                                         <td class="small"><span class="badge-health dot @PathStatusCssClass(a.Status)" data-testid="path-status">@a.Status</span></td>
                                     </tr>
                                     <tr>
@@ -172,11 +182,16 @@ else
                         </table>
                     </div>
                 }
+                else
+                {
+                    <div class="empty-state py-2 mb-2"><i class="bi bi-signpost-split" aria-hidden="true"></i> No migration path assessed yet.</div>
+                }
 
                 <AuthorizeView Roles="@Roles.CanEditPolicy">
                     <div class="row g-2 mb-2">
                         <div class="col-6">
-                            <select class="form-select form-select-sm" @bind="_pathAssessmentType">
+                            <label class="form-label small mb-1" for="path-type">Change type</label>
+                            <select id="path-type" class="form-select form-select-sm" @bind="_pathAssessmentType">
                                 @foreach (var t in Enum.GetValues<MigrationAssessmentType>())
                                 {
                                     <option value="@t">@t</option>
@@ -184,7 +199,8 @@ else
                             </select>
                         </div>
                         <div class="col-6">
-                            <select class="form-select form-select-sm" @bind="_pathMethod">
+                            <label class="form-label small mb-1" for="path-method">Method</label>
+                            <select id="path-method" class="form-select form-select-sm" @bind="_pathMethod">
                                 @foreach (var m in Enum.GetValues<MigrationMethod>())
                                 {
                                     <option value="@m">@m</option>
@@ -193,42 +209,44 @@ else
                         </div>
                     </div>
                     <div class="row g-2 mb-2">
-                        <div class="col-6"><input class="form-control form-control-sm" placeholder="Source product/family" @bind="_pathSourceProduct" @bind:event="oninput" /></div>
-                        <div class="col-6"><input class="form-control form-control-sm" placeholder="Source build" @bind="_pathSourceBuild" @bind:event="oninput" /></div>
+                        <div class="col-6"><label class="form-label small mb-1" for="path-src-product">Source product (required)</label><input id="path-src-product" class="form-control form-control-sm" placeholder="Source product/family" @bind="_pathSourceProduct" @bind:event="oninput" /></div>
+                        <div class="col-6"><label class="form-label small mb-1" for="path-src-build">Source build</label><input id="path-src-build" class="form-control form-control-sm" placeholder="Source build" @bind="_pathSourceBuild" @bind:event="oninput" /></div>
                     </div>
                     <div class="row g-2 mb-2">
-                        <div class="col-6"><input class="form-control form-control-sm" placeholder="Target product/family" @bind="_pathTargetProduct" @bind:event="oninput" /></div>
-                        <div class="col-6"><input class="form-control form-control-sm" placeholder="Target build" @bind="_pathTargetBuild" @bind:event="oninput" /></div>
+                        <div class="col-6"><label class="form-label small mb-1" for="path-tgt-product">Target product (required)</label><input id="path-tgt-product" class="form-control form-control-sm" placeholder="Target product/family" @bind="_pathTargetProduct" @bind:event="oninput" /></div>
+                        <div class="col-6"><label class="form-label small mb-1" for="path-tgt-build">Target build</label><input id="path-tgt-build" class="form-control form-control-sm" placeholder="Target build" @bind="_pathTargetBuild" @bind:event="oninput" /></div>
                     </div>
-                    <button class="btn btn-primary btn-sm" @onclick="EvaluatePath" disabled="@(string.IsNullOrWhiteSpace(_pathSourceProduct) || string.IsNullOrWhiteSpace(_pathTargetProduct))">Evaluate path</button>
+                    <button type="button" class="btn btn-primary btn-sm" @onclick="EvaluatePath" disabled="@(string.IsNullOrWhiteSpace(_pathSourceProduct) || string.IsNullOrWhiteSpace(_pathTargetProduct))">Evaluate path</button>
                 </AuthorizeView>
             </div>
         </div>
 
         <div class="col-lg-6">
             <div class="dbt-card h-100">
-                <h2 class="h6 text-muted text-uppercase mb-3">Upgrade-readiness checklist (D09)</h2>
+                <h2 class="h6 text-muted text-uppercase mb-3">Upgrade-readiness checklist</h2>
 
                 @if (_checklist is null)
                 {
-                    <div class="empty-state py-3"><i class="bi bi-list-check"></i> No checklist started yet.</div>
+                    <div class="empty-state py-3"><i class="bi bi-list-check" aria-hidden="true"></i> No checklist started yet.</div>
                     <AuthorizeView Roles="@Roles.CanEditPolicy">
                         <div class="d-flex gap-2 mt-2">
-                            <input class="form-control form-control-sm" placeholder="Source label" @bind="_checklistSourceLabel" @bind:event="oninput" />
-                            <input class="form-control form-control-sm" placeholder="Target label" @bind="_checklistTargetLabel" @bind:event="oninput" />
-                            <button class="btn btn-outline-secondary btn-sm" @onclick="CreateChecklist" disabled="@(string.IsNullOrWhiteSpace(_checklistSourceLabel) || string.IsNullOrWhiteSpace(_checklistTargetLabel))">New checklist</button>
+                            <label class="visually-hidden" for="checklist-source">Source label</label>
+                            <input id="checklist-source" class="form-control form-control-sm" placeholder="Source label" @bind="_checklistSourceLabel" @bind:event="oninput" />
+                            <label class="visually-hidden" for="checklist-target">Target label</label>
+                            <input id="checklist-target" class="form-control form-control-sm" placeholder="Target label" @bind="_checklistTargetLabel" @bind:event="oninput" />
+                            <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="CreateChecklist" disabled="@(string.IsNullOrWhiteSpace(_checklistSourceLabel) || string.IsNullOrWhiteSpace(_checklistTargetLabel))">New checklist</button>
                         </div>
                     </AuthorizeView>
                 }
                 else
                 {
                     var summary = ReadinessChecklistAggregator.Summarize(_checklist.Items.ToList(), DateTime.UtcNow);
-                    <p class="small mb-1">@_checklist.SourceLabel → <strong>@_checklist.TargetLabel</strong></p>
+                    <p class="small mb-1">@_checklist.SourceLabel <span aria-hidden="true">→</span><span class="visually-hidden">to</span> <strong>@_checklist.TargetLabel</strong></p>
                     <p class="small mb-2" data-testid="readiness-summary">
                         @summary.PassedCount passed · @summary.FailedCount failed · @summary.UnknownCount unknown · @summary.NotApplicableCount n/a
                         @if (summary.HasBlockingFindings)
                         {
-                            <span style="color:var(--dbt-failed);"> — @summary.FailedCount blocking finding(s)</span>
+                            <span style="color:var(--dbt-failed);">: @summary.FailedCount blocking finding(s)</span>
                         }
                     </p>
 
@@ -242,7 +260,7 @@ else
                             </div>
                             @if (effective != item.Status)
                             {
-                                <p class="small mb-1" style="color:var(--dbt-overdue);">@(item.IsInvalidated ? item.InvalidationReason : "Evidence expired — treated as Unknown until re-reviewed.")</p>
+                                <p class="small mb-1" style="color:var(--dbt-overdue);">@(item.IsInvalidated ? item.InvalidationReason : "Evidence expired. Treated as Unknown until someone reviews it again.")</p>
                             }
                             @if (!string.IsNullOrWhiteSpace(item.Findings))
                             {
@@ -254,28 +272,30 @@ else
                                 {
                                     <div class="row g-2 mb-1">
                                         <div class="col-3">
-                                            <select class="form-select form-select-sm" @bind="_itemStatus">
+                                            <label class="form-label small mb-1" for="item-status-@item.Id">Result</label>
+                                            <select id="item-status-@item.Id" class="form-select form-select-sm" @bind="_itemStatus">
                                                 @foreach (var s in Enum.GetValues<ReadinessCheckStatus>())
                                                 {
                                                     <option value="@s">@s</option>
                                                 }
                                             </select>
                                         </div>
-                                        <div class="col-3"><input class="form-control form-control-sm" placeholder="Reviewer" @bind="_itemReviewer" @bind:event="oninput" /></div>
-                                        <div class="col-6"><input class="form-control form-control-sm" placeholder="Findings" @bind="_itemFindings" @bind:event="oninput" /></div>
+                                        <div class="col-3"><label class="form-label small mb-1" for="item-reviewer-@item.Id">Reviewer</label><input id="item-reviewer-@item.Id" class="form-control form-control-sm" placeholder="Reviewer" @bind="_itemReviewer" @bind:event="oninput" /></div>
+                                        <div class="col-6"><label class="form-label small mb-1" for="item-findings-@item.Id">Findings</label><input id="item-findings-@item.Id" class="form-control form-control-sm" placeholder="Findings" @bind="_itemFindings" @bind:event="oninput" /></div>
                                     </div>
                                     <div class="row g-2 mb-1">
-                                        <div class="col-6"><input class="form-control form-control-sm" placeholder="Remediation owner" @bind="_itemRemediationOwner" @bind:event="oninput" /></div>
+                                        <div class="col-6"><label class="form-label small mb-1" for="item-owner-@item.Id">Remediation owner</label><input id="item-owner-@item.Id" class="form-control form-control-sm" placeholder="Remediation owner" @bind="_itemRemediationOwner" @bind:event="oninput" /></div>
                                         <div class="col-6">
-                                            <input type="date" class="form-control form-control-sm" @bind="_itemEvidenceExpires" title="Evidence expires" />
+                                            <label class="form-label small mb-1" for="item-expires-@item.Id">Evidence expires</label>
+                                            <input id="item-expires-@item.Id" type="date" class="form-control form-control-sm" @bind="_itemEvidenceExpires" />
                                         </div>
                                     </div>
-                                    <button class="btn btn-primary btn-sm" @onclick="() => SaveItem(item.Id)">Save check</button>
-                                    <button class="btn btn-link btn-sm" @onclick="() => _editingItemId = null">Cancel</button>
+                                    <button type="button" class="btn btn-primary btn-sm" @onclick="() => SaveItem(item.Id)">Save check</button>
+                                    <button type="button" class="btn btn-link btn-sm" @onclick="() => _editingItemId = null">Cancel</button>
                                 }
                                 else
                                 {
-                                    <button class="btn btn-link btn-sm p-0" @onclick="() => OpenItemEdit(item)">Record result…</button>
+                                    <button type="button" class="btn btn-link btn-sm p-0" aria-label="Record result for @item.Label" @onclick="() => OpenItemEdit(item)">Record result…</button>
                                 }
                             </AuthorizeView>
                         </div>
@@ -284,8 +304,9 @@ else
                     <AuthorizeView Roles="@Roles.CanEditPolicy">
                         <hr />
                         <div class="d-flex gap-2">
-                            <input class="form-control form-control-sm" placeholder="New target label" @bind="_checklistTargetLabel" @bind:event="oninput" />
-                            <button class="btn btn-outline-secondary btn-sm" @onclick="UpdateTarget" disabled="@string.IsNullOrWhiteSpace(_checklistTargetLabel)">Update target (invalidates reviewed checks)</button>
+                            <label class="visually-hidden" for="checklist-new-target">New target label</label>
+                            <input id="checklist-new-target" class="form-control form-control-sm" placeholder="New target label" @bind="_checklistTargetLabel" @bind:event="oninput" />
+                            <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="UpdateTarget" disabled="@string.IsNullOrWhiteSpace(_checklistTargetLabel)">Update target (invalidates reviewed checks)</button>
                         </div>
                     </AuthorizeView>
                 }
@@ -298,7 +319,7 @@ else
     [Parameter] public int Id { get; set; }
 
     private DatabaseInstance? _instance;
-    private bool _loaded;
+    private bool _loaded, _loadFailed;
     private string? _userName;
 
     private List<InstanceDependency> _dependencies = new();
@@ -331,8 +352,21 @@ else
     {
         var state = await AuthProvider.GetAuthenticationStateAsync();
         _userName = state.User.Identity?.Name ?? "unknown";
-        await Load();
-        _loaded = true;
+        await Retry();
+    }
+
+    private async Task Retry()
+    {
+        _loadFailed = false;
+        try
+        {
+            await Load();
+            _loaded = true;
+        }
+        catch (Exception)
+        {
+            _loadFailed = true;
+        }
     }
 
     private async Task Load()
@@ -397,7 +431,7 @@ else
     private async Task CreateChecklist()
     {
         await Readiness.CreateChecklistAsync(Id, _pathAssessments.FirstOrDefault()?.Id, _checklistSourceLabel, _checklistTargetLabel, _userName ?? "unknown");
-        Toasts.Success("Readiness checklist created — every check starts Unknown.");
+        Toasts.Success("Readiness checklist created. Every check starts as Unknown.");
         await Load();
     }
 
@@ -427,7 +461,7 @@ else
             return;
         }
         await Readiness.UpdateTargetAsync(_checklist.Id, _checklistTargetLabel, _userName ?? "unknown");
-        Toasts.Success("Target updated — any already-reviewed checks are flagged for re-review.");
+        Toasts.Success("Target updated. Checks that were already reviewed are flagged for review again.");
         await Load();
     }
 

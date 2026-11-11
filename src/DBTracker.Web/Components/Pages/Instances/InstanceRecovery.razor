@@ -15,14 +15,21 @@
 
 <PageTitle>@(_instance?.Name ?? "Instance") recovery evidence · DBTracker</PageTitle>
 
-@if (!_loaded)
+@if (_loadFailed)
 {
-    <div class="spinner-ring"></div>
+    <div class="dbt-card" style="max-width:600px;">
+        <div class="empty-state py-4" role="alert"><i class="bi bi-exclamation-triangle" aria-hidden="true"></i> Couldn't load recovery evidence. The database may be unreachable.</div>
+        <button type="button" class="btn btn-outline-secondary" @onclick="Retry">Try again</button>
+    </div>
+}
+else if (!_loaded)
+{
+    <div class="spinner-ring" role="status"><span class="visually-hidden">Loading recovery evidence…</span></div>
 }
 else if (_instance is null)
 {
     <div class="dbt-card" style="max-width:600px;">
-        <div class="empty-state py-4"><i class="bi bi-question-diamond"></i> Instance #@Id doesn't exist.</div>
+        <div class="empty-state py-4"><i class="bi bi-question-diamond" aria-hidden="true"></i> Instance #@Id doesn't exist.</div>
         <a class="btn btn-outline-secondary" href="/instances">Back to instances</a>
     </div>
 }
@@ -30,11 +37,10 @@ else
 {
     <div class="app-topbar">
         <div>
-            <div class="eyebrow">Recovery objectives and backup-copy evidence</div>
             <h1>@_instance.Name</h1>
             <div class="subtitle">
-                @_instance.Engine · <a href="/instances/@Id">Back to instance detail</a> ·
-                Unknown chain coverage stays Unknown — a fresh log/WAL/binlog backup never by itself proves a valid base or full recoverability.
+                Recovery objectives and backup copies · @_instance.Engine · <a href="/instances/@Id">Back to instance detail</a><br />
+                Chain coverage stays Unknown until evidence proves otherwise. A recent log, WAL or binlog backup alone doesn't prove a valid base backup or full recoverability.
             </div>
         </div>
     </div>
@@ -42,41 +48,43 @@ else
     <div class="row g-3">
         <div class="col-lg-6">
             <div class="dbt-card h-100">
-                <h2 class="h6 text-muted text-uppercase mb-3">Recovery objectives (D16)</h2>
+                <h2 class="h6 text-muted text-uppercase mb-3">Recovery objectives</h2>
                 <div class="row g-2 mb-2">
                     <div class="col-6">
-                        <label class="small text-muted">RPO target (minutes)</label>
-                        <input type="number" class="form-control form-control-sm" @bind="_rpoMinutes" disabled="@(!_canEdit)" />
+                        <label class="form-label small text-muted mb-1" for="rpo-minutes">RPO target (minutes)</label>
+                        <input id="rpo-minutes" type="number" min="0" class="form-control form-control-sm" @bind="_rpoMinutes" disabled="@(!_canEdit)" />
                     </div>
                     <div class="col-6">
-                        <label class="small text-muted">RTO target (minutes)</label>
-                        <input type="number" class="form-control form-control-sm" @bind="_rtoMinutes" disabled="@(!_canEdit)" />
+                        <label class="form-label small text-muted mb-1" for="rto-minutes">RTO target (minutes)</label>
+                        <input id="rto-minutes" type="number" min="0" class="form-control form-control-sm" @bind="_rtoMinutes" disabled="@(!_canEdit)" />
                     </div>
                 </div>
                 <div class="mb-2">
-                    <label class="small text-muted">Encryption-key dependency reference (D20 has full tracking)</label>
-                    <input class="form-control form-control-sm" @bind="_encryptionNote" @bind:event="oninput" disabled="@(!_canEdit)" />
+                    <label class="form-label small text-muted mb-1" for="encryption-note">Encryption-key dependency reference</label>
+                    <input id="encryption-note" class="form-control form-control-sm" @bind="_encryptionNote" @bind:event="oninput" disabled="@(!_canEdit)" aria-describedby="encryption-note-help" />
+                    <div class="form-text" id="encryption-note-help">Full key tracking is on the <a href="/instances/@Id/certificates">certificates page</a>.</div>
                 </div>
                 <div class="mb-2">
-                    <label class="small text-muted">Offsite-copy dependency reference (D17 has full tracking)</label>
-                    <input class="form-control form-control-sm" @bind="_offsiteNote" @bind:event="oninput" disabled="@(!_canEdit)" />
+                    <label class="form-label small text-muted mb-1" for="offsite-note">Offsite-copy dependency reference</label>
+                    <input id="offsite-note" class="form-control form-control-sm" @bind="_offsiteNote" @bind:event="oninput" disabled="@(!_canEdit)" aria-describedby="offsite-note-help" />
+                    <div class="form-text" id="offsite-note-help">Copy locations are tracked in the backup-copy section below.</div>
                 </div>
                 <div class="mb-2">
-                    <label class="small text-muted">Notes</label>
-                    <textarea class="form-control form-control-sm" rows="2" @bind="_objectiveNotes" @bind:event="oninput" disabled="@(!_canEdit)"></textarea>
+                    <label class="form-label small text-muted mb-1" for="objective-notes">Notes</label>
+                    <textarea id="objective-notes" class="form-control form-control-sm" rows="2" @bind="_objectiveNotes" @bind:event="oninput" disabled="@(!_canEdit)"></textarea>
                 </div>
                 <AuthorizeView Roles="@Roles.CanEditPolicy">
-                    <button class="btn btn-primary btn-sm" @onclick="SaveObjective" data-testid="save-recovery-objective">Save objectives</button>
+                    <button type="button" class="btn btn-primary btn-sm" @onclick="SaveObjective" data-testid="save-recovery-objective">Save objectives</button>
                 </AuthorizeView>
 
                 @if (_recentRestores.Count > 0)
                 {
                     <hr />
-                    <p class="small text-muted mb-1">Measured restore duration (reusing U11/U12 restore evidence, not re-entered here):</p>
+                    <p class="small text-muted mb-1">Measured restore durations, taken from the restore log on the instance detail page:</p>
                     <ul class="small mb-0">
                         @foreach (var r in _recentRestores.Take(3))
                         {
-                            <li>@r.TimestampUtc.ToString("MMM d, yyyy") — @r.Outcome @(r.DurationMinutes is { } d ? $"({d:N0} min)" : "(duration not recorded)")</li>
+                            <li>@r.TimestampUtc.ToString("MMM d, yyyy"): @r.Outcome @(r.DurationMinutes is { } d ? $"({d:N0} min)" : "(duration not recorded)")</li>
                         }
                     </ul>
                 }
@@ -85,7 +93,7 @@ else
 
         <div class="col-lg-6">
             <div class="dbt-card h-100">
-                <h2 class="h6 text-muted text-uppercase mb-3">Backup-chain coverage (D16)</h2>
+                <h2 class="h6 text-muted text-uppercase mb-3">Backup-chain coverage</h2>
 
                 <div class="mb-3" data-testid="chain-coverage-status">
                     <span class="badge-health dot @CoverageCssClass(_coverage!.Status)">@_coverage.Status</span>
@@ -111,9 +119,9 @@ else
 
                 @if (_chainRequirements.Count > 0)
                 {
-                    <div class="table-responsive mb-3" role="region" aria-label="Chain requirements">
+                    <div class="table-responsive mb-3" role="region" aria-label="Chain requirements" tabindex="0">
                         <table class="table table-sm dbt-table mb-0" data-testid="chain-requirement-table">
-                            <thead><tr><th>Member</th><th>Required</th><th>Max age (h)</th><th></th></tr></thead>
+                            <thead><tr><th scope="col">Member</th><th scope="col">Required</th><th scope="col">Max age (h)</th><th scope="col"><span class="visually-hidden">Actions</span></th></tr></thead>
                             <tbody>
                                 @foreach (var req in _chainRequirements)
                                 {
@@ -123,7 +131,7 @@ else
                                         <td class="small">@(req.MaxAgeHoursOverride?.ToString() ?? "default")</td>
                                         <td class="small">
                                             <AuthorizeView Roles="@Roles.CanEditPolicy">
-                                                <button class="btn btn-link btn-sm p-0" @onclick="() => RemoveRequirement(req.Id)">Remove</button>
+                                                <button type="button" class="btn btn-link btn-sm p-0" @onclick="() => RemoveRequirement(req.Id)">Remove</button>
                                             </AuthorizeView>
                                         </td>
                                     </tr>
@@ -134,13 +142,14 @@ else
                 }
                 else
                 {
-                    <div class="empty-state py-2"><i class="bi bi-link"></i> No chain members recorded — coverage stays Unknown until at least one is.</div>
+                    <div class="empty-state py-2"><i class="bi bi-link" aria-hidden="true"></i> No chain members recorded. Coverage stays Unknown until at least one is added.</div>
                 }
 
                 <AuthorizeView Roles="@Roles.CanEditPolicy">
-                    <div class="row g-2 mb-2">
+                    <div class="row g-2 mb-2 align-items-end">
                         <div class="col-5">
-                            <select class="form-select form-select-sm" @bind="_newMemberType">
+                            <label class="form-label small mb-1" for="chain-member-type">Chain member</label>
+                            <select id="chain-member-type" class="form-select form-select-sm" @bind="_newMemberType">
                                 @foreach (var m in Enum.GetValues<ChainMemberType>())
                                 {
                                     <option value="@m">@m</option>
@@ -148,10 +157,11 @@ else
                             </select>
                         </div>
                         <div class="col-4">
-                            <input type="number" class="form-control form-control-sm" placeholder="Max age (h), optional" @bind="_newMaxAgeHours" />
+                            <label class="form-label small mb-1" for="chain-max-age">Max age (hours)</label>
+                            <input id="chain-max-age" type="number" min="1" class="form-control form-control-sm" placeholder="Max age (h), optional" @bind="_newMaxAgeHours" />
                         </div>
                         <div class="col-3">
-                            <button class="btn btn-outline-secondary btn-sm w-100" @onclick="AddRequirement" data-testid="add-chain-requirement">Add</button>
+                            <button type="button" class="btn btn-outline-secondary btn-sm w-100" @onclick="AddRequirement" data-testid="add-chain-requirement">Add to chain</button>
                         </div>
                     </div>
                 </AuthorizeView>
@@ -160,8 +170,8 @@ else
 
         <div class="col-12">
             <div class="dbt-card">
-                <h2 class="h6 text-muted text-uppercase mb-3">Backup-copy availability and retention (D17)</h2>
-                <p class="small text-muted">Historical discovery of a copy is not the same claim as current availability — only a currently accessible, non-stale verification counts toward retention coverage.</p>
+                <h2 class="h6 text-muted text-uppercase mb-3">Backup-copy availability and retention</h2>
+                <p class="small text-muted">Finding a copy once doesn't mean it is available now. Only a current, recent verification that the copy is accessible counts toward retention coverage.</p>
 
                 <div class="mb-3" data-testid="retention-coverage-status">
                     <span class="badge-health dot @RetentionCssClass(_retention!.Coverage.Status)">@_retention.Coverage.Status</span>
@@ -170,9 +180,9 @@ else
 
                 @if (_copies.Count > 0)
                 {
-                    <div class="table-responsive mb-3" role="region" aria-label="Backup copy locations">
+                    <div class="table-responsive mb-3" role="region" aria-label="Backup copy locations" tabindex="0">
                         <table class="table table-sm dbt-table mb-0" data-testid="copy-location-table">
-                            <thead><tr><th>Label</th><th>Path/reference</th><th>Offsite</th><th>Immutable-flagged</th><th>Verification</th><th></th></tr></thead>
+                            <thead><tr><th scope="col">Label</th><th scope="col">Path/reference</th><th scope="col">Offsite</th><th scope="col">Immutable-flagged</th><th scope="col">Verification</th><th scope="col"><span class="visually-hidden">Actions</span></th></tr></thead>
                             <tbody>
                                 @foreach (var copy in _copies)
                                 {
@@ -186,9 +196,9 @@ else
                                         </td>
                                         <td class="small">
                                             <AuthorizeView Roles="@Roles.CanEditPolicy">
-                                                <button class="btn btn-link btn-sm p-0" @onclick="() => MarkVerification(copy.Id, CopyVerificationStatus.Accessible)">Mark accessible</button>
-                                                <button class="btn btn-link btn-sm p-0" @onclick="() => MarkVerification(copy.Id, CopyVerificationStatus.CannotVerify)">Mark cannot verify</button>
-                                                <button class="btn btn-link btn-sm p-0" @onclick="() => MarkVerification(copy.Id, CopyVerificationStatus.Missing)">Mark missing</button>
+                                                <button type="button" class="btn btn-link btn-sm p-0" @onclick="() => MarkVerification(copy.Id, CopyVerificationStatus.Accessible)">Mark accessible</button>
+                                                <button type="button" class="btn btn-link btn-sm p-0" @onclick="() => MarkVerification(copy.Id, CopyVerificationStatus.CannotVerify)">Mark cannot verify</button>
+                                                <button type="button" class="btn btn-link btn-sm p-0" @onclick="() => MarkVerification(copy.Id, CopyVerificationStatus.Missing)">Mark missing</button>
                                             </AuthorizeView>
                                         </td>
                                     </tr>
@@ -199,13 +209,13 @@ else
                 }
                 else
                 {
-                    <div class="empty-state py-2"><i class="bi bi-hdd-network"></i> No copy locations recorded yet.</div>
+                    <div class="empty-state py-2"><i class="bi bi-hdd-network" aria-hidden="true"></i> No copy locations recorded yet.</div>
                 }
 
                 <AuthorizeView Roles="@Roles.CanEditPolicy">
-                    <div class="row g-2 mb-2">
-                        <div class="col-md-3"><input class="form-control form-control-sm" placeholder="Label" @bind="_newCopyLabel" @bind:event="oninput" /></div>
-                        <div class="col-md-5"><input class="form-control form-control-sm" placeholder="Storage path/URL/bucket reference" @bind="_newCopyPath" @bind:event="oninput" /></div>
+                    <div class="row g-2 mb-2 align-items-end">
+                        <div class="col-md-3"><label class="form-label small mb-1" for="copy-label">Label (required)</label><input id="copy-label" class="form-control form-control-sm" placeholder="Label" @bind="_newCopyLabel" @bind:event="oninput" /></div>
+                        <div class="col-md-5"><label class="form-label small mb-1" for="copy-path">Storage path, URL or bucket</label><input id="copy-path" class="form-control form-control-sm" placeholder="Storage path/URL/bucket reference" @bind="_newCopyPath" @bind:event="oninput" /></div>
                         <div class="col-md-2 form-check mt-2">
                             <input type="checkbox" class="form-check-input" id="newCopyOffsite" @bind="_newCopyOffsite" />
                             <label class="form-check-label small" for="newCopyOffsite">Offsite</label>
@@ -215,7 +225,7 @@ else
                             <label class="form-check-label small" for="newCopyImmutable">Immutable-flagged</label>
                         </div>
                     </div>
-                    <button class="btn btn-outline-secondary btn-sm" @onclick="AddCopy" disabled="@string.IsNullOrWhiteSpace(_newCopyLabel)" data-testid="add-copy-location">Record copy location</button>
+                    <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="AddCopy" disabled="@string.IsNullOrWhiteSpace(_newCopyLabel)" data-testid="add-copy-location">Record copy location</button>
                 </AuthorizeView>
             </div>
         </div>
@@ -226,7 +236,7 @@ else
     [Parameter] public int Id { get; set; }
 
     private DatabaseInstance? _instance;
-    private bool _loaded;
+    private bool _loaded, _loadFailed;
     private bool _canEdit;
     private string? _userName;
 
@@ -250,8 +260,21 @@ else
         var state = await AuthProvider.GetAuthenticationStateAsync();
         _userName = state.User.Identity?.Name ?? "unknown";
         _canEdit = state.User.IsInRole(Roles.Admin) || state.User.IsInRole(Roles.Dba);
-        await Load();
-        _loaded = true;
+        await Retry();
+    }
+
+    private async Task Retry()
+    {
+        _loadFailed = false;
+        try
+        {
+            await Load();
+            _loaded = true;
+        }
+        catch (Exception)
+        {
+            _loadFailed = true;
+        }
     }
 
     private async Task Load()

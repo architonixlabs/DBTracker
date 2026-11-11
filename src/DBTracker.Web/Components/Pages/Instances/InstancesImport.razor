@@ -11,26 +11,33 @@
 
 <div class="app-topbar">
     <div>
-        <div class="eyebrow">Instance record</div>
         <h1>Import database instances</h1>
-        <div class="subtitle">Bulk-onboard many databases from a CSV — re-importing the same file updates existing instances by name instead of duplicating them.</div>
+        <div class="subtitle">Onboard many databases from one CSV file. Re-importing the same file updates existing instances by name instead of duplicating them.</div>
     </div>
-    <button class="btn btn-outline-secondary" @onclick="DownloadTemplate">
-        <i class="bi bi-download"></i> Download CSV template
+    <button type="button" class="btn btn-outline-secondary" @onclick="DownloadTemplate">
+        <i class="bi bi-download" aria-hidden="true"></i> Download CSV template
     </button>
 </div>
 
 <div class="dbt-card" style="max-width: 900px;">
     <h2 class="h6 text-muted text-uppercase mb-3">File</h2>
-    <p class="text-muted small mb-3">
-        Header row required — only <strong>Name</strong> and <strong>Engine</strong> are mandatory columns.
-        Matching is by Name (case-insensitive) against the existing inventory — a row with the same name as an
-        existing instance updates it; a new name creates a new instance. Quoted fields may contain commas and
-        line breaks.
+    <p class="text-muted small mb-3" id="import-file-help">
+        The first row must be a header. Only the <strong>Name</strong> and <strong>Engine</strong> columns are required.
+        Rows are matched to the existing inventory by Name, ignoring case: a matching name updates that instance,
+        a new name creates one. Quoted fields may contain commas and line breaks. Maximum file size is 2 MB.
     </p>
-    <InputFile OnChange="OnFileSelected" class="form-control" accept=".csv" />
+    <label class="form-label small" for="import-file">CSV file</label>
+    <InputFile id="import-file" OnChange="OnFileSelected" class="form-control" accept=".csv" aria-describedby="import-file-help" disabled="@_parsing" />
 
-    @if (_fileName is not null)
+    @if (_parsing)
+    {
+        <p class="text-muted small mt-2 mb-0" role="status">Reading @_fileName…</p>
+    }
+    else if (_fileError is not null)
+    {
+        <p class="small mt-2 mb-0" role="alert" style="color:var(--dbt-failed);">@_fileError</p>
+    }
+    else if (_fileName is not null)
     {
         <p class="text-muted small mt-2 mb-0">@_fileName</p>
     }
@@ -58,12 +65,12 @@
         @if (_preview.Errors.Count > 0)
         {
             <div class="d-flex justify-content-between align-items-center mb-2">
-                <span class="text-muted small">Fix these rows and re-upload — correct rows above are unaffected.</span>
-                <button class="btn btn-outline-secondary btn-sm" @onclick="DownloadErrors"><i class="bi bi-download"></i> Download error rows (CSV)</button>
+                <span class="text-muted small">Fix these rows and upload the file again. Valid rows are not affected.</span>
+                <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="DownloadErrors"><i class="bi bi-download" aria-hidden="true"></i> Download error rows (CSV)</button>
             </div>
             <div class="dbt-table mb-4">
-                <table class="table">
-                    <thead><tr><th>Row</th><th>Error</th></tr></thead>
+                <table class="table" aria-label="Rows with errors">
+                    <thead><tr><th scope="col">Row</th><th scope="col">Error</th></tr></thead>
                     <tbody>
                         @foreach (var e in _preview.Errors)
                         {
@@ -77,15 +84,15 @@
         @if (_preview.Rows.Count > 0)
         {
             <div class="dbt-table mb-4">
-                <table class="table">
-                    <thead><tr><th>Row</th><th>Plan</th><th>Name</th><th>Engine</th><th>Detail</th></tr></thead>
+                <table class="table" aria-label="Import plan per row">
+                    <thead><tr><th scope="col">Row</th><th scope="col">Plan</th><th scope="col">Name</th><th scope="col">Engine</th><th scope="col">Detail</th></tr></thead>
                     <tbody>
                         @foreach (var row in _preview.Rows.Take(100))
                         {
                             <tr>
                                 <td class="small">@row.RowNumber</td>
                                 <td><span class="badge-health dot @PlanClass(row.Plan)">@row.Plan</span></td>
-                                <td class="small">@(row.Instance?.Name ?? "—")</td>
+                                <td class="small">@(row.Instance?.Name ?? "(no name)")</td>
                                 <td class="small">@row.Instance?.Engine</td>
                                 <td class="small text-muted">@row.AmbiguityReason</td>
                             </tr>
@@ -98,8 +105,12 @@
                 <p class="text-muted small">…and @(_preview.Rows.Count - 100) more.</p>
             }
 
-            <button class="btn btn-primary" @onclick="Import" disabled="@(_importing || (_preview.CreateCount + _preview.UpdateCount) == 0)">
-                <i class="bi bi-upload"></i> @(_importing ? "Importing…" : $"Apply {_preview.CreateCount} create / {_preview.UpdateCount} update")
+            @if (_importError is not null)
+            {
+                <p class="small" role="alert" style="color:var(--dbt-failed);">@_importError</p>
+            }
+            <button type="button" class="btn btn-primary" @onclick="Import" disabled="@(_importing || (_preview.CreateCount + _preview.UpdateCount) == 0)">
+                <i class="bi bi-upload" aria-hidden="true"></i> @(_importing ? "Importing…" : $"Apply {_preview.CreateCount} create / {_preview.UpdateCount} update")
             </button>
         }
     </div>
@@ -108,22 +119,44 @@
 @code {
     private string? _fileName;
     private ImportPreviewResult? _preview;
-    private bool _importing;
+    private bool _importing, _parsing;
+    private string? _fileError, _importError;
+    private const long MaxFileBytes = 2 * 1024 * 1024;
 
     private async Task OnFileSelected(InputFileChangeEventArgs e)
     {
         _preview = null;
+        _fileError = null;
+        _importError = null;
         _fileName = e.File.Name;
 
-        using var stream = e.File.OpenReadStream(maxAllowedSize: 2 * 1024 * 1024);
-        using var reader = new StreamReader(stream);
-        var content = await reader.ReadToEndAsync();
+        if (e.File.Size > MaxFileBytes)
+        {
+            _fileError = $"{e.File.Name} is larger than 2 MB. Split it into smaller files and import each one.";
+            return;
+        }
 
-        var existingByName = await Db.DatabaseInstances
-            .AsNoTracking()
-            .ToDictionaryAsync(i => i.Name, i => i, StringComparer.OrdinalIgnoreCase);
+        _parsing = true;
+        try
+        {
+            using var stream = e.File.OpenReadStream(maxAllowedSize: MaxFileBytes);
+            using var reader = new StreamReader(stream);
+            var content = await reader.ReadToEndAsync();
 
-        _preview = InstanceCsvImporter.ParseForImport(content, existingByName);
+            var existingByName = await Db.DatabaseInstances
+                .AsNoTracking()
+                .ToDictionaryAsync(i => i.Name, i => i, StringComparer.OrdinalIgnoreCase);
+
+            _preview = InstanceCsvImporter.ParseForImport(content, existingByName);
+        }
+        catch (Exception)
+        {
+            _fileError = $"Couldn't read {e.File.Name}. Check that it is a UTF-8 CSV file and try again.";
+        }
+        finally
+        {
+            _parsing = false;
+        }
     }
 
     private async Task Import()
@@ -161,7 +194,17 @@
             // Skip and Ambiguous rows are never written.
         }
 
-        await Db.SaveChangesAsync();
+        try
+        {
+            await Db.SaveChangesAsync();
+        }
+        catch (Exception)
+        {
+            Db.ChangeTracker.Clear();
+            _importing = false;
+            _importError = "The import failed and nothing was saved. Reload the file to rebuild the preview, then try again.";
+            return;
+        }
         Db.ChangeTracker.Clear();
 
         var state = await AuthProvider.GetAuthenticationStateAsync();
@@ -171,7 +214,7 @@
             reason: $"{creates} created, {updates} updated, {_preview.SkipCount} unchanged, {_preview.AmbiguousCount} ambiguous, {_preview.Errors.Count} error row(s)");
 
         _importing = false;
-        Toasts.Success($"Import complete — {creates} created, {updates} updated.");
+        Toasts.Success($"Import complete: {creates} created, {updates} updated.");
         Nav.NavigateTo("/instances");
     }
 

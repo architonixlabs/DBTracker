@@ -17,14 +17,21 @@
 
 <PageTitle>@(_instance?.Name ?? "Instance") operational assurance · DBTracker</PageTitle>
 
-@if (!_loaded)
+@if (_loadFailed)
 {
-    <div class="spinner-ring"></div>
+    <div class="dbt-card" style="max-width:600px;">
+        <div class="empty-state py-4" role="alert"><i class="bi bi-exclamation-triangle" aria-hidden="true"></i> Couldn't load operational evidence. The database may be unreachable.</div>
+        <button type="button" class="btn btn-outline-secondary" @onclick="Retry">Try again</button>
+    </div>
+}
+else if (!_loaded)
+{
+    <div class="spinner-ring" role="status"><span class="visually-hidden">Loading operational evidence…</span></div>
 }
 else if (_instance is null)
 {
     <div class="dbt-card" style="max-width:600px;">
-        <div class="empty-state py-4"><i class="bi bi-question-diamond"></i> Instance #@Id doesn't exist.</div>
+        <div class="empty-state py-4"><i class="bi bi-question-diamond" aria-hidden="true"></i> Instance #@Id doesn't exist.</div>
         <a class="btn btn-outline-secondary" href="/instances">Back to instances</a>
     </div>
 }
@@ -32,11 +39,10 @@ else
 {
     <div class="app-topbar">
         <div>
-            <div class="eyebrow">Integrity, HA, maintenance and capacity evidence</div>
             <h1>@_instance.Name</h1>
             <div class="subtitle">
-                @_instance.Engine · <a href="/instances/@Id">Back to instance detail</a> ·
-                Recorded results, not continuously measured HA health or an automatic repair/tuning engine — kept separate from backup health throughout.
+                Integrity, HA, maintenance and capacity · @_instance.Engine · <a href="/instances/@Id">Back to instance detail</a><br />
+                These are recorded results, not live HA monitoring, and DBTracker never runs repairs or tuning. They are kept separate from backup health.
             </div>
         </div>
     </div>
@@ -44,13 +50,13 @@ else
     <div class="row g-3">
         <div class="col-12">
             <div class="dbt-card">
-                <h2 class="h6 text-muted text-uppercase mb-3">Integrity, replication/failover and maintenance-job evidence (D18)</h2>
+                <h2 class="h6 text-muted text-uppercase mb-3">Integrity, replication/failover and maintenance-job evidence</h2>
 
                 @if (_maintenanceRows.Count > 0)
                 {
-                    <div class="table-responsive mb-3" role="region" aria-label="Maintenance evidence">
+                    <div class="table-responsive mb-3" role="region" aria-label="Maintenance evidence" tabindex="0">
                         <table class="table table-sm dbt-table mb-0" data-testid="maintenance-evidence-table">
-                            <thead><tr><th>Type</th><th>Node/deployment</th><th>Ran at</th><th>Outcome</th><th>Status</th><th>Source</th></tr></thead>
+                            <thead><tr><th scope="col">Type</th><th scope="col">Node/deployment</th><th scope="col">Ran at</th><th scope="col">Outcome</th><th scope="col">Status</th><th scope="col">Source</th></tr></thead>
                             <tbody>
                                 @foreach (var row in _maintenanceRows)
                                 {
@@ -71,13 +77,14 @@ else
                 }
                 else
                 {
-                    <div class="empty-state py-2"><i class="bi bi-shield-check"></i> No integrity/HA/maintenance evidence recorded yet — distinct from, and never inferred from, backup health.</div>
+                    <div class="empty-state py-2"><i class="bi bi-shield-check" aria-hidden="true"></i> No integrity, HA or maintenance results recorded yet. These are never inferred from backup health.</div>
                 }
 
                 <AuthorizeView Roles="@Roles.CanEditPolicy">
-                    <div class="row g-2 mb-2">
+                    <div class="row g-2 mb-2 align-items-end">
                         <div class="col-md-2">
-                            <select class="form-select form-select-sm" @bind="_checkType">
+                            <label class="form-label small mb-1" for="mx-check-type">Check type</label>
+                            <select id="mx-check-type" class="form-select form-select-sm" @bind="_checkType">
                                 @foreach (var t in Enum.GetValues<MaintenanceCheckType>())
                                 {
                                     <option value="@t">@t</option>
@@ -85,16 +92,20 @@ else
                             </select>
                         </div>
                         <div class="col-md-2">
-                            <input class="form-control form-control-sm" placeholder="Node/deployment label" @bind="_nodeLabel" @bind:event="oninput" />
+                            <label class="form-label small mb-1" for="mx-node">Node or deployment</label>
+                            <input id="mx-node" class="form-control form-control-sm" placeholder="Node/deployment label" @bind="_nodeLabel" @bind:event="oninput" />
                         </div>
                         <div class="col-md-2">
-                            <input class="form-control form-control-sm" placeholder="Tool (+ version)" @bind="_toolName" @bind:event="oninput" />
+                            <label class="form-label small mb-1" for="mx-tool">Tool and version</label>
+                            <input id="mx-tool" class="form-control form-control-sm" placeholder="Tool (+ version)" @bind="_toolName" @bind:event="oninput" />
                         </div>
                         <div class="col-md-2">
-                            <input type="number" class="form-control form-control-sm" placeholder="Expected interval (h)" @bind="_expectedIntervalHours" />
+                            <label class="form-label small mb-1" for="mx-interval">Expected interval (hours)</label>
+                            <input id="mx-interval" type="number" min="1" class="form-control form-control-sm" placeholder="Expected interval (h)" @bind="_expectedIntervalHours" />
                         </div>
                         <div class="col-md-2">
-                            <select class="form-select form-select-sm" @bind="_outcome">
+                            <label class="form-label small mb-1" for="mx-outcome">Outcome</label>
+                            <select id="mx-outcome" class="form-select form-select-sm" @bind="_outcome">
                                 @foreach (var o in Enum.GetValues<MaintenanceOutcome>())
                                 {
                                     <option value="@o">@o</option>
@@ -102,7 +113,8 @@ else
                             </select>
                         </div>
                         <div class="col-md-2">
-                            <select class="form-select form-select-sm" @bind="_source">
+                            <label class="form-label small mb-1" for="mx-source">Source</label>
+                            <select id="mx-source" class="form-select form-select-sm" @bind="_source">
                                 @foreach (var s in Enum.GetValues<MaintenanceEvidenceSource>())
                                 {
                                     <option value="@s">@s</option>
@@ -113,13 +125,14 @@ else
                     @if (_source != MaintenanceEvidenceSource.ManuallyEntered)
                     {
                         <div class="mb-2">
-                            <input class="form-control form-control-sm" placeholder="Monitoring/ticket link (required for this source)" @bind="_sourceReference" @bind:event="oninput" />
+                            <label class="form-label small mb-1" for="mx-source-ref">Monitoring or ticket link (required for this source)</label>
+                            <input id="mx-source-ref" class="form-control form-control-sm" placeholder="Monitoring/ticket link (required for this source)" @bind="_sourceReference" @bind:event="oninput" />
                         </div>
                     }
-                    <button class="btn btn-outline-secondary btn-sm" @onclick="RecordMaintenanceEvidence" data-testid="record-maintenance-evidence">Record result (now)</button>
+                    <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="RecordMaintenanceEvidence" data-testid="record-maintenance-evidence">Record result (now)</button>
                     @if (!string.IsNullOrWhiteSpace(_maintenanceError))
                     {
-                        <p class="small mt-1" style="color:var(--dbt-failed);">@_maintenanceError</p>
+                        <p class="small mt-1" role="alert" style="color:var(--dbt-failed);">@_maintenanceError</p>
                     }
                 </AuthorizeView>
             </div>
@@ -127,14 +140,14 @@ else
 
         <div class="col-12">
             <div class="dbt-card">
-                <h2 class="h6 text-muted text-uppercase mb-3">Capacity and performance planning evidence (D19)</h2>
-                <p class="small text-muted">Imported/referenced timestamped measurements — not a continuous query profiler built into this app.</p>
+                <h2 class="h6 text-muted text-uppercase mb-3">Capacity and performance planning evidence</h2>
+                <p class="small text-muted">Timestamped measurements entered here or referenced from your monitoring tools. DBTracker doesn't profile queries itself.</p>
 
                 @if (_measurements.Count > 0)
                 {
-                    <div class="table-responsive mb-3" role="region" aria-label="Capacity measurements">
+                    <div class="table-responsive mb-3" role="region" aria-label="Capacity measurements" tabindex="0">
                         <table class="table table-sm dbt-table mb-0" data-testid="capacity-measurement-table">
-                            <thead><tr><th>Type</th><th>Measured at</th><th>Value</th><th>Period</th><th>Source</th></tr></thead>
+                            <thead><tr><th scope="col">Type</th><th scope="col">Measured at</th><th scope="col">Value</th><th scope="col">Period</th><th scope="col">Source</th></tr></thead>
                             <tbody>
                                 @foreach (var m in _measurements)
                                 {
@@ -150,44 +163,49 @@ else
                         </table>
                     </div>
                 }
+                else
+                {
+                    <div class="empty-state py-2"><i class="bi bi-speedometer2" aria-hidden="true"></i> No capacity or performance measurements recorded yet.</div>
+                }
 
                 <AuthorizeView Roles="@Roles.CanEditPolicy">
-                    <div class="row g-2 mb-2">
+                    <div class="row g-2 mb-2 align-items-end">
                         <div class="col-md-2">
-                            <select class="form-select form-select-sm" @bind="_measurementType">
+                            <label class="form-label small mb-1" for="cap-type">Measurement</label>
+                            <select id="cap-type" class="form-select form-select-sm" @bind="_measurementType">
                                 @foreach (var t in Enum.GetValues<CapacityMeasurementType>())
                                 {
                                     <option value="@t">@t</option>
                                 }
                             </select>
                         </div>
-                        <div class="col-md-2"><input type="number" class="form-control form-control-sm" placeholder="Value" @bind="_measurementValue" /></div>
-                        <div class="col-md-2"><input class="form-control form-control-sm" placeholder="Unit (GB, IOPS, ms…)" @bind="_measurementUnit" @bind:event="oninput" /></div>
-                        <div class="col-md-3"><input class="form-control form-control-sm" placeholder="Measurement period" @bind="_measurementPeriod" @bind:event="oninput" /></div>
-                        <div class="col-md-3"><input class="form-control form-control-sm" placeholder="Source" @bind="_measurementSource" @bind:event="oninput" /></div>
+                        <div class="col-md-2"><label class="form-label small mb-1" for="cap-value">Value (required)</label><input id="cap-value" type="number" class="form-control form-control-sm" placeholder="Value" @bind="_measurementValue" /></div>
+                        <div class="col-md-2"><label class="form-label small mb-1" for="cap-unit">Unit</label><input id="cap-unit" class="form-control form-control-sm" placeholder="Unit (GB, IOPS, ms…)" @bind="_measurementUnit" @bind:event="oninput" /></div>
+                        <div class="col-md-3"><label class="form-label small mb-1" for="cap-period">Measurement period</label><input id="cap-period" class="form-control form-control-sm" placeholder="Measurement period" @bind="_measurementPeriod" @bind:event="oninput" /></div>
+                        <div class="col-md-3"><label class="form-label small mb-1" for="cap-source">Source</label><input id="cap-source" class="form-control form-control-sm" placeholder="Source" @bind="_measurementSource" @bind:event="oninput" /></div>
                     </div>
-                    <button class="btn btn-outline-secondary btn-sm" @onclick="AddMeasurement" data-testid="add-capacity-measurement">Record measurement</button>
+                    <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="AddMeasurement" data-testid="add-capacity-measurement">Record measurement</button>
                 </AuthorizeView>
 
                 <hr />
-                <p class="small mb-1"><strong>Growth forecast</strong> — a range, not a precise exhaustion date:</p>
+                <p class="small mb-1"><strong>Growth forecast:</strong> a range, not a precise exhaustion date.</p>
                 <div class="row g-2 mb-2">
                     <div class="col-md-4">
-                        <label class="small text-muted">Storage capacity limit (GB), optional</label>
-                        <input type="number" class="form-control form-control-sm" placeholder="e.g. 2000" @bind="_capacityLimitGb" data-testid="capacity-limit-input" />
+                        <label class="form-label small text-muted mb-1" for="cap-limit">Storage capacity limit (GB), optional</label>
+                        <input id="cap-limit" type="number" min="1" class="form-control form-control-sm" placeholder="e.g. 2000" @bind="_capacityLimitGb" data-testid="capacity-limit-input" />
                     </div>
                     <div class="col-md-2 d-flex align-items-end">
-                        <button class="btn btn-outline-secondary btn-sm" @onclick="Load" data-testid="recompute-forecast">Recompute forecast</button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="Retry" data-testid="recompute-forecast">Recompute forecast</button>
                     </div>
                 </div>
                 @if (_forecast is null || !_forecast.HasSufficientData)
                 {
-                    <div class="empty-state py-2" data-testid="forecast-missing-data"><i class="bi bi-graph-up"></i> Not enough data for a projection yet.</div>
+                    <div class="empty-state py-2" data-testid="forecast-missing-data"><i class="bi bi-graph-up" aria-hidden="true"></i> Not enough data for a projection yet.</div>
                 }
                 else
                 {
                     <p class="small mb-1" data-testid="forecast-range">
-                        Plausible exhaustion: @(_forecast.EarliestPlausibleExhaustionUtc?.ToString("MMM d, yyyy") ?? "n/a") – @(_forecast.LatestPlausibleExhaustionUtc?.ToString("MMM d, yyyy") ?? "n/a")
+                        Plausible exhaustion: between @(_forecast.EarliestPlausibleExhaustionUtc?.ToString("MMM d, yyyy") ?? "n/a") and @(_forecast.LatestPlausibleExhaustionUtc?.ToString("MMM d, yyyy") ?? "n/a")
                         (@(_forecast.ProjectedGrowthPerDayGb?.ToString("N2") ?? "?") units/day observed)
                     </p>
                 }
@@ -213,19 +231,19 @@ else
                     <p class="small mb-1"><strong>Migration space estimates</strong></p>
                     @foreach (var e in _estimates)
                     {
-                        <p class="small mb-1">@(e.EstimatedSpaceGb?.ToString("N0") ?? "?") GB — @e.AssumptionsText</p>
+                        <p class="small mb-1">@(e.EstimatedSpaceGb is { } gb ? $"{gb:N0} GB" : "Size not estimated"): @e.AssumptionsText</p>
                     }
                 }
 
                 <AuthorizeView Roles="@Roles.CanEditPolicy">
                     <div class="row g-2 mb-2 mt-2">
-                        <div class="col-md-3"><input type="number" class="form-control form-control-sm" placeholder="Estimated space (GB)" @bind="_estimateSpaceGb" /></div>
-                        <div class="col-md-9"><input class="form-control form-control-sm" placeholder="Assumptions (required)" @bind="_estimateAssumptions" @bind:event="oninput" /></div>
+                        <div class="col-md-3"><label class="form-label small mb-1" for="est-space">Estimated space (GB)</label><input id="est-space" type="number" min="0" class="form-control form-control-sm" placeholder="Estimated space (GB)" @bind="_estimateSpaceGb" /></div>
+                        <div class="col-md-9"><label class="form-label small mb-1" for="est-assumptions">Assumptions (required)</label><input id="est-assumptions" class="form-control form-control-sm" placeholder="Assumptions (required)" @bind="_estimateAssumptions" @bind:event="oninput" /></div>
                     </div>
-                    <button class="btn btn-outline-secondary btn-sm" @onclick="AddEstimate" disabled="@string.IsNullOrWhiteSpace(_estimateAssumptions)">Record migration space estimate</button>
+                    <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="AddEstimate" disabled="@string.IsNullOrWhiteSpace(_estimateAssumptions)">Record migration space estimate</button>
                     @if (!string.IsNullOrWhiteSpace(_estimateError))
                     {
-                        <p class="small mt-1" style="color:var(--dbt-failed);">@_estimateError</p>
+                        <p class="small mt-1" role="alert" style="color:var(--dbt-failed);">@_estimateError</p>
                     }
                 </AuthorizeView>
             </div>
@@ -237,7 +255,7 @@ else
     [Parameter] public int Id { get; set; }
 
     private DatabaseInstance? _instance;
-    private bool _loaded;
+    private bool _loaded, _loadFailed;
     private string? _userName;
 
     private List<MaintenanceEvidenceRow> _maintenanceRows = new();
@@ -263,8 +281,21 @@ else
     {
         var state = await AuthProvider.GetAuthenticationStateAsync();
         _userName = state.User.Identity?.Name ?? "unknown";
-        await Load();
-        _loaded = true;
+        await Retry();
+    }
+
+    private async Task Retry()
+    {
+        _loadFailed = false;
+        try
+        {
+            await Load();
+            _loaded = true;
+        }
+        catch (Exception)
+        {
+            _loadFailed = true;
+        }
     }
 
     private async Task Load()
