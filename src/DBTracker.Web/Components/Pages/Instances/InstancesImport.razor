@@ -14,20 +14,35 @@
         <h1>Import database instances</h1>
         <div class="subtitle">Onboard many databases from one CSV file. Re-importing the same file updates existing instances by name instead of duplicating them.</div>
     </div>
-    <button type="button" class="btn btn-outline-secondary" @onclick="DownloadTemplate">
-        <i class="bi bi-download" aria-hidden="true"></i> Download CSV template
-    </button>
+    <div class="d-flex gap-2 flex-wrap">
+        <a class="btn btn-outline-secondary" href="/instances/import-history" data-testid="open-history-import"><i class="bi bi-clock-history" aria-hidden="true"></i> Import backup and restore history</a>
+        <button type="button" class="btn btn-outline-secondary" data-testid="import-download-inventory" @onclick="DownloadInventory">
+            <i class="bi bi-download" aria-hidden="true"></i> Download current inventory
+        </button>
+        <button type="button" class="btn btn-outline-secondary" @onclick="DownloadTemplate">
+            <i class="bi bi-download" aria-hidden="true"></i> Download CSV template
+        </button>
+    </div>
 </div>
 
 <div class="dbt-card" style="max-width: 900px;">
     <h2 class="h6 text-muted mb-3">File</h2>
     <p class="text-muted small mb-3" id="import-file-help">
         The first row must be a header. Only the <strong>Name</strong> and <strong>Engine</strong> columns are required.
-        Rows are matched to the existing inventory by Name, ignoring case: a matching name updates that instance,
-        a new name creates one. An update changes only the columns in your file; leave a column out to keep what is
+        Choose how rows find the instance they update. <strong>By name</strong> (ignoring case): a matching name updates that instance,
+        a new name creates one. <strong>By Id</strong>: the <code>Id</code> column from "Download current inventory" identifies the instance, so a
+        row can also rename it; an empty Id creates one. An update changes only the columns in your file; leave a column out to keep what is
         stored. Lines starting with <code>#</code> are ignored, so the template's example row and notes can stay.
-        Quoted fields may contain commas and line breaks. Maximum file size is 2 MB.
+        Quoted fields may contain commas and line breaks. Maximum file size is 2 MB. Nothing is saved until you apply the preview;
+        applying saves every row or none.
     </p>
+    <div class="mb-3" style="max-width:320px;">
+        <label class="form-label small" for="import-match-rule">Match rows to instances by</label>
+        <select id="import-match-rule" data-testid="import-match-rule" class="form-select form-select-sm" @bind="_matchRule" @bind:after="Reparse" disabled="@_parsing">
+            <option value="@ImportMatchRule.Name">Name (ignoring case)</option>
+            <option value="@ImportMatchRule.Id">DBTracker Id column</option>
+        </select>
+    </div>
     <details class="mb-3">
         <summary class="small">Column guide: what each column accepts</summary>
         <table class="table table-sm dbt-table mt-2 mb-0" aria-label="Import columns and the values they accept">
@@ -84,7 +99,7 @@
         {
             <div class="d-flex justify-content-between align-items-center mb-2">
                 <span class="text-muted small">Fix these rows and upload the file again. Valid rows are not affected.</span>
-                <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="DownloadErrors"><i class="bi bi-download" aria-hidden="true"></i> Download error rows (CSV)</button>
+                <button type="button" class="btn btn-outline-secondary btn-sm" data-testid="import-download-errors" @onclick="DownloadErrors"><i class="bi bi-download" aria-hidden="true"></i> Download rows to fix (CSV)</button>
             </div>
             <div class="dbt-table mb-4">
                 <table class="table" aria-label="Rows with errors">
@@ -96,6 +111,14 @@
                         }
                     </tbody>
                 </table>
+            </div>
+        }
+
+        @if (_preview.Errors.Count == 0 && _preview.AmbiguousCount > 0)
+        {
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <span class="text-muted small">Ambiguous rows are not imported. Download them with the reason, fix them and upload again.</span>
+                <button type="button" class="btn btn-outline-secondary btn-sm" data-testid="import-download-errors" @onclick="DownloadErrors"><i class="bi bi-download" aria-hidden="true"></i> Download rows to fix (CSV)</button>
             </div>
         }
 
@@ -136,6 +159,8 @@
 
 @code {
     private string? _fileName;
+    private string? _content;
+    private ImportMatchRule _matchRule = ImportMatchRule.Name;
     private ImportPreviewResult? _preview;
     private bool _importing, _parsing;
     private string? _fileError, _importError;
@@ -159,8 +184,45 @@
         {
             using var stream = e.File.OpenReadStream(maxAllowedSize: MaxFileBytes);
             using var reader = new StreamReader(stream);
-            var content = await reader.ReadToEndAsync();
+            _content = await reader.ReadToEndAsync();
+            await BuildPreview(_content);
+        }
+        catch (Exception)
+        {
+            _fileError = $"Couldn't read {e.File.Name}. Check that it is a UTF-8 CSV file and try again.";
+        }
+        finally
+        {
+            _parsing = false;
+        }
+    }
 
+    private async Task Reparse()
+    {
+        if (_content is null)
+        {
+            return;
+        }
+
+        _importError = null;
+        _parsing = true;
+        try
+        {
+            await BuildPreview(_content);
+        }
+        catch (Exception)
+        {
+            _fileError = $"Couldn't read {_fileName}. Check that it is a UTF-8 CSV file and try again.";
+        }
+        finally
+        {
+            _parsing = false;
+        }
+    }
+
+    private async Task BuildPreview(string content)
+    {
+        {
             var all = await Db.DatabaseInstances.AsNoTracking().ToListAsync();
             var byName = all.GroupBy(i => i.Name, StringComparer.OrdinalIgnoreCase).ToList();
             var existingByName = byName
@@ -179,15 +241,8 @@
                 .GroupBy(t => t.Name, StringComparer.OrdinalIgnoreCase)
                 .ToDictionary(g => g.Key, g => g.First().Id, StringComparer.OrdinalIgnoreCase);
 
-            _preview = InstanceCsvImporter.ParseForImport(content, existingByName, blockedNames, teamIdsByName);
-        }
-        catch (Exception)
-        {
-            _fileError = $"Couldn't read {e.File.Name}. Check that it is a UTF-8 CSV file and try again.";
-        }
-        finally
-        {
-            _parsing = false;
+            _preview = InstanceCsvImporter.ParseForImport(content, existingByName, blockedNames, teamIdsByName,
+                _matchRule, all.ToDictionary(i => i.Id));
         }
     }
 
@@ -202,6 +257,11 @@
         var now = DateTime.UtcNow;
         var creates = 0;
         var updates = 0;
+        var state = await AuthProvider.GetAuthenticationStateAsync();
+        var userId = state.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? "";
+        var userName = state.User.Identity?.Name ?? "unknown";
+        var created = new List<DatabaseInstance>();
+        var edited = new List<(DatabaseInstance Instance, IReadOnlyList<InstanceChangeLog> Changes)>();
 
         foreach (var row in _preview.Rows)
         {
@@ -215,6 +275,7 @@
                 row.Instance.CreatedAtUtc = now;
                 row.Instance.UpdatedAtUtc = now;
                 Db.DatabaseInstances.Add(row.Instance);
+                created.Add(row.Instance);
                 creates++;
             }
             else if (row.Plan == ImportRowPlan.Update && row.MatchedExistingId is { } existingId)
@@ -227,8 +288,12 @@
                     continue;
                 }
                 Db.Entry(stored).Property(i => i.RowVersion).OriginalValue = row.Instance.RowVersion;
-                InstanceCsvImporter.ApplyImportedFields(stored, row.Instance);
+                var before = InstanceCsvImporter.Clone(stored);
+                InstanceCsvImporter.ApplyImportedFields(stored, row.Instance, includeName: _matchRule == ImportMatchRule.Id);
                 stored.UpdatedAtUtc = now;
+                var changes = InstanceChangeLogBuilder.Diff(before, stored, userName, now);
+                Db.InstanceChangeLogs.AddRange(changes);
+                edited.Add((stored, changes));
                 updates++;
             }
             // Skip and Ambiguous rows are never written.
@@ -254,33 +319,48 @@
         }
         Db.ChangeTracker.Clear();
 
-        var state = await AuthProvider.GetAuthenticationStateAsync();
-        var userId = state.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? "";
-        var userName = state.User.Identity?.Name ?? "unknown";
+        // One event per instance with its before/after, plus the batch summary.
+        var importReason = $"CSV import {_fileName}, matched by {_matchRule}";
+        foreach (var instance in created)
+        {
+            await Audit.RecordUserActionAsync(userId, userName, "InstanceCreated", "DatabaseInstance", instance.Id.ToString(), instance.Name,
+                reason: importReason, afterJson: AuditDiffJson.ForCreate(instance));
+        }
+        foreach (var (instance, changes) in edited)
+        {
+            var (beforeJson, afterJson) = AuditDiffJson.FromChanges(changes);
+            await Audit.RecordUserActionAsync(userId, userName, "InstanceEdited", "DatabaseInstance", instance.Id.ToString(), instance.Name,
+                reason: importReason, beforeJson: beforeJson, afterJson: afterJson);
+        }
         await Audit.RecordUserActionAsync(userId, userName, "InstancesCsvImported", "CsvImport", "", $"{_fileName}",
-            reason: $"{creates} created, {updates} updated, {_preview.SkipCount} unchanged, {_preview.AmbiguousCount} ambiguous, {_preview.Errors.Count} error row(s)");
+            reason: $"{creates} created, {updates} updated, {_preview.SkipCount} unchanged, {_preview.AmbiguousCount} ambiguous, {_preview.Errors.Count} error row(s); matched by {_matchRule}");
 
         _importing = false;
         Toasts.Success($"Import complete: {creates} created, {updates} updated.");
         Nav.NavigateTo("/instances");
     }
 
+    private async Task DownloadInventory()
+    {
+        var instances = await Db.DatabaseInstances.AsNoTracking().Where(i => !i.IsArchived).ToListAsync();
+        var teams = await Db.Teams.AsNoTracking().ToDictionaryAsync(t => t.Id, t => t.Name);
+        await JS.InvokeVoidAsync("dbtracker.downloadCsv", $"dbtracker-inventory-{DateTime.UtcNow:yyyyMMdd-HHmm}.csv", InstanceCsvImporter.ExportCsv(instances, teams));
+    }
+
     private async Task DownloadTemplate() =>
         await JS.InvokeVoidAsync("dbtracker.downloadCsv", "dbtracker-import-template.csv", InstanceCsvImporter.TemplateCsv());
 
+    /// <summary>The rejected and ambiguous rows with their original cells and the reason, ready to fix and upload again.</summary>
     private async Task DownloadErrors()
     {
-        if (_preview is null || _preview.Errors.Count == 0)
+        if (_preview is null || _content is null || (_preview.Errors.Count == 0 && _preview.AmbiguousCount == 0))
         {
             return;
         }
 
-        var csv = new System.Text.StringBuilder("Row,Error\n");
-        foreach (var e in _preview.Errors)
-        {
-            csv.AppendLine($"{e.RowNumber},\"{e.Message.Replace("\"", "\"\"")}\"");
-        }
-        await JS.InvokeVoidAsync("dbtracker.downloadCsv", "dbtracker-import-errors.csv", csv.ToString());
+        var problems = _preview.Errors.Select(e => (e.RowNumber, e.Message))
+            .Concat(_preview.Rows.Where(r => r.Plan == ImportRowPlan.Ambiguous).Select(r => (r.RowNumber, $"Not imported: {r.AmbiguityReason}")));
+        await JS.InvokeVoidAsync("dbtracker.downloadCsv", "dbtracker-import-rows-to-fix.csv", ImportCorrections.BuildCsv(_content, problems));
     }
 
     private static string PlanClass(ImportRowPlan plan) => plan switch

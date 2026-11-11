@@ -87,6 +87,9 @@ else
 @code {
     [SupplyParameterFromQuery] public string? Ids { get; set; }
 
+    /// <summary>Preselects a policy, e.g. when coming from a policy edit to apply its new version.</summary>
+    [SupplyParameterFromQuery] public int? Policy { get; set; }
+
     private List<int> _instanceIds = new();
     private List<BackupPolicy> _policies = new();
     private int _selectedPolicyId;
@@ -115,7 +118,7 @@ else
         }
         if (_policies.Count > 0)
         {
-            _selectedPolicyId = _policies[0].Id;
+            _selectedPolicyId = Policy is { } requested && _policies.Any(p => p.Id == requested) ? requested : _policies[0].Id;
         }
         _loaded = true;
 

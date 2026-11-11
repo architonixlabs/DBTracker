@@ -113,6 +113,8 @@ public class CrossEpicIntegrationTests
         var rowAsDba = _page.Locator("tr", new PageLocatorOptions { HasText = instanceName });
         await Assertions.Expect(rowAsDba.Locator("button:has-text('Unarchive')")).ToBeVisibleAsync();
         await rowAsDba.Locator("button:has-text('Unarchive')").ClickAsync();
+        await _page.FillAsync("[data-testid=unarchive-reason]", "Archived by mistake in an E2E test");
+        await _page.ClickAsync("[data-testid=unarchive-confirm]");
         await _page.WaitForTimeoutAsync(600);
         await Assertions.Expect(_page.Locator("tr", new PageLocatorOptions { HasText = instanceName })).ToHaveCountAsync(0);
     }

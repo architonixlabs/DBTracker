@@ -1,4 +1,8 @@
 window.dbtracker = {
+    // G11: the viewer's IANA time zone, so times show in the reader's zone with the zone named instead of the server's.
+    timeZone: function () {
+        try { return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"; } catch (e) { return "UTC"; }
+    },
     // U13: warn on an actual browser tab close/refresh while a form has unsaved changes. In-app
     // navigation (clicking another nav link) is handled separately via
     // NavigationManager.RegisterLocationChangingHandler, which can show a real confirm() dialog;

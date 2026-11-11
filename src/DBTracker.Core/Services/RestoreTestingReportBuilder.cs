@@ -12,7 +12,8 @@ public record RestoreTestingRow(
     bool RestoreTested, DateTime? LastSuccessfulRestoreUtc, int TotalAttempts,
     RestoreTestRecency Recency, DateTime? NextDueUtc);
 
-/// <summary>Which instances have a proven successful restore and whether it is still within the test window. Untested and overdue instances sort first.</summary>
+/// <summary>Which instances have a proven successful restore and whether it is still within the test window. Untested and overdue instances sort first.
+/// Imported restore history is not proof, so it never makes an instance restore-tested.</summary>
 public static class RestoreTestingReportBuilder
 {
     public static IReadOnlyList<RestoreTestingRow> Build(IEnumerable<RestoreTestingInput> inputs, int defaultIntervalDays = 90, DateTime? nowUtc = null)
@@ -23,7 +24,7 @@ public static class RestoreTestingReportBuilder
             .Select(i =>
             {
                 var lastSuccess = i.RestoreEvents
-                    .Where(e => e.Outcome == RestoreOutcome.Success)
+                    .Where(RestoreEvidence.CountsAsVerified)
                     .OrderByDescending(e => e.TimestampUtc)
                     .FirstOrDefault();
 

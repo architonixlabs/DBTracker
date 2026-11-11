@@ -3,6 +3,7 @@ using DBTracker.Core.Enums;
 using DBTracker.Core.Services;
 using DBTracker.Infrastructure.Audit;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 
 namespace DBTracker.Infrastructure.Lifecycle;
 
@@ -11,7 +12,7 @@ public record ArchiveOutcome(bool Ok, string Message);
 public record ArchivedInstanceRow(int Id, string Name, string Application, string Company, DateTime? ArchivedAtUtc, string ArchivedBy, string ArchiveReason);
 
 /// <summary>Archive and unarchive with preview, attribution and audit. Nothing is deleted; sweeps skip archived instances and pick them up again after unarchive.</summary>
-public class InstanceArchiveService(IDbContextFactory<DBTrackerDbContext> factory, AuditRecorder audit)
+public class InstanceArchiveService(IDbContextFactory<DBTrackerDbContext> factory, AuditRecorder audit, IConfiguration configuration)
 {
     public async Task<ArchiveImpactCounts> PreviewAsync(int instanceId)
     {
@@ -30,11 +31,19 @@ public class InstanceArchiveService(IDbContextFactory<DBTrackerDbContext> factor
         var alertable = health is BackupHealth.Overdue or BackupHealth.Failed;
         var openIncidents = await db.Incidents.CountAsync(i => i.DatabaseInstanceId == instanceId && i.ClosedAtUtc == null);
 
+        // Snapshot rows are frozen JSON; match the serialized name, which is how the row stores it.
+        var nameToken = $"\"InstanceName\":{System.Text.Json.JsonSerializer.Serialize(instance.Name)}";
+        var snapshotCount = await db.ComplianceSnapshots.CountAsync(s => s.RowsJson.Contains(nameToken));
+
         return new ArchiveImpactCounts(
             BackgroundScanConfigured: !string.IsNullOrWhiteSpace(instance.BackupFileLocation),
             AlertableNow: alertable,
             OpenIncidentCount: openIncidents,
-            IncludedInScheduledReports: true);
+            // Reports and the Compliance view read every non-archived instance; there is no other report filter to consult.
+            IncludedInScheduledReports: !instance.IsArchived,
+            ScheduledReportIntervalDays: configuration.GetValue("Reports:IntervalDays", 7),
+            DistributionListConfigured: !string.IsNullOrWhiteSpace(configuration["Reports:DistributionList"]),
+            SavedSnapshotCount: snapshotCount);
     }
 
     /// <summary>Archives a record that is not being retired (a duplicate or one entered by mistake). Refused while a
@@ -87,8 +96,13 @@ public class InstanceArchiveService(IDbContextFactory<DBTrackerDbContext> factor
         return new ArchiveOutcome(true, "");
     }
 
-    public async Task<bool> UnarchiveAsync(int instanceId, string actorId, string actorName)
+    /// <summary>Brings an archived instance back. A reason is required and recorded with the previous archive reason.</summary>
+    public async Task<bool> UnarchiveAsync(int instanceId, string reason, string actorId, string actorName)
     {
+        if (string.IsNullOrWhiteSpace(reason))
+        {
+            throw new ArgumentException("A reason is required to unarchive an instance.", nameof(reason));
+        }
         using var db = await factory.CreateDbContextAsync();
         var instance = await db.DatabaseInstances.FirstOrDefaultAsync(i => i.Id == instanceId);
         if (instance is null || !instance.IsArchived)
@@ -105,7 +119,10 @@ public class InstanceArchiveService(IDbContextFactory<DBTrackerDbContext> factor
         await db.SaveChangesAsync();
 
         // Health isn't cached, so the next read and sweep recompute it now that IsArchived is false.
-        await audit.RecordUserActionAsync(actorId, actorName, "InstanceUnarchived", "DatabaseInstance", instanceId.ToString(), instance.Name, $"Previously archived: {previousReason}");
+        await audit.RecordUserActionAsync(actorId, actorName, "InstanceUnarchived", "DatabaseInstance", instanceId.ToString(), instance.Name,
+            $"{reason.Trim()} (previously archived: {previousReason})",
+            beforeJson: System.Text.Json.JsonSerializer.Serialize(new { IsArchived = true, ArchiveReason = previousReason }),
+            afterJson: System.Text.Json.JsonSerializer.Serialize(new { IsArchived = false }));
         return true;
     }
 

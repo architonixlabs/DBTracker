@@ -52,15 +52,37 @@ else
                         <td class="fw-semibold"><a href="/instances/@row.Id">@row.Name</a></td>
                         <td>@row.Application</td>
                         <td>@row.Company</td>
-                        <td class="small text-muted">@(row.ArchivedAtUtc?.ToLocalTime().ToString("MMM d, yyyy h:mm tt") ?? "Not recorded")</td>
+                        <td class="small text-muted"><LocalTime Utc="row.ArchivedAtUtc" ShowUtc="false" Empty="Not recorded" /></td>
                         <td class="small text-muted">@row.ArchivedBy</td>
                         <td class="small">@row.ArchiveReason</td>
                         <td>
                             <AuthorizeView Roles="@Roles.CanEditPolicy">
-                                <button type="button" class="btn btn-outline-secondary btn-sm" aria-label="Unarchive @row.Name" @onclick="() => Unarchive(row.Id)">Unarchive</button>
+                                <button type="button" class="btn btn-outline-secondary btn-sm" aria-label="Unarchive @row.Name" aria-expanded="@(_unarchivingId == row.Id ? "true" : "false")"
+                                        data-testid="unarchive-open" @onclick="() => OpenUnarchive(row.Id)">Unarchive</button>
                             </AuthorizeView>
                         </td>
                     </tr>
+                    @if (_unarchivingId == row.Id)
+                    {
+                        <tr>
+                            <td colspan="7">
+                                <div class="d-flex gap-2 align-items-end flex-wrap py-1">
+                                    <div style="min-width:260px;flex:1;">
+                                        <label class="form-label small mb-1" for="unarchive-reason-@row.Id">Why is @row.Name coming back? (required)</label>
+                                        <input id="unarchive-reason-@row.Id" data-testid="unarchive-reason" class="form-control form-control-sm" @bind="_unarchiveReason" @bind:event="oninput"
+                                               placeholder="Archived by mistake, database back in service…" aria-describedby="unarchive-help-@row.Id" />
+                                        <div class="form-text" id="unarchive-help-@row.Id">Recorded in the audit trail with the original archive reason. Scans, alerts and reports pick it up again.</div>
+                                    </div>
+                                    <button type="button" class="btn btn-primary btn-sm" data-testid="unarchive-confirm" disabled="@(string.IsNullOrWhiteSpace(_unarchiveReason) || _busy)" @onclick="() => Unarchive(row.Id)">Unarchive @row.Name</button>
+                                    <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="() => _unarchivingId = null">Cancel</button>
+                                </div>
+                                @if (_unarchiveError is not null)
+                                {
+                                    <p class="small mb-0" role="alert" style="color:var(--dbt-failed)">@_unarchiveError</p>
+                                }
+                            </td>
+                        </tr>
+                    }
                 }
             </tbody>
         </table>
@@ -73,12 +95,18 @@ else
     private string _search = "";
     private string? _userId;
     private string? _userName;
+    private bool _canEdit;
+    private int? _unarchivingId;
+    private string _unarchiveReason = "";
+    private string? _unarchiveError;
+    private bool _busy;
 
     protected override async Task OnInitializedAsync()
     {
         var state = await AuthProvider.GetAuthenticationStateAsync();
         _userId = state.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? "";
         _userName = state.User.Identity?.Name ?? "unknown";
+        _canEdit = Roles.CanEditPolicy.Split(',').Any(state.User.IsInRole);
         await Load();
     }
 
@@ -101,9 +129,31 @@ else
         await Load();
     }
 
+    private void OpenUnarchive(int id)
+    {
+        _unarchivingId = id;
+        _unarchiveReason = "";
+        _unarchiveError = null;
+    }
+
     private async Task Unarchive(int id)
     {
-        var ok = await ArchiveService.UnarchiveAsync(id, _userId ?? "", _userName ?? "unknown");
+        // The button is hidden from read-only roles, but the write is checked here too.
+        if (!_canEdit)
+        {
+            _unarchiveError = "Only DBA or Admin users can unarchive instances.";
+            return;
+        }
+        if (string.IsNullOrWhiteSpace(_unarchiveReason))
+        {
+            _unarchiveError = "Give a reason before unarchiving.";
+            return;
+        }
+
+        _busy = true;
+        var ok = await ArchiveService.UnarchiveAsync(id, _unarchiveReason, _userId ?? "", _userName ?? "unknown");
+        _busy = false;
+        _unarchivingId = null;
         if (ok)
         {
             // Health/alert eligibility isn't cached: the next dashboard/list read and the next

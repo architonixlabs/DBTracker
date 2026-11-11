@@ -31,6 +31,9 @@ public class BackupRecord
 
     public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
 
+    /// <summary>The time zone the occurrence time was entered or imported in (IANA or "UTC"). TimestampUtc stays the source of truth; this records how a person stated it. Empty for scanner records and older entries.</summary>
+    public string OccurredTimeZone { get; set; } = string.Empty;
+
     /// <summary>The chain member this record satisfies when Type can't express it (WAL, binlog, archival copy). Null maps from Type, so older records need no backfill.</summary>
     public ChainMemberType? ChainRole { get; set; }
 

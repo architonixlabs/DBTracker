@@ -494,6 +494,11 @@ namespace DBTracker.Infrastructure.Migrations
                     b.Property<long?>("ObservedFileBytes")
                         .HasColumnType("bigint");
 
+                    b.Property<string>("OccurredTimeZone")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
                     b.Property<string>("RecordedByUserName")
                         .IsRequired()
                         .HasMaxLength(320)
@@ -3363,6 +3368,11 @@ namespace DBTracker.Infrastructure.Migrations
                     b.Property<double?>("DurationMinutes")
                         .HasColumnType("float");
 
+                    b.Property<string>("EvidenceReference")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
                     b.Property<int?>("LinkedBackupRecordId")
                         .HasColumnType("int");
 
@@ -3370,6 +3380,11 @@ namespace DBTracker.Infrastructure.Migrations
                         .IsRequired()
                         .HasMaxLength(2000)
                         .HasColumnType("nvarchar(2000)");
+
+                    b.Property<string>("OccurredTimeZone")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
 
                     b.Property<int>("Outcome")
                         .HasColumnType("int");
@@ -3386,6 +3401,9 @@ namespace DBTracker.Infrastructure.Migrations
                         .IsRequired()
                         .HasMaxLength(320)
                         .HasColumnType("nvarchar(320)");
+
+                    b.Property<int>("Source")
+                        .HasColumnType("int");
 
                     b.Property<double?>("TargetRecoveryTimeMinutes")
                         .HasColumnType("float");

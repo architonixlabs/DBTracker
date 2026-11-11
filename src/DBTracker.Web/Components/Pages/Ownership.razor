@@ -130,7 +130,7 @@
                 {
                     <div class="dbt-table" role="region" aria-label="Backup policies" tabindex="0">
                         <table class="table table-sm">
-                            <thead><tr><th scope="col">Name</th><th scope="col">Version</th><th scope="col">Cadence</th><th scope="col">Retention</th><th scope="col">Restore-test</th><th scope="col">Updated</th></tr></thead>
+                            <thead><tr><th scope="col">Name</th><th scope="col">Version</th><th scope="col">Cadence</th><th scope="col">Retention</th><th scope="col">Restore-test</th><th scope="col">Updated</th><th scope="col"><span class="visually-hidden">Actions</span></th></tr></thead>
                             <tbody>
                                 @foreach (var p in _policies)
                                 {
@@ -140,13 +140,94 @@
                                         <td class="small">every @p.ExpectedBackupIntervalHours h</td>
                                         <td class="small">@(p.RetentionPolicyDays?.ToString() ?? "org default") d</td>
                                         <td class="small">@(p.RestoreTestIntervalDays?.ToString() ?? "org default") d</td>
-                                        <td class="small text-muted">@p.UpdatedAtUtc.ToLocalTime().ToString("MMM d, yyyy") by @p.UpdatedBy</td>
+                                        <td class="small text-muted"><LocalTime Utc="p.UpdatedAtUtc" Format="MMM d, yyyy" ShowUtc="false" /> by @p.UpdatedBy</td>
+                                        <td class="small"><button type="button" class="btn btn-outline-secondary btn-sm" data-testid="policy-edit" aria-label="Edit policy @p.Name" @onclick="() => StartEdit(p)">Edit</button></td>
                                     </tr>
                                 }
                             </tbody>
                         </table>
                     </div>
-                    <p class="small text-muted mt-2">Edit a policy's values from here to bump its version (recorded in the <a href="/audit">audit trail</a>); apply it to instances from the Instances list's "Apply policy" action after selecting rows.</p>
+                    <p class="small text-muted mt-2">Editing a policy saves a new version (recorded in the <a href="/audit">audit trail</a>) and never changes instances by itself. Preview the impact first, then apply the new version to the instances that use it.</p>
+
+                    @if (_editing is not null)
+                    {
+                        <div class="dbt-card mt-3" data-testid="policy-edit-panel">
+                            <h2 class="h6 text-muted mb-3">Edit @_editing.Name (now v@_editing.Version)</h2>
+                            <div class="row g-2 mb-2">
+                                <div class="col-sm-4">
+                                    <label class="form-label small" for="policy-edit-interval">Expected backup interval (hours)</label>
+                                    <input id="policy-edit-interval" data-testid="policy-edit-interval" type="number" min="1" class="form-control form-control-sm" @bind="_editIntervalHours" @bind:event="oninput" @bind:after="ClearImpact" />
+                                </div>
+                                <div class="col-sm-4">
+                                    <label class="form-label small" for="policy-edit-retention">Retention (days, optional)</label>
+                                    <input id="policy-edit-retention" type="number" min="0" class="form-control form-control-sm" @bind="_editRetentionDays" @bind:event="oninput" @bind:after="ClearImpact" />
+                                </div>
+                                <div class="col-sm-4">
+                                    <label class="form-label small" for="policy-edit-restore">Restore-test interval (days, optional)</label>
+                                    <input id="policy-edit-restore" type="number" min="1" class="form-control form-control-sm" @bind="_editRestoreDays" @bind:event="oninput" @bind:after="ClearImpact" />
+                                </div>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label small" for="policy-edit-reason">Reason for the change (recorded in the audit trail)</label>
+                                <input id="policy-edit-reason" data-testid="policy-edit-reason" class="form-control form-control-sm" @bind="_editReason" @bind:event="oninput" />
+                            </div>
+                            <div class="d-flex gap-2 mb-3">
+                                <button type="button" class="btn btn-outline-secondary btn-sm" data-testid="policy-edit-preview" @onclick="PreviewEdit" disabled="@_editBusy">Preview impact</button>
+                                <button type="button" class="btn btn-primary btn-sm" data-testid="policy-edit-save" @onclick="SaveEdit" disabled="@(_editBusy || _impact is null || _impact.Errors.Count > 0 || _impact.PolicyChanges.Count == 0)">Save as v@(_editing.Version + 1)</button>
+                                <button type="button" class="btn btn-link btn-sm" @onclick="() => _editing = null">Cancel</button>
+                            </div>
+                            @if (_editErrors.Count > 0)
+                            {
+                                <ul class="small mb-2" role="alert" style="color:var(--dbt-failed)">
+                                    @foreach (var error in _editErrors) { <li>@error</li> }
+                                </ul>
+                            }
+                            @if (_impact is not null)
+                            {
+                                <div role="status" data-testid="policy-edit-impact">
+                                    @if (_impact.PolicyChanges.Count == 0)
+                                    {
+                                        <p class="small mb-2">These values match v@_editing.Version, so there is nothing to save.</p>
+                                    }
+                                    else
+                                    {
+                                        <p class="small mb-2">
+                                            Policy change: @string.Join("; ", _impact.PolicyChanges.Select(c => $"{c.Field} {(c.Before.Length == 0 ? "(none)" : c.Before)} to {(c.After.Length == 0 ? "(none)" : c.After)}")).
+                                            @_impact.LinkedCount active instance(s) use this policy. Saving changes none of them; applying the new version would change @_impact.WouldChangeCount,
+                                            with @_impact.BecomesOverdueCount becoming Overdue and @_impact.BecomesOnTrackCount becoming On track under the new cadence.
+                                        </p>
+                                    }
+                                    @if (_impact.Rows.Count > 0)
+                                    {
+                                        <div class="table-responsive" role="region" aria-label="Instances using this policy" tabindex="0">
+                                            <table class="table table-sm mb-0">
+                                                <thead><tr><th scope="col">Instance</th><th scope="col">Applied version</th><th scope="col">Would change when applied</th><th scope="col">Health now</th><th scope="col">After applying</th></tr></thead>
+                                                <tbody>
+                                                    @foreach (var row in _impact.Rows)
+                                                    {
+                                                        <tr>
+                                                            <td class="small"><a href="/instances/@row.InstanceId">@row.InstanceName</a></td>
+                                                            <td class="small">v@(row.AppliedVersion?.ToString() ?? "?")</td>
+                                                            <td class="small">@(row.ReapplyChanges.Count == 0 ? "Nothing" : string.Join("; ", row.ReapplyChanges.Select(c => $"{c.Field} {(c.Before.Length == 0 ? "(none)" : c.Before)} to {(c.After.Length == 0 ? "(none)" : c.After)}")))</td>
+                                                            <td class="small"><HealthBadge Health="row.CurrentHealth" /></td>
+                                                            <td class="small"><HealthBadge Health="row.HealthAfterReapply" /></td>
+                                                        </tr>
+                                                    }
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    }
+
+                    @if (_savedPolicyId is { } savedId && _savedLinkedIds.Count > 0)
+                    {
+                        <p class="small mt-3" role="status" data-testid="policy-apply-new-version">
+                            Saved. <a href="/instances/apply-policy?ids=@string.Join(",", _savedLinkedIds)&policy=@savedId">Review and apply the new version to the @_savedLinkedIds.Count instance(s) that use it</a>.
+                        </p>
+                    }
                 }
             </div>
         </div>
@@ -167,7 +248,7 @@
                     <div class="d-flex justify-content-between align-items-start mb-2">
                         <div>
                             <a href="/instances/@req.DatabaseInstanceId">@(req.DatabaseInstance?.Name ?? $"Instance #{req.DatabaseInstanceId}")</a>
-                            <div class="small text-muted">Requested by @req.RequestedByName on @req.RequestedAtUtc.ToLocalTime().ToString("MMM d, h:mm tt")</div>
+                            <div class="small text-muted">Requested by @req.RequestedByName on <LocalTime Utc="req.RequestedAtUtc" Format="MMM d, h:mm tt" ShowUtc="false" /></div>
                         </div>
                     </div>
                     <p class="small mb-2">"@req.Note"</p>
@@ -205,6 +286,70 @@
     private int? _newPolicyRestoreDays;
 
     private string? _userId, _userName;
+
+    // Policy edit (U21): preview the impact, then save a new version. Saving never re-applies.
+    private BackupPolicy? _editing;
+    private int _editIntervalHours;
+    private int? _editRetentionDays;
+    private int? _editRestoreDays;
+    private string _editReason = "";
+    private PolicyEditImpact? _impact;
+    private IReadOnlyList<string> _editErrors = [];
+    private bool _editBusy;
+    private int? _savedPolicyId;
+    private List<int> _savedLinkedIds = new();
+
+    private void StartEdit(BackupPolicy policy)
+    {
+        _editing = policy;
+        _editIntervalHours = policy.ExpectedBackupIntervalHours;
+        _editRetentionDays = policy.RetentionPolicyDays;
+        _editRestoreDays = policy.RestoreTestIntervalDays;
+        _editReason = "";
+        _impact = null;
+        _editErrors = [];
+        _savedPolicyId = null;
+    }
+
+    private void ClearImpact() => _impact = null;
+
+    private async Task PreviewEdit()
+    {
+        if (_editing is null)
+        {
+            return;
+        }
+
+        _editBusy = true;
+        _impact = await Policies.PreviewEditAsync(_editing.Id, _editIntervalHours, _editRetentionDays, _editRestoreDays);
+        _editErrors = _impact?.Errors ?? ["This policy no longer exists."];
+        _editBusy = false;
+    }
+
+    private async Task SaveEdit()
+    {
+        if (_editing is null || _impact is null)
+        {
+            return;
+        }
+
+        _editBusy = true;
+        var policyId = _editing.Id;
+        _editErrors = await Policies.UpdateAsync(policyId, _editIntervalHours, _editRetentionDays, _editRestoreDays,
+            _userId ?? "", _userName ?? "unknown", expectedVersion: _editing.Version, reason: _editReason);
+        _editBusy = false;
+        if (_editErrors.Count > 0)
+        {
+            return;
+        }
+
+        Toasts.Success($"Policy \"{_editing.Name}\" saved as v{_editing.Version + 1}. No instance changed yet.");
+        _savedPolicyId = policyId;
+        _savedLinkedIds = await Policies.LinkedInstanceIdsAsync(policyId);
+        _editing = null;
+        _impact = null;
+        await LoadPolicies();
+    }
 
     protected override async Task OnInitializedAsync()
     {
@@ -278,7 +423,13 @@
 
     private async Task CreatePolicy()
     {
-        var ok = await Policies.CreateAsync(_newPolicyName, _newPolicyIntervalHours, _newPolicyRetentionDays, _newPolicyRestoreDays, _userName ?? "unknown");
+        var createErrors = PolicyEditImpactBuilder.Validate(_newPolicyIntervalHours, _newPolicyRetentionDays, _newPolicyRestoreDays);
+        if (createErrors.Count > 0)
+        {
+            Toasts.Error(string.Join(" ", createErrors));
+            return;
+        }
+        var ok = await Policies.CreateAsync(_newPolicyName, _newPolicyIntervalHours, _newPolicyRetentionDays, _newPolicyRestoreDays, _userName ?? "unknown", _userId ?? "");
         if (ok)
         {
             Toasts.Success($"Policy \"{_newPolicyName}\" created.");

@@ -9,10 +9,8 @@ public static class BackupEvidenceClassifier
     /// <summary>Null for Failed/Missed records; evidence level only describes claimed-successful backups.</summary>
     public static EvidenceLevel? Classify(BackupRecord record, IReadOnlyCollection<RestoreEvent> restoreEvents)
     {
-        var lastRestoreSuccessUtc = restoreEvents
-            .Where(r => r.Outcome == RestoreOutcome.Success)
-            .Select(r => (DateTime?)r.TimestampUtc)
-            .Max();
+        // Only verified restores (successful, not imported) can upgrade a backup to restore-tested.
+        var lastRestoreSuccessUtc = RestoreEvidence.LastVerifiedUtc(restoreEvents);
         return Classify(record.Status, record.Source, record.TimestampUtc, lastRestoreSuccessUtc);
     }
 
@@ -22,6 +20,12 @@ public static class BackupEvidenceClassifier
         if (status != BackupStatus.Success)
         {
             return null;
+        }
+
+        // Imported history is context only: it is never upgraded, and an imported restore never proves anything.
+        if (source == BackupSource.Imported)
+        {
+            return EvidenceLevel.Imported;
         }
 
         if (lastRestoreSuccessUtc is { } restoredAt && restoredAt >= recordTimestampUtc)
@@ -58,6 +62,7 @@ public static class BackupEvidenceClassifier
         EvidenceLevel.Discovered => "Discovered",
         EvidenceLevel.ReportedSuccess => "Reported success",
         EvidenceLevel.RestoreTested => "Restore-tested",
+        EvidenceLevel.Imported => "Imported",
         _ => level.ToString()
     };
 }

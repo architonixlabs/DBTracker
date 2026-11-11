@@ -278,7 +278,7 @@ public class InstanceOverviewService(IDbContextFactory<DBTrackerDbContext> facto
         var instanceIds = records.Select(r => r.DatabaseInstanceId).Distinct().ToList();
         var lastRestoreSuccess = await db.RestoreEvents
             .AsNoTracking()
-            .Where(r => r.Outcome == RestoreOutcome.Success && instanceIds.Contains(r.DatabaseInstanceId))
+            .Where(r => r.Outcome == RestoreOutcome.Success && r.Source != BackupSource.Imported && instanceIds.Contains(r.DatabaseInstanceId))
             .GroupBy(r => r.DatabaseInstanceId)
             .Select(g => new { InstanceId = g.Key, LastUtc = g.Max(r => r.TimestampUtc) })
             .ToDictionaryAsync(x => x.InstanceId, x => (DateTime?)x.LastUtc);

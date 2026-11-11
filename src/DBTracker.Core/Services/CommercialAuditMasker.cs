@@ -10,4 +10,8 @@ public static class CommercialAuditMasker
 
     public static string Reason(string action, string reason, bool canSeeCommercialEvidence) =>
         canSeeCommercialEvidence || !CommercialActions.Contains(action) ? reason : HiddenText;
+
+    /// <summary>True when the event's before/after values must be hidden from this viewer, for the same reason as its text.</summary>
+    public static bool HidesChange(string action, bool canSeeCommercialEvidence) =>
+        !canSeeCommercialEvidence && CommercialActions.Contains(action);
 }

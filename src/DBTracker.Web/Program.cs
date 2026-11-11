@@ -59,6 +59,8 @@ builder.Services.AddScoped<PersonalAccessTokenService>();
 
 builder.Services.AddScoped<TeamService>();
 builder.Services.AddScoped<BackupPolicyService>();
+builder.Services.AddScoped<DBTracker.Infrastructure.Import.EvidenceHistoryImportService>();
+builder.Services.AddScoped<DBTracker.Web.Services.ViewerTimeZone>();
 builder.Services.AddScoped<ContactCorrectionService>();
 
 builder.Services.AddScoped<VersionIdentityService>();
