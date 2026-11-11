@@ -1,3 +1,4 @@
+<!-- Pinned to WiX 5 on purpose: WiX 6 and later ship under the Open Source Maintenance Fee EULA. Ask the owner before upgrading. -->
 <Project Sdk="WixToolset.Sdk/5.0.2">
 
   <PropertyGroup>

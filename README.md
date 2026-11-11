@@ -20,9 +20,10 @@ dotnet ef database update --project src/DBTracker.Infrastructure --startup-proje
 dotnet run --project src/DBTracker.Web
 ```
 
-The connection string lives in `src/DBTracker.Web/appsettings.json`
-(`ConnectionStrings:DBTracker`) and defaults to `Server=localhost` with
-integrated security — no secrets required.
+For local development the connection string lives in
+`src/DBTracker.Web/appsettings.Development.json` (`ConnectionStrings:DBTracker`) and defaults to
+`Server=localhost` with integrated security, so no secrets are required. Deployed (Production)
+instances get theirs from the `/install` setup wizard instead; see [DEPLOYMENT.md](DEPLOYMENT.md).
 
 ## Deploying to IIS
 See [DEPLOYMENT.md](DEPLOYMENT.md). A first-run wizard at `/install` creates the database and the
