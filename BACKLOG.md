@@ -1553,7 +1553,7 @@ changed. Owner decisions: MSI built with the WiX Toolset; offer SQL Server Expre
 is found. Because an MSI cannot chain other installers, prerequisites live in a WiX bundle (Setup.exe)
 that runs the MSI last.
 
-- [ ] **2026-11-11 | I03 | NEW | P1 | L - DBTracker.msi (WiX).**
+- [x] **2026-11-11 | I03 | NEW | P1 | L - DBTracker.msi (WiX).**
   **Acceptance:** per-machine MSI with a fixed UpgradeCode and major-upgrade support; installs the
   published app to a chosen folder (default `C:\inetpub\DBTracker`); creates the app pool (No Managed
   Code) and site on a chosen free port; grants the app pool identity Modify on `App_Data`; optionally

@@ -1,0 +1,107 @@
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+
+  <Package Name="DBTracker"
+           Manufacturer="Architonix Labs LLP"
+           Version="$(var.ProductVersion)"
+           UpgradeCode="475809F8-3DB3-43C9-BA39-14CEF80EE484"
+           Scope="perMachine"
+           Compressed="yes">
+
+    <SummaryInformation Description="DBTracker database backup and lifecycle tracker for IIS" />
+
+    <MajorUpgrade DowngradeErrorMessage="A newer version of DBTracker is already installed. To install this older version, first uninstall DBTracker from Settings &gt; Apps." />
+    <MediaTemplate EmbedCab="yes" />
+
+    <!-- Public properties, also set by DBTracker-Setup.exe. Secure so they reach the elevated
+         execute sequence. -->
+    <Property Id="SITE_NAME" Value="DBTracker" Secure="yes">
+      <RegistrySearch Id="RememberSiteName" Root="HKLM" Key="SOFTWARE\Architonix Labs\DBTracker" Name="SiteName" Type="raw" Bitness="always64" />
+    </Property>
+    <Property Id="APPPOOL_NAME" Value="DBTracker" Secure="yes">
+      <RegistrySearch Id="RememberAppPoolName" Root="HKLM" Key="SOFTWARE\Architonix Labs\DBTracker" Name="AppPoolName" Type="raw" Bitness="always64" />
+    </Property>
+    <Property Id="SITE_PORT" Value="8150" Secure="yes">
+      <RegistrySearch Id="RememberSitePort" Root="HKLM" Key="SOFTWARE\Architonix Labs\DBTracker" Name="SitePort" Type="raw" Bitness="always64" />
+    </Property>
+    <Property Id="INSTALLFOLDER" Secure="yes">
+      <RegistrySearch Id="RememberInstallFolder" Root="HKLM" Key="SOFTWARE\Architonix Labs\DBTracker" Name="InstallFolder" Type="raw" Bitness="always64" />
+    </Property>
+    <Property Id="SQL_SERVER" Secure="yes" />
+    <Property Id="SQL_GRANT_LOGIN" Secure="yes" />
+    <Property Id="LAUNCH_WIZARD" Value="1" Secure="yes" />
+    <Property Id="OPEN_SETUP_KEY" Value="1" Secure="yes" />
+    <Property Id="REMOVE_DATA" Secure="yes" />
+
+    <!-- Prerequisite detection. DWORD values come back as "#<n>". The ASP.NET Core 10 runtime has no
+         reliable registry marker across install methods, so the custom action checks the folders. -->
+    <Property Id="IISMAJORVERSION">
+      <RegistrySearch Id="IisMajorVersion" Root="HKLM" Key="SOFTWARE\Microsoft\InetStp" Name="MajorVersion" Type="raw" Bitness="always64" />
+    </Property>
+    <Property Id="IISWEBSOCKETS">
+      <RegistrySearch Id="IisWebSockets" Root="HKLM" Key="SOFTWARE\Microsoft\InetStp\Components" Name="WebSockets" Type="raw" Bitness="always64" />
+    </Property>
+
+    <Launch Condition="Privileged" Message="Installing DBTracker needs administrator rights. Right-click the installer and choose Run as administrator, or run msiexec from an elevated command prompt." />
+    <Launch Condition="Installed OR IISMAJORVERSION = &quot;#10&quot;" Message="IIS 10 is not installed on this computer. Run DBTracker-Setup.exe, which installs it for you, or turn on Internet Information Services and follow DEPLOYMENT.md, section 1 (Prerequisites)." />
+    <Launch Condition="Installed OR IISWEBSOCKETS = &quot;#1&quot;" Message="The IIS WebSocket Protocol feature is not installed, and DBTracker's live pages need it. Run DBTracker-Setup.exe, or turn on Web Server (IIS) &gt; Application Development &gt; WebSocket Protocol (DEPLOYMENT.md, section 1)." />
+    <Launch Condition="Installed OR (ASPNETCORE10_FOUND AND ANCMV2_FOUND)" Message="The .NET 10 Hosting Bundle is not installed. It provides the ASP.NET Core 10 runtime and the ASP.NET Core Module that IIS uses to run DBTracker. Run DBTracker-Setup.exe, or install the .NET 10 Hosting Bundle from Microsoft and run this installer again (DEPLOYMENT.md, section 1)." />
+
+    <!-- Authored under Program Files so WiX can derive stable component GUIDs; SetDirectory moves it. -->
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="DBTracker">
+        <Directory Id="APPDATAFOLDER" Name="App_Data" />
+      </Directory>
+    </StandardDirectory>
+    <!-- Default C:\inetpub\DBTracker (the Windows drive), unless set on the command line or remembered.
+         Directory actions must run after CostFinalize, when INSTALLFOLDER is always resolved, so note
+         beforehand whether it was supplied. -->
+    <SetProperty Id="DBT_INSTALLFOLDER_GIVEN" Value="1" Before="CostFinalize" Sequence="both" Condition="INSTALLFOLDER" />
+    <SetDirectory Id="INSTALLFOLDER" Value="[WindowsVolume]inetpub\DBTracker" Condition="NOT DBT_INSTALLFOLDER_GIVEN" Sequence="both" />
+
+    <Feature Id="Main" Title="DBTracker" Level="1" AllowAbsent="no">
+      <ComponentGroupRef Id="AppFiles" />
+      <ComponentRef Id="AppDataFolder" />
+      <ComponentRef Id="RememberSettings" />
+      <ComponentGroupRef Id="IisConfiguration" />
+    </Feature>
+
+    <!-- Custom actions (installer/CustomActions). -->
+    <Binary Id="DBTrackerCA" SourceFile="$(var.DBTracker.CustomActions.TargetDir)$(var.DBTracker.CustomActions.TargetName).CA.dll" />
+
+    <CustomAction Id="DetectPrerequisites" BinaryRef="DBTrackerCA" DllEntry="DetectPrerequisites" Execute="immediate" Return="check" />
+    <CustomAction Id="ValidateSettingsUi" BinaryRef="DBTrackerCA" DllEntry="ValidateSettingsUi" Execute="immediate" Return="check" />
+    <CustomAction Id="ValidateSettingsExecute" BinaryRef="DBTrackerCA" DllEntry="ValidateSettingsExecute" Execute="immediate" Return="check" />
+    <CustomAction Id="StopAppPool" BinaryRef="DBTrackerCA" DllEntry="StopAppPool" Execute="deferred" Impersonate="no" Return="ignore" />
+    <CustomAction Id="ConfigureAppPoolAndData" BinaryRef="DBTrackerCA" DllEntry="ConfigureAppPoolAndData" Execute="deferred" Impersonate="no" Return="check" />
+    <CustomAction Id="GrantSqlLogin" BinaryRef="DBTrackerCA" DllEntry="GrantSqlLogin" Execute="deferred" Impersonate="yes" Return="check" />
+    <CustomAction Id="RemoveAppData" BinaryRef="DBTrackerCA" DllEntry="RemoveAppData" Execute="deferred" Impersonate="no" Return="ignore" />
+    <CustomAction Id="LaunchWizard" BinaryRef="DBTrackerCA" DllEntry="LaunchWizard" Execute="immediate" Return="ignore" />
+
+    <SetProperty Id="StopAppPool" Value="Pool=[APPPOOL_NAME]" Before="StopAppPool" Sequence="execute" />
+    <SetProperty Id="ConfigureAppPoolAndData" Value="Pool=[APPPOOL_NAME];AppData=[APPDATAFOLDER]" Before="ConfigureAppPoolAndData" Sequence="execute" />
+    <SetProperty Id="GrantSqlLogin" Value="Server=[SQL_SERVER];Pool=[APPPOOL_NAME]" Before="GrantSqlLogin" Sequence="execute" />
+    <SetProperty Id="RemoveAppData" Value="AppData=[APPDATAFOLDER]" Before="RemoveAppData" Sequence="execute" />
+
+    <InstallUISequence>
+      <Custom Action="DetectPrerequisites" After="AppSearch" />
+    </InstallUISequence>
+
+    <InstallExecuteSequence>
+      <Custom Action="DetectPrerequisites" After="AppSearch" />
+      <Custom Action="ValidateSettingsExecute" After="CostFinalize" Condition="NOT (REMOVE~=&quot;ALL&quot;)" />
+      <Custom Action="StopAppPool" After="InstallInitialize" Condition="Installed" />
+      <!-- The IIS extension's ConfigureIIs runs just before RegisterUser, so these see the new pool. -->
+      <Custom Action="ConfigureAppPoolAndData" After="RegisterUser" Condition="NOT (REMOVE~=&quot;ALL&quot;)" />
+      <Custom Action="GrantSqlLogin" After="ConfigureAppPoolAndData" Condition="NOT (REMOVE~=&quot;ALL&quot;) AND SQL_GRANT_LOGIN=&quot;1&quot; AND SQL_SERVER" />
+      <Custom Action="RemoveAppData" After="RegisterUser" Condition="REMOVE~=&quot;ALL&quot; AND REMOVE_DATA=&quot;1&quot; AND NOT UPGRADINGPRODUCTCODE" />
+      <!-- Full UI opens the wizard from the exit dialog instead, which runs unelevated. -->
+      <Custom Action="LaunchWizard" After="InstallFinalize" Condition="LAUNCH_WIZARD=&quot;1&quot; AND UILevel &lt; 5 AND NOT (REMOVE~=&quot;ALL&quot;)" />
+    </InstallExecuteSequence>
+
+    <Property Id="ARPHELPLINK" Value="https://github.com/architonixlabs/DBTracker" />
+    <SetProperty Id="ARPINSTALLLOCATION" Value="[INSTALLFOLDER]" After="CostFinalize" Sequence="execute" />
+
+    <UIRef Id="DBTrackerUI" />
+    <WixVariable Id="WixUILicenseRtf" Value="License.rtf" />
+  </Package>
+</Wix>

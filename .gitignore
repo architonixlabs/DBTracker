@@ -490,3 +490,8 @@ $RECYCLE.BIN/
 
 # Install wizard output: setup key, Data Protection keys, saved settings with encrypted secrets
 App_Data/
+
+# Installer build output (installer/build.ps1)
+installer/out/
+# *.msi above also matches the WiX project folder name; keep its sources tracked.
+!installer/DBTracker.Msi/
