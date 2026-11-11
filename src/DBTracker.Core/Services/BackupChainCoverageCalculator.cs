@@ -34,7 +34,7 @@ public static class BackupChainCoverageCalculator
         if (required.Count == 0)
         {
             return new BackupChainCoverageResult(ChainCoverageStatus.Unknown, null, [],
-                ["No backup-chain requirements recorded for this instance — coverage can't be evaluated."]);
+                ["No backup-chain requirements recorded for this instance, so coverage can't be evaluated."]);
         }
 
         var members = new List<ChainMemberCoverage>();

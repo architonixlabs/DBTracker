@@ -29,7 +29,7 @@ public static class ChangeWindowConflictDetector
 
         var maintenanceOverlaps = instanceMaintenanceWindows
             .Where(m => m.MaintenanceUntilUtc is { } until && candidateStartUtc < until)
-            .Select(m => $"{m.InstanceName} has an active/planned maintenance window until {m.MaintenanceUntilUtc:yyyy-MM-dd HH:mm} UTC ({(string.IsNullOrWhiteSpace(m.MaintenanceReason) ? "no reason recorded" : m.MaintenanceReason)}) — this does not by itself make the change safe.")
+            .Select(m => $"{m.InstanceName} has an active/planned maintenance window until {m.MaintenanceUntilUtc:yyyy-MM-dd HH:mm} UTC ({(string.IsNullOrWhiteSpace(m.MaintenanceReason) ? "no reason recorded" : m.MaintenanceReason)}). That window does not by itself make the change safe.")
             .ToList();
 
         return new ChangeWindowConflictResult(freezeConflicts, maintenanceOverlaps);

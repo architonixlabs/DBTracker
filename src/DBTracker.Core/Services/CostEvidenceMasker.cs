@@ -5,7 +5,7 @@ namespace DBTracker.Core.Services;
 /// <summary>Masks a cost estimate's figures for roles that shouldn't see them, on every view and export.</summary>
 public static class CostEvidenceMasker
 {
-    public const string MaskedPlaceholder = "•••• (masked — Admin/ITManager only)";
+    public const string MaskedPlaceholder = "•••• (masked: Admin/ITManager only)";
 
     // Invariant culture so 123456.78 renders the same on every host locale.
     public static string MaskAmount(decimal amount, string currency, bool canViewCommercial) =>

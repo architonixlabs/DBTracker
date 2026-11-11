@@ -27,7 +27,7 @@ public static class RetentionCoverageComparer
         if (currentlyAvailable.Count == 0)
         {
             return new RetentionCoverageResult(RetentionCoverageStatus.Gap,
-                "No copy is currently verified accessible — historical discovery of a now-unverified copy does not satisfy the policy.");
+                "No copy is currently verified accessible. Historical discovery of a now-unverified copy does not satisfy the policy.");
         }
 
         var oldestDiscovered = currentlyAvailable
@@ -40,7 +40,7 @@ public static class RetentionCoverageComparer
         if (oldestDiscovered is null)
         {
             return new RetentionCoverageResult(RetentionCoverageStatus.Unknown,
-                "An accessible copy exists, but its discovery date is unknown — can't confirm how far back its coverage actually reaches.");
+                "An accessible copy exists, but its discovery date is unknown, so there's no way to confirm how far back its coverage reaches.");
         }
 
         var coveredDays = (nowUtc - oldestDiscovered.Value).TotalDays;

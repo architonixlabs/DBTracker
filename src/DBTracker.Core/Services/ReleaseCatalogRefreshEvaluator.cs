@@ -12,7 +12,7 @@ public static class ReleaseCatalogRefreshEvaluator
     {
         if (string.IsNullOrWhiteSpace(entry.SourceUrl))
         {
-            return new ReleaseCatalogRefreshOutcome(false, "No source URL configured for this entry — nothing to refresh against.");
+            return new ReleaseCatalogRefreshOutcome(false, "No source URL configured for this entry, so there's nothing to refresh against.");
         }
 
         if (entry.OverrideExpiresUtc is { } expires && expires <= DateTime.UtcNow)

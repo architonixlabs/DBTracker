@@ -17,7 +17,7 @@ public static class ConnectivityEndpointResolver
 
         if (string.IsNullOrWhiteSpace(host))
         {
-            return new ConnectivityEndpoint(false, "", 0, usedHostOverride, false, "No host, IP or DNS override configured — there's nothing to check.");
+            return new ConnectivityEndpoint(false, "", 0, usedHostOverride, false, "No host, IP or DNS override configured, so there's nothing to check.");
         }
 
         var defaultPort = DefaultPortMapper.GetDefaultPort(engine);

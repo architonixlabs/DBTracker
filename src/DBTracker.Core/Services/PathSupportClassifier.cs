@@ -43,7 +43,7 @@ public static class PathSupportClassifier
         if (distinctStatuses.Count > 1)
         {
             return new PathSupportClassificationResult(PathSupportStatus.Unknown, null,
-                $"{matches.Count} reviewed rules match this pairing with conflicting outcomes ({string.Join(", ", distinctStatuses)}) — needs review rather than an automatic pick.");
+                $"{matches.Count} reviewed rules match this pairing with conflicting outcomes ({string.Join(", ", distinctStatuses)}). This needs review rather than an automatic pick.");
         }
 
         var best = matches.OrderByDescending(Specificity).First();

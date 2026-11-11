@@ -32,7 +32,7 @@ public class SecretLeakGuardTests
         var redacted = SecretLeakGuard.Redact("password=Sup3rSecret!");
 
         Assert.DoesNotContain("Sup3rSecret", redacted);
-        Assert.Equal("[redacted — looked like secret/private-key material]", redacted);
+        Assert.Equal("[redacted: looked like secret or private-key material]", redacted);
     }
 
     [Fact]

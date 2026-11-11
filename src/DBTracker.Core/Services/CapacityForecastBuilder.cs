@@ -37,7 +37,7 @@ public static class CapacityForecastBuilder
         }
         if (capacityLimitGb is null)
         {
-            gaps.Add("No storage capacity limit recorded — a growth rate can still be shown, but not an exhaustion date.");
+            gaps.Add("No storage capacity limit recorded. A growth rate can still be shown, but not an exhaustion date.");
         }
 
         if (growth.Count < 2)
@@ -81,7 +81,7 @@ public static class CapacityForecastBuilder
 
         if (maxRate <= 0)
         {
-            gaps.Add("Observed growth rate is flat or negative across every interval — no exhaustion projected from the current trend.");
+            gaps.Add("Observed growth rate is flat or negative across every interval, so no exhaustion is projected from the current trend.");
             return new CapacityForecastResult(true, avgRate, null, null, assumptions, gaps);
         }
 
@@ -95,7 +95,7 @@ public static class CapacityForecastBuilder
         }
         else
         {
-            gaps.Add("The slowest observed interval shows flat/negative growth — no upper-bound exhaustion date from that interval alone.");
+            gaps.Add("The slowest observed interval shows flat or negative growth, so it gives no upper-bound exhaustion date on its own.");
         }
 
         return new CapacityForecastResult(true, avgRate, earliest, latestExhaustion, assumptions, gaps);

@@ -19,7 +19,7 @@ public record FileEvaluation(string FileName, long SizeBytes, DateTime LastWrite
         FileEligibility.Eligible => "Matches configured rules",
         FileEligibility.PatternMismatch => "Name doesn't match the configured pattern(s)",
         FileEligibility.ZeroLength => "File is zero-length",
-        FileEligibility.StillChanging => "File size/timestamp changed between checks — still being written",
+        FileEligibility.StillChanging => "File size or timestamp changed between checks, so it's still being written",
         _ => ""
     };
 }

@@ -36,7 +36,7 @@ public static class VersionIdentityParser
             DatabaseEngine.MySql => ParseMySql(raw),
             DatabaseEngine.MongoDb => ParseMongo(raw),
             DatabaseEngine.Oracle => ParseOracle(raw),
-            _ => VersionParseResult.Unresolved("Engine is Other/custom — no normalization rule exists for it; needs manual review.")
+            _ => VersionParseResult.Unresolved("Engine is Other/custom, and no normalization rule exists for it. It needs manual review.")
         };
     }
 
@@ -94,7 +94,7 @@ public static class VersionIdentityParser
             var internalMajor = int.Parse(buildMatch.Groups[1].Value);
             if (!SqlServerBuildYears.TryGetValue(internalMajor, out var year))
             {
-                return VersionParseResult.Unresolved($"Internal SQL Server major build {internalMajor} is not in the known build-to-year map — needs manual review.");
+                return VersionParseResult.Unresolved($"Internal SQL Server major build {internalMajor} is not in the known build-to-year map. It needs manual review.");
             }
 
             var build = $"{buildMatch.Groups[3].Value}.{buildMatch.Groups[4].Value}";
@@ -114,7 +114,7 @@ public static class VersionIdentityParser
             int? min = m.Success ? int.Parse(m.Groups[2].Value) : null;
             var mariaBuild = m.Success ? m.Groups[3].Value : "";
             return new VersionParseResult(VersionResolutionStatus.NeedsReview, "MariaDB", maj, min, mariaBuild, "MariaDB",
-                "", "Version string identifies MariaDB, a related but distinct product from MySQL — confirm the correct support/patch catalogue before relying on this.");
+                "", "Version string identifies MariaDB, a related but distinct product from MySQL. Confirm the correct support and patch catalogue before relying on this.");
         }
 
         var match = Regex.Match(raw, @"^(\d+)\.(\d+)\.(\d+)(?:-(\w+))?");
