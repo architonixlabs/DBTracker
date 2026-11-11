@@ -5,15 +5,8 @@ namespace DBTracker.Core.Services;
 
 public record ChangeCompletionGateResult(bool CanComplete, IReadOnlyList<string> BlockingReasons, bool UsedException);
 
-/// <summary>
-/// Pure (no I/O) gate for completing a D10 MigrationCampaign (reaching CampaignState.Completed).
-/// A ChangeValidation record existing is not enough — every required evidence field on it must have
-/// actually passed, every required reviewer scope must have signed off Approved, and (per D11) the
-/// latest rehearsal for the same instance must still be current and passing. Editing
-/// DatabaseInstance.Version is not read anywhere in this evaluator — it cannot, by construction,
-/// complete a change on its own. hasActiveException is the single D14 bypass: an explicit, scoped,
-/// time-boxed risk acceptance rather than a silent override of any of the checks above.
-/// </summary>
+/// <summary>Gate for completing a migration campaign: every required evidence field passed, every required scope signed off, and the latest rehearsal is current and passing. DatabaseInstance.Version is never read here.</summary>
+/// <remarks>hasActiveException is the only bypass: a scoped, time-boxed risk acceptance.</remarks>
 public static class ChangeCompletionGateEvaluator
 {
     public static readonly string[] RequiredSignoffScopes = ["DBA", "Application owner"];

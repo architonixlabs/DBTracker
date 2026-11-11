@@ -11,12 +11,7 @@ public record CapacityForecastResult(
     IReadOnlyList<string> Assumptions,
     IReadOnlyList<string> MissingDataGaps);
 
-/// <summary>
-/// D19 — pure capacity-exhaustion forecasting from imported/referenced growth measurements. Always
-/// surfaces its assumptions and missing-data gaps rather than asserting one precise exhaustion date:
-/// a plausible earliest/latest range is derived from the fastest/slowest observed growth intervals,
-/// never a single number dressed up as certainty.
-/// </summary>
+/// <summary>Capacity-exhaustion forecast from imported growth measurements. Gives an earliest/latest range from the fastest and slowest observed growth, with assumptions and gaps, never one precise date.</summary>
 public static class CapacityForecastBuilder
 {
     private static readonly string[] StandardAssumptions =

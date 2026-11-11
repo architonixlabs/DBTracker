@@ -2,14 +2,7 @@ using DBTracker.Core.Enums;
 
 namespace DBTracker.Core.Entities;
 
-/// <summary>
-/// D13 — post-change validation for one instance within a D10 MigrationCampaign. This is the record
-/// ChangeCompletionGateEvaluator reads before a campaign is allowed to reach CampaignState.Completed —
-/// a bare edit of DatabaseInstance.Version is never, on its own, evidence any of this passed.
-/// NewBackupRestoreEvidenceOutcome plus LinkedBackupRecordId/LinkedRestoreEventId is the "new
-/// successful backup/restore-evidence requirement" from the acceptance criteria, reusing U01/U11/U12's
-/// existing evidence rather than inventing a parallel one.
-/// </summary>
+/// <summary>Post-change validation for one instance in a campaign. The completion gate reads this; editing DatabaseInstance.Version alone never counts as evidence.</summary>
 public class ChangeValidation
 {
     public int Id { get; set; }
@@ -21,7 +14,7 @@ public class ChangeValidation
     public DatabaseInstance? DatabaseInstance { get; set; }
 
     public string ObservedTargetBuildText { get; set; } = string.Empty;
-    /// <summary>Reuses D01's compatibility-level concept by name/shape, not a new rule — the text actually observed on the target after the change.</summary>
+    /// <summary>The compatibility level actually observed on the target after the change.</summary>
     public string ObservedCompatibilityLevel { get; set; } = string.Empty;
 
     public EvidenceCheckOutcome ApplicationTestsOutcome { get; set; } = EvidenceCheckOutcome.NotPerformed;

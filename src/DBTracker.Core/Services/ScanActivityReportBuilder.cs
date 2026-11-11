@@ -5,12 +5,7 @@ namespace DBTracker.Core.Services;
 public record ScanActivityInput(string InstanceName, string BackupFileLocation, DateTime? LastScanUtc, ScanStatus LastScanStatus, string LastScanError);
 public record ScanActivityRow(string InstanceName, string BackupFileLocation, DateTime? LastScanUtc, ScanStatus LastScanStatus, string LastScanError, ScannerHealth Scanner);
 
-/// <summary>
-/// Shared-drive scan status across every instance that has one configured — evidence the automated
-/// scan is actually running, not just that a path is set. Serves the DBA (is the scanner healthy?)
-/// and Auditor (is the file evidence current?) personas. Errored and stale (U02) scans sort first.
-/// Pure (no I/O).
-/// </summary>
+/// <summary>Shared-drive scan status for every instance with a location configured, as evidence the scanner is actually running. Errored and stale scans sort first.</summary>
 public static class ScanActivityReportBuilder
 {
     public static IReadOnlyList<ScanActivityRow> Build(

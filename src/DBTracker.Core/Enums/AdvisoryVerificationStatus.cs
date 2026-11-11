@@ -6,6 +6,6 @@ public enum AdvisoryVerificationStatus
     InProgress,
     Verified,
 
-    /// <summary>A specific, time-bounded exception was recorded instead of remediation (see D14, future epic) — tracked here as a status, not a full exception workflow yet.</summary>
+    /// <summary>A time-bounded exception was recorded instead of remediation.</summary>
     Exception
 }

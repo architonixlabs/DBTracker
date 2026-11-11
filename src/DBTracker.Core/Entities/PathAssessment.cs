@@ -2,13 +2,7 @@ using DBTracker.Core.Enums;
 
 namespace DBTracker.Core.Entities;
 
-/// <summary>
-/// A recorded evaluation of one source-to-target pairing for one instance (D08), produced by
-/// PathSupportClassifier against the curated PathSupportRule set. Relocation (same version, new
-/// host/platform) and cross-engine conversion are recorded with their own AssessmentType rather than
-/// being folded into a version upgrade. This never generates an executable migration script and never
-/// assumes zero downtime — Method only records which supported technique was chosen/evaluated.
-/// </summary>
+/// <summary>An evaluated source-to-target pairing for one instance. Relocation and cross-engine conversion get their own AssessmentType; nothing here generates a migration script or assumes zero downtime.</summary>
 public class PathAssessment
 {
     public int Id { get; set; }

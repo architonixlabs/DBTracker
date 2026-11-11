@@ -1,6 +1,6 @@
 namespace DBTracker.Core.Enums;
 
-/// <summary>D09 — the fixed set of areas an upgrade-readiness checklist covers, applied as relevant per engine.</summary>
+/// <summary>Areas an upgrade-readiness checklist covers, applied per engine as relevant.</summary>
 public enum ReadinessCheckArea
 {
     DriverOrmCompatibility,
@@ -11,7 +11,7 @@ public enum ReadinessCheckArea
     OperatingSystem,
     EditionFeatures,
     BackupTooling,
-    /// <summary>Reuses D01's compatibility-level concept (VersionIdentity.DatabaseCompatibilityLevel), not a separate rule.</summary>
+    /// <summary>Checks VersionIdentity.DatabaseCompatibilityLevel.</summary>
     EngineCompatibilityState,
     Other
 }

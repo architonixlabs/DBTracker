@@ -2,24 +2,15 @@ using DBTracker.Core.Enums;
 
 namespace DBTracker.Core.Services;
 
-/// <summary>Minimal backup-event facts needed for a trend period — raw, dated events, not a recomputed health status.</summary>
+/// <summary>Raw dated backup events for a trend period, not a recomputed health status.</summary>
 public record TrendBackupEvent(string InstanceName, DateTime TimestampUtc, BackupStatus Status, double? SizeMb, double? DurationMinutes);
 
-/// <summary>An incident open as of the period's end — the actual persisted U08 timestamp, not a status recomputed from today's policy.</summary>
+/// <summary>An incident open at the period's end, from its stored timestamps.</summary>
 public record TrendOutstandingRisk(string InstanceName, DateTime OpenedAtUtc, BackupHealth TriggerHealth);
 
 public record RepeatedFailureRow(string InstanceName, int FailureCount);
 
-/// <summary>
-/// Everything one side of a trend comparison needs (U22). SnapshotRows/SnapshotGeneratedAtUtc come
-/// from the nearest U10 ComplianceSnapshot at or before ToUtc — null means no snapshot covers this
-/// period, which the builder reports as an explicit missing-evidence period rather than silently
-/// falling back to today's live inventory (which would misrepresent instances that didn't exist yet
-/// or whose policy has since changed). BackupEvents/RestoreTestTimestamps/OutstandingRisks are raw,
-/// dated facts (BackupRecord/RestoreEvent/Incident rows already filtered to this period by the
-/// caller) — counting them isn't "inferring past health", it's counting things that actually
-/// happened at a known time.
-/// </summary>
+/// <summary>Inputs for one side of a trend comparison. Snapshot rows come from the nearest snapshot at or before ToUtc; null is reported as missing evidence, never filled from today's live inventory.</summary>
 public record TrendPeriodInput(
     DateTime FromUtc,
     DateTime ToUtc,
@@ -52,13 +43,7 @@ public record TrendPeriodResult(
 
 public record TrendComparisonResult(TrendPeriodResult PeriodA, TrendPeriodResult PeriodB);
 
-/// <summary>
-/// Compares two time periods for health coverage, outstanding-risk age, repeated failures, backup
-/// duration/size, and restore-test activity (U22) — pure (no I/O, no DB), built from already-fetched
-/// U10 snapshot rows and raw dated events so the comparison is fully unit-testable. Deliberately
-/// never re-derives a past health status from today's BackupHealthCalculator/instance list; a
-/// period with no snapshot evidence is flagged, not interpolated.
-/// </summary>
+/// <summary>Compares two periods for health coverage, risk age, repeated failures, backup duration/size and restore tests. Past health is never re-derived from today's data; a period without snapshot evidence is flagged.</summary>
 public static class TrendsReportBuilder
 {
     /// <summary>Instances with 2+ failed backup attempts within the period count as a repeated failure, not just one bad run.</summary>

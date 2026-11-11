@@ -7,13 +7,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace DBTracker.Infrastructure.Lifecycle;
 
-/// <summary>
-/// D02 — the curated/importable release and support catalogue. Every create/edit/override/refresh
-/// writes an append-only ReleaseCatalogRevision snapshot plus a U19 audit event, and bumps
-/// RevisionNumber, so a catalogue fact's history survives later changes. A failed refresh
-/// (RefreshAsync) never clears existing fields: only IsStale/LastRefreshError/LastRefreshAttemptUtc
-/// change, and the entry's prior facts stay exactly as they were.
-/// </summary>
+/// <summary>The curated release catalogue. Every change writes a revision snapshot and an audit event; a failed refresh only sets the staleness fields.</summary>
 public class ReleaseCatalogService(IDbContextFactory<DBTrackerDbContext> factory, AuditRecorder audit)
 {
     public async Task<List<ReleaseCatalogEntry>> ListAsync(DatabaseEngine? engine = null)
@@ -33,7 +27,7 @@ public class ReleaseCatalogService(IDbContextFactory<DBTrackerDbContext> factory
         return await db.ReleaseCatalogEntries.AsNoTracking().FirstOrDefaultAsync(c => c.Id == id);
     }
 
-    /// <summary>Catalogue entries for a family, for support-runway/patch-baseline computation — never calls any live vendor site, only what's already stored.</summary>
+    /// <summary>Stored catalogue entries for a family. Never calls a live vendor site.</summary>
     public async Task<List<ReleaseCatalogEntry>> FindApplicableAsync(DatabaseEngine engine, string family)
     {
         using var db = await factory.CreateDbContextAsync();
@@ -65,7 +59,7 @@ public class ReleaseCatalogService(IDbContextFactory<DBTrackerDbContext> factory
         return entry;
     }
 
-    /// <summary>Records a manual override of this entry's vendor-sourced facts — a reason, reviewer and optional expiry are required so an override never quietly becomes permanent, undocumented policy.</summary>
+    /// <summary>Records a manual override. Reason, reviewer and optional expiry are required so an override can't quietly become permanent.</summary>
     public async Task<bool> ApplyManualOverrideAsync(int entryId, string reason, string reviewedBy, DateTime? expiresUtc, Action<ReleaseCatalogEntry> applyChanges, string actorName)
     {
         using var db = await factory.CreateDbContextAsync();
@@ -102,12 +96,7 @@ public class ReleaseCatalogService(IDbContextFactory<DBTrackerDbContext> factory
         return true;
     }
 
-    /// <summary>
-    /// Re-confirms an entry against its configured source. This app curates facts manually rather
-    /// than polling live vendor pages, so "refresh" only validates the entry is still configured and
-    /// not expired; on failure the entry's own facts are left completely untouched and only the
-    /// staleness warning is set.
-    /// </summary>
+    /// <summary>Re-confirms an entry against its configured source. Facts are curated manually, so this only checks configuration and expiry; on failure only the staleness warning changes.</summary>
     public async Task<ReleaseCatalogRefreshOutcome> RefreshAsync(int entryId, string actorName)
     {
         using var db = await factory.CreateDbContextAsync();

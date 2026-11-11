@@ -9,12 +9,7 @@ public enum DiagnosticSeverity { Ok, Warning, Problem }
 public record DiagnosticItem(string Area, string Label, DiagnosticSeverity Severity, string Detail, string? NextActionUrl = null, string? NextActionLabel = null);
 public record PathCheck(string InstanceName, string Path, bool Reachable, string? Error);
 
-/// <summary>
-/// Admin-only setup/diagnostics checklist (U15) — "can I tell what's wrong without SSH/log access"
-/// for import/create readiness, file-path reachability, scan/alert/report enablement, the
-/// distribution list, and each background worker's heartbeat. Credentials are masked everywhere
-/// they'd otherwise show (SMTP password, ArxMail API key).
-/// </summary>
+/// <summary>Admin setup and diagnostics checks: import/create readiness, file-path reachability, scan/alert/report enablement, the distribution list, and worker heartbeats. Credentials are masked.</summary>
 public class SetupDiagnosticsService(
     IDbContextFactory<DBTrackerDbContext> factory,
     IConfiguration configuration,
@@ -32,7 +27,6 @@ public class SetupDiagnosticsService(
             ? new DiagnosticItem("Inventory", "Instances on file", DiagnosticSeverity.Warning, "No active instances yet.", "/instances/new", "Add an instance")
             : new DiagnosticItem("Inventory", "Instances on file", DiagnosticSeverity.Ok, $"{instanceCount} active instance(s) tracked."));
 
-        // Email
         var provider = configuration["Email:Provider"];
         if (string.IsNullOrWhiteSpace(provider) || provider == "None")
         {
@@ -52,7 +46,6 @@ public class SetupDiagnosticsService(
             items.Add(new DiagnosticItem("Email", "Provider", DiagnosticSeverity.Ok, $"ArxMail gateway at {endpoint} (API key: {Mask(configuration["Email:ArxMail:ApiKey"])})."));
         }
 
-        // Alerts / scan / reports enablement
         var scanMinutes = configuration.GetValue("BackupScan:IntervalMinutes", 15);
         items.Add(scanMinutes > 0
             ? new DiagnosticItem("Scanning", "Background scan", DiagnosticSeverity.Ok, $"Every {scanMinutes} minute(s).")
@@ -76,7 +69,6 @@ public class SetupDiagnosticsService(
                 : new DiagnosticItem("Reporting", "Scheduled report", DiagnosticSeverity.Warning, "Disabled (Reports:IntervalDays <= 0) — on-demand \"Send report\" still works."));
         }
 
-        // Worker heartbeats
         foreach (var worker in new[] { "Backup scan", "Alert check", "Scheduled report" })
         {
             var hb = heartbeats.Get(worker);
@@ -102,7 +94,7 @@ public class SetupDiagnosticsService(
         return items;
     }
 
-    /// <summary>Checks each configured backup-file location for reachability under the service's own process identity — the same identity the scanner itself runs as.</summary>
+    /// <summary>Checks each backup-file location under the service's own identity, which is the identity the scanner runs as.</summary>
     public async Task<List<PathCheck>> CheckFilePathsAsync()
     {
         using var db = await factory.CreateDbContextAsync();
@@ -128,7 +120,7 @@ public class SetupDiagnosticsService(
         return results;
     }
 
-    /// <summary>Sends a real test email to the given address, surfacing the true Disabled/Accepted/Failed outcome (reusing U09's EmailSendResult) rather than claiming success when nothing was attempted.</summary>
+    /// <summary>Sends a real test email and reports the true Disabled/Accepted/Failed outcome.</summary>
     public Task<EmailSendResult> SendTestEmailAsync(string toAddress, CancellationToken ct = default) =>
         emailSender.SendAsync(toAddress, "DBTracker test email", "This is a test email sent from the DBTracker setup/diagnostics page to confirm email delivery is working.", ct);
 

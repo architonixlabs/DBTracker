@@ -2,12 +2,7 @@ using DBTracker.Core.Enums;
 
 namespace DBTracker.Core.Entities;
 
-/// <summary>
-/// One append-only entry in a D12 ChangeWindow's cutover journal — an externally performed action,
-/// traffic/write-state note, go/no-go decision, the point of no return, or a rollback outcome, with
-/// its own timestamp. This table only ever records what a human says happened; nothing in this app
-/// runs a command against any tracked database as a result of adding a row here.
-/// </summary>
+/// <summary>An append-only cutover journal entry recording what a person says happened. Adding one runs nothing against any database.</summary>
 public class CutoverJournalEntry
 {
     public int Id { get; set; }

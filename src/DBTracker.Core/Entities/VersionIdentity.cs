@@ -2,20 +2,8 @@ using DBTracker.Core.Enums;
 
 namespace DBTracker.Core.Entities;
 
-/// <summary>
-/// Structured installed-version identity for one instance (D01) — layered on top of
-/// DatabaseInstance.Version, which stays exactly as-is and is never replaced. Normalizes the raw
-/// text into family/major/minor/build plus edition/distribution/patch-train/hosting context, and
-/// keeps three deliberately distinct concepts apart:
-///   - HostingEngineVersion: the actual server/engine binary version.
-///   - DatabaseCompatibilityLevel: a database-level compatibility setting (e.g. SQL Server's
-///     compat level), which can lag behind the engine binary after an in-place upgrade.
-///   - Per-node versions in a cluster/replica set (see ClusterNodeVersion) — Epic 17's
-///     Region/Cluster/ReplicaSet fields on DatabaseInstance describe *topology*; this describes the
-///     *version* observed at each node of that topology, a related but separate concern.
-/// An unresolved/unrecognized raw string is a correct, first-class outcome (ResolutionStatus) —
-/// it is never silently treated as a known, compliant product.
-/// </summary>
+/// <summary>Structured version identity parsed from DatabaseInstance.Version, which stays unchanged. Engine version, database compatibility level, and per-node versions (ClusterNodeVersion) are kept separate.</summary>
+/// <remarks>An unrecognized string stays Unresolved and is never treated as a known, compliant product.</remarks>
 public class VersionIdentity
 {
     public int Id { get; set; }
@@ -54,7 +42,7 @@ public class VersionIdentity
     public string AttestedBy { get; set; } = string.Empty;
     public DateTime? AttestedAtUtc { get; set; }
 
-    /// <summary>Dedupe state for D03's escalating support-runway notices — the smallest (most urgent) threshold already notified for this instance, and when.</summary>
+    /// <summary>Dedupe state for support-runway notices: the most urgent threshold already notified, and when.</summary>
     public int? LastRunwayNoticeThresholdDays { get; set; }
     public DateTime? LastRunwayNoticeAtUtc { get; set; }
 

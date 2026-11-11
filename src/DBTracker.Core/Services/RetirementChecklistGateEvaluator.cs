@@ -10,22 +10,13 @@ public record RetirementChecklistEvaluation(
     bool AllGatesSatisfied,
     IReadOnlyList<string> BlockingReasons);
 
-/// <summary>
-/// D22 — pure gating logic for a decommission/retirement checklist. Every input here is evidence
-/// already owned by an earlier epic (D07 dependencies, D16 chain coverage, D17 copy availability, D20
-/// certificate access, D13 rollback-retention deadline, D21 cost/contract review) plus the small set
-/// of genuinely manual facts on RetirementChecklist itself (legal-hold review, sign-offs). Nothing
-/// here reaches into a database — the caller (RetirementChecklistService) gathers every input and
-/// this function only classifies it. A gate with nothing recorded is Unknown, not Passed; a gate that
-/// genuinely doesn't apply (e.g. no active change to close a rollback window on) is NotApplicable —
-/// both count as "not yet satisfied" for AllGatesSatisfied, exactly like Blocked, since a correct
-/// Unknown must still require a scoped D14 exception to proceed past, not be silently treated as fine.
-/// </summary>
+/// <summary>Retirement gates computed from evidence the caller gathers (dependencies, chain coverage, copies, certificates, rollback deadline, cost review) plus the checklist's manual facts.</summary>
+/// <remarks>Unknown and NotApplicable count as unsatisfied, like Blocked, so proceeding past them needs a scoped exception.</remarks>
 public static class RetirementChecklistGateEvaluator
 {
     private static RetirementGateStatus Worse(RetirementGateStatus a, RetirementGateStatus b)
     {
-        // Blocked is worst, then Unknown, then NotApplicable, then Passed is best.
+        // Ordered worst to best: Blocked, Unknown, NotApplicable, Passed.
         int Rank(RetirementGateStatus s) => s switch
         {
             RetirementGateStatus.Blocked => 0,

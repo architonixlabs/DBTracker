@@ -8,11 +8,7 @@ namespace DBTracker.Infrastructure.Recovery;
 
 public record RetentionEvidenceView(DatabaseInstance Instance, IReadOnlyList<BackupCopyLocation> Copies, RetentionCoverageResult Coverage);
 
-/// <summary>
-/// D17 — backup-copy availability and retention evidence. StoragePathOrReference is masked by role
-/// at read time (MaskSensitivePaths), never only in the UI layer, so a CSV export built from this
-/// same read path can never leak the raw path to a role that shouldn't see it.
-/// </summary>
+/// <summary>Backup-copy availability and retention evidence. Paths are masked by role at read time, so exports built on this read can't leak them.</summary>
 public class BackupCopyLocationService(IDbContextFactory<DBTrackerDbContext> factory, AuditRecorder audit)
 {
     public const int DefaultStaleAfterDays = 30;

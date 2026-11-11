@@ -2,13 +2,7 @@ using DBTracker.Core.Enums;
 
 namespace DBTracker.Core.Entities;
 
-/// <summary>
-/// One chain-member type this instance's engine/topology actually requires for a full recovery
-/// (D16) — e.g. a WAL-archiving PostgreSQL instance records Base + WalArchive; a MySQL instance
-/// replicating via binlog records Base + Binlog; a point-snapshot engine with no chain concept at
-/// all simply has no rows here, which is exactly what keeps BackupChainCoverageCalculator honestly
-/// Unknown for it rather than inventing a chain requirement that doesn't apply.
-/// </summary>
+/// <summary>A chain member (e.g. Base + WalArchive) this instance needs for full recovery. Engines with no chain concept have no rows, which keeps coverage Unknown instead of invented.</summary>
 public class BackupChainRequirement
 {
     public int Id { get; set; }

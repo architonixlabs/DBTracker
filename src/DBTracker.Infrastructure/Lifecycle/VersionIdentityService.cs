@@ -6,12 +6,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace DBTracker.Infrastructure.Lifecycle;
 
-/// <summary>
-/// D01 — structured installed-version identity per instance, layered on top of
-/// DatabaseInstance.Version (which stays untouched). Every write records a U19 audit event; an
-/// unresolved/unrecognized raw string is stored and surfaced exactly as such rather than ever being
-/// coerced into a "known" family/major/minor.
-/// </summary>
+/// <summary>Structured version identity per instance, alongside the untouched DatabaseInstance.Version. Writes are audited, and unresolvable text is stored as unresolved.</summary>
 public class VersionIdentityService(IDbContextFactory<DBTrackerDbContext> factory, AuditRecorder audit)
 {
     public async Task<VersionIdentity?> GetByInstanceAsync(int instanceId)
@@ -22,7 +17,7 @@ public class VersionIdentityService(IDbContextFactory<DBTrackerDbContext> factor
             .FirstOrDefaultAsync(v => v.DatabaseInstanceId == instanceId);
     }
 
-    /// <summary>Re-parses the instance's own free-text Version field and stores/refreshes the structured identity from it. Used as the quick "resolve from existing Version" path.</summary>
+    /// <summary>Re-parses the instance's Version field into a stored identity.</summary>
     public async Task<VersionIdentity> ResolveFromInstanceVersionAsync(int instanceId, string actorName)
     {
         using var db = await factory.CreateDbContextAsync();
@@ -30,7 +25,7 @@ public class VersionIdentityService(IDbContextFactory<DBTrackerDbContext> factor
         return await SaveRawTextAsync(db, instance, instance.Version, VersionObservationSource.ManualEntry, actorName);
     }
 
-    /// <summary>Manual entry of a (possibly different, more precise) raw version string than DatabaseInstance.Version — the "entering structured version identity" path, including intentionally unresolvable text.</summary>
+    /// <summary>Manual entry of a raw version string, possibly more precise than DatabaseInstance.Version, including unresolvable text.</summary>
     public async Task<VersionIdentity> RecordManualRawVersionAsync(int instanceId, string rawVersionText, string actorName)
     {
         using var db = await factory.CreateDbContextAsync();
@@ -65,8 +60,7 @@ public class VersionIdentityService(IDbContextFactory<DBTrackerDbContext> factor
         identity.UpdatedAtUtc = DateTime.UtcNow;
         identity.UpdatedBy = actorName;
 
-        // Re-entering the raw text resets attestation — an attestation is a statement about a
-        // specific value; it must not silently carry forward onto a different one.
+        // An attestation covers a specific value, so changing the raw text resets it.
         if (!isNew && existing!.RawVersionText != identity.RawVersionText)
         {
             identity.IsAttested = false;
@@ -87,7 +81,7 @@ public class VersionIdentityService(IDbContextFactory<DBTrackerDbContext> factor
         return identity;
     }
 
-    /// <summary>Sets structured fields a parser can't infer: edition/distribution/patch train/hosting context/compatibility level. Manual, reviewer-entered metadata — distinct from raw-text parsing.</summary>
+    /// <summary>Sets fields a parser can't infer: edition, distribution, patch train, hosting, compatibility level.</summary>
     public async Task SetStructuredFieldsAsync(int instanceId, string edition, string distribution, string patchTrain,
         string hostingProvider, string hostingContext, string hostingEngineVersion, string databaseCompatibilityLevel, string actorName)
     {
@@ -113,7 +107,7 @@ public class VersionIdentityService(IDbContextFactory<DBTrackerDbContext> factor
         await audit.RecordUserActionAsync("", actorName, "VersionIdentityMetadataUpdated", "DatabaseInstance", instanceId.ToString(), instance.Name);
     }
 
-    /// <summary>D06 — a person explicitly attesting the currently-stored identity is correct, distinct from merely having entered text.</summary>
+    /// <summary>Records that a person attested the stored identity is correct.</summary>
     public async Task<bool> AttestAsync(int instanceId, string attestedBy)
     {
         using var db = await factory.CreateDbContextAsync();

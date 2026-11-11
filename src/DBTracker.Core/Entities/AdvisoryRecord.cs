@@ -2,12 +2,7 @@ using DBTracker.Core.Enums;
 
 namespace DBTracker.Core.Entities;
 
-/// <summary>
-/// One imported/referenced security advisory (D05) — vendor ID, affected build range, fixed build
-/// and provenance. This app never scans for or discovers advisories itself; it only records
-/// imported/reviewed results, deliberately not duplicating a dedicated vulnerability-management
-/// platform's own UI (DefectDojo/Dependency-Track per org standards already cover that).
-/// </summary>
+/// <summary>An imported security advisory with vendor ID, affected and fixed builds, and provenance. Recorded here, never discovered by this app.</summary>
 public class AdvisoryRecord
 {
     public int Id { get; set; }

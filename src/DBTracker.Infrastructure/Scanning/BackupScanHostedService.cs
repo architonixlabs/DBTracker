@@ -7,12 +7,7 @@ using Microsoft.Extensions.Logging;
 
 namespace DBTracker.Infrastructure.Scanning;
 
-/// <summary>
-/// Periodically re-scans every instance that has a backup file location configured, so discovered
-/// backup evidence stays current without anyone manually re-triggering it. Interval is configurable
-/// via "BackupScan:IntervalMinutes" (default 15); a value &lt;= 0 disables the background scan
-/// entirely (manual "Scan now" from the instance page still works).
-/// </summary>
+/// <summary>Re-scans every instance with a backup location configured. BackupScan:IntervalMinutes (default 15); &lt;= 0 disables it, and Scan now still works.</summary>
 public class BackupScanHostedService(
     IServiceScopeFactory scopeFactory,
     IConfiguration configuration,

@@ -6,12 +6,7 @@ using Microsoft.Extensions.Options;
 
 namespace DBTracker.Infrastructure.Identity;
 
-/// <summary>
-/// A deactivated account (U16) must never be able to sign in again, even with the correct password
-/// — CanSignInAsync is ASP.NET Core Identity's own extensibility point for exactly this, so
-/// PasswordSignInAsync comes back as a plain "not allowed" rather than this app re-implementing the
-/// whole sign-in pipeline.
-/// </summary>
+/// <summary>Blocks deactivated accounts via CanSignInAsync, so PasswordSignInAsync returns "not allowed" even with the right password.</summary>
 public class AppSignInManager(
     UserManager<ApplicationUser> userManager,
     IHttpContextAccessor contextAccessor,

@@ -2,12 +2,7 @@ using DBTracker.Core.Enums;
 
 namespace DBTracker.Core.Entities;
 
-/// <summary>
-/// A one-time, short-lived token backing the "scan this QR code on your phone to sign in" flow.
-/// The desktop (unauthenticated) creates it and polls its status; the phone (already authenticated
-/// from a normal login) approves or denies it; only then does the desktop redeem it for a session —
-/// this never bypasses password login, it just lets an already-trusted device vouch for a new one.
-/// </summary>
+/// <summary>A one-time, short-lived token for QR sign-in. An already signed-in phone approves it before the desktop can redeem it; password login is never bypassed.</summary>
 public class DeviceLinkToken
 {
     public int Id { get; set; }

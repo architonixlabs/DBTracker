@@ -5,12 +5,7 @@ namespace DBTracker.Core.Services;
 
 public record CopyAvailabilityResult(bool IsCurrentlyVerifiedAvailable, bool HasStaleVerification, string Explanation);
 
-/// <summary>
-/// D17 — pure classification of one backup-copy location's current availability, kept explicitly
-/// separate from U01's EvidenceLevel/"we once discovered a file" framing: a copy's FirstDiscoveredAtUtc
-/// is historical provenance only, never treated here as proof the copy is still there today. Only a
-/// recent Accessible verification counts as currently available.
-/// </summary>
+/// <summary>Current availability of one backup copy. Only a recent Accessible verification counts; FirstDiscoveredAtUtc is history, not proof the copy is still there.</summary>
 public static class BackupCopyAvailabilityEvaluator
 {
     public static CopyAvailabilityResult Evaluate(BackupCopyLocation copy, DateTime nowUtc, int staleAfterDays)

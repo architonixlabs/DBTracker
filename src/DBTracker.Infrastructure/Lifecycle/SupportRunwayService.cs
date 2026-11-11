@@ -10,7 +10,6 @@ using Microsoft.Extensions.Configuration;
 
 namespace DBTracker.Infrastructure.Lifecycle;
 
-/// <summary>Everything SupportRunwayService needs about one instance's runway, in one place for the UI.</summary>
 public record InstanceRunwayView(
     DatabaseInstance Instance,
     VersionIdentity? Identity,
@@ -18,13 +17,7 @@ public record InstanceRunwayView(
     SupportRunwayResult Runway,
     SupportRunwayDecision? LatestDecision);
 
-/// <summary>
-/// D03 — support runway/deadline computation and the escalating, deduplicated notice sweep.
-/// Matching an instance's resolved identity to a catalogue entry, and the phase/days-remaining math
-/// itself, are pure (SupportRunwayCalculator); this class is just the I/O around it: finding the
-/// match, persisting dedupe state, and routing a notice through the existing U07 subscription/
-/// notification plumbing when a more urgent threshold is crossed.
-/// </summary>
+/// <summary>Finds each instance's catalogue match, persists notice dedupe state, and sends a notice when a more urgent threshold is crossed. The math is in SupportRunwayCalculator.</summary>
 public class SupportRunwayService(
     IDbContextFactory<DBTrackerDbContext> factory,
     AuditRecorder audit,
@@ -87,13 +80,7 @@ public class SupportRunwayService(
             reason: $"{actionType}: {actionReference}");
     }
 
-    /// <summary>
-    /// One sweep: for every non-archived instance with a resolved identity matched to a catalogue
-    /// entry, check whether a more urgent configured threshold has been crossed since the last
-    /// notice, and if so raise exactly one deduplicated in-app + email notice. Safe to call either
-    /// from the background hosted service or an explicit "Evaluate now" admin action — both paths
-    /// share this one method so the behavior (and dedupe state) is identical either way.
-    /// </summary>
+    /// <summary>One sweep: raise one deduplicated notice per instance that crossed a more urgent threshold. Shared by the hosted service and the manual action so dedupe behaves the same.</summary>
     public async Task<int> EvaluateAndNotifyAsync(CancellationToken ct = default)
     {
         using var db = await factory.CreateDbContextAsync(ct);

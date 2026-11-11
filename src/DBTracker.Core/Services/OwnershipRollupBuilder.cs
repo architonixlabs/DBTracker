@@ -5,10 +5,7 @@ namespace DBTracker.Core.Services;
 public record OwnershipRollupInput(string Company, string Department, BackupHealth Health, string ContactName);
 public record OwnershipRollupRow(string Company, string Department, int InstanceCount, int OnTrack, int Overdue, int Failed, int NeverBackedUp, string PrimaryContacts);
 
-/// <summary>
-/// Health counts rolled up by company/department. Serves the IT Manager persona: "who owns this"
-/// and where risk is concentrated, without digging through the raw instance grid. Pure (no I/O).
-/// </summary>
+/// <summary>Health counts rolled up by company and department, to show where risk is concentrated and who owns it.</summary>
 public static class OwnershipRollupBuilder
 {
     public static IReadOnlyList<OwnershipRollupRow> Build(IEnumerable<OwnershipRollupInput> inputs) =>

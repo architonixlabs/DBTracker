@@ -6,11 +6,7 @@ using Microsoft.Extensions.Logging;
 
 namespace DBTracker.Infrastructure.Recovery;
 
-/// <summary>
-/// Periodic sweep for D20's certificate-expiry notices — same shape as SupportRunwayCheckHostedService.
-/// "CertificateExpiry:IntervalMinutes" (default 1440, once a day); &lt;= 0 disables it. The same logic
-/// is also reachable synchronously via an explicit "Evaluate now" admin action for testing.
-/// </summary>
+/// <summary>Periodic certificate-expiry notice sweep. CertificateExpiry:IntervalMinutes (default 1440); &lt;= 0 disables it.</summary>
 public class CertificateExpiryCheckHostedService(
     IServiceScopeFactory scopeFactory,
     IConfiguration configuration,

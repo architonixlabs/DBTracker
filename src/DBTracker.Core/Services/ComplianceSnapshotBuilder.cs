@@ -3,16 +3,12 @@ using DBTracker.Core.Enums;
 
 namespace DBTracker.Core.Services;
 
-/// <summary>Frozen per-instance row inside a stored ComplianceSnapshot (U10) — plain data, never recomputed after generation.</summary>
+/// <summary>A frozen per-instance row inside a stored ComplianceSnapshot, never recomputed.</summary>
 public record ComplianceSnapshotRow(
     string InstanceName, string Company, string Department, InstanceRole Role, EnvironmentTier Environment,
     DateTime? LastBackupUtc, BackupHealth Health, bool RestoreTested);
 
-/// <summary>
-/// Builds and (de)serializes the frozen row set a ComplianceSnapshot stores. Pure (no I/O) —
-/// serialization correctness (round-tripping, and staying stable even if the source instances are
-/// later edited) is unit-testable without a database.
-/// </summary>
+/// <summary>Builds and (de)serializes a snapshot's frozen rows.</summary>
 public static class ComplianceSnapshotBuilder
 {
     public static IReadOnlyList<ComplianceSnapshotRow> BuildRows(IEnumerable<ComplianceReportRow> rows) =>

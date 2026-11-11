@@ -2,7 +2,7 @@ using DBTracker.Core.Enums;
 
 namespace DBTracker.Core.Entities;
 
-/// <summary>One reviewer's sign-off on a D13 ChangeValidation, within their own named scope (e.g. "DBA", "Application owner", "Security") — append-only history, never overwritten by a later sign-off from someone else.</summary>
+/// <summary>One reviewer's sign-off within their named scope (e.g. "DBA", "Security"). Append-only.</summary>
 public class ChangeValidationSignoff
 {
     public int Id { get; set; }

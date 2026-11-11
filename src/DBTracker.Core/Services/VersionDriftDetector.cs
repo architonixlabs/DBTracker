@@ -3,15 +3,9 @@ using DBTracker.Core.Enums;
 
 namespace DBTracker.Core.Services;
 
-/// <summary>Pure comparison of a declared identity against one observation (D06).</summary>
 public record DriftDetectionResult(DriftStatus Status, IReadOnlyList<string> DifferingFields);
 
-/// <summary>
-/// Compares a declared VersionIdentity (manually entered/attested) against one VersionObservation
-/// (manual import today; a FutureCollector result eventually). A failed observation (permission
-/// denied/unreachable) is always Unknown — it must never be reported as drift, since that would
-/// imply the asset changed when all that actually happened is the check couldn't run.
-/// </summary>
+/// <summary>Compares a declared VersionIdentity with one observation. A failed observation is always Unknown, never drift.</summary>
 public static class VersionDriftDetector
 {
     public static DriftDetectionResult Detect(VersionIdentity declared, VersionObservation observation, DatabaseEngine engine)

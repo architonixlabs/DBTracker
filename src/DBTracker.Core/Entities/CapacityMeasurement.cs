@@ -2,13 +2,7 @@ using DBTracker.Core.Enums;
 
 namespace DBTracker.Core.Entities;
 
-/// <summary>
-/// D19 — one timestamped capacity/performance measurement (growth, free space, workload, or a
-/// performance baseline), imported or referenced from existing monitoring rather than collected by a
-/// new continuous profiler built into this app. Unit/MeasurementPeriodDescription/Source are explicit
-/// so a reader never has to guess what a bare number means; freshness is always derived live from
-/// MeasuredAtUtc vs. "now", never stored as a separate stale/fresh flag that could drift out of sync.
-/// </summary>
+/// <summary>A timestamped capacity or performance measurement imported from existing monitoring. Freshness is derived from MeasuredAtUtc, never stored.</summary>
 public class CapacityMeasurement
 {
     public int Id { get; set; }

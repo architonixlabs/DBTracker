@@ -8,13 +8,7 @@ namespace DBTracker.Infrastructure.Lifecycle;
 
 public record ArchivedInstanceRow(int Id, string Name, string Application, string Company, DateTime? ArchivedAtUtc, string ArchivedBy, string ArchiveReason);
 
-/// <summary>
-/// Archive/unarchive with preview, attribution and audit (U14). Archiving never deletes anything —
-/// backup/restore/change history stays attached to the instance row, which the background scan/
-/// alert/report sweeps already exclude via their own `!IsArchived` filters; unarchiving makes the
-/// instance visible to those sweeps again on their next run, which is exactly "health/alert
-/// eligibility recomputed" since nothing about health is cached.
-/// </summary>
+/// <summary>Archive and unarchive with preview, attribution and audit. Nothing is deleted; sweeps skip archived instances and pick them up again after unarchive.</summary>
 public class InstanceArchiveService(IDbContextFactory<DBTrackerDbContext> factory, AuditRecorder audit)
 {
     public async Task<ArchiveImpactCounts> PreviewAsync(int instanceId)
@@ -84,9 +78,7 @@ public class InstanceArchiveService(IDbContextFactory<DBTrackerDbContext> factor
         instance.UpdatedAtUtc = DateTime.UtcNow;
         await db.SaveChangesAsync();
 
-        // Nothing about health/alert eligibility is cached on the row — the next dashboard/list
-        // read, scan sweep and alert sweep all recompute from scratch and will simply stop
-        // excluding this instance now that IsArchived is false.
+        // Health isn't cached, so the next read and sweep recompute it now that IsArchived is false.
         await audit.RecordUserActionAsync(actorId, actorName, "InstanceUnarchived", "DatabaseInstance", instanceId.ToString(), instance.Name, $"Previously archived: {previousReason}");
         return true;
     }

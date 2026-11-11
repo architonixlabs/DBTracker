@@ -2,16 +2,7 @@ using DBTracker.Core.Enums;
 
 namespace DBTracker.Core.Entities;
 
-/// <summary>
-/// D11 — one rehearsal of a migration method against a named source/target, on a representative
-/// dataset, for one instance within a D10 MigrationCampaign. Reuses U11/U12 restore evidence via
-/// LinkedRestoreEventId rather than duplicating the restore-event model — the rehearsal's own
-/// BackupRestoreOutcome records whether that restore (if any) actually succeeded as part of this
-/// rehearsal. PostCutoverWriteDisposition/PostCutoverWriteReconciliationPlan exist specifically so a
-/// rollback is never implied to preserve post-cutover writes automatically — that must be an explicit,
-/// documented decision. RehearsalEvidenceEvaluator (pure) is what decides freshness/pass-fail from
-/// these fields; nothing here is auto-computed.
-/// </summary>
+/// <summary>One rehearsal of a migration method on a representative dataset. Post-cutover write handling must be stated explicitly, since a rollback never preserves those writes automatically.</summary>
 public class RehearsalRecord
 {
     public int Id { get; set; }
@@ -22,7 +13,7 @@ public class RehearsalRecord
     public int DatabaseInstanceId { get; set; }
     public DatabaseInstance? DatabaseInstance { get; set; }
 
-    /// <summary>Optional traceability back to the D08 path assessment this rehearsal exercises — never required, since a rehearsal can precede a formal assessment.</summary>
+    /// <summary>Optional link to the path assessment this rehearsal exercises.</summary>
     public int? PathAssessmentId { get; set; }
     public PathAssessment? PathAssessment { get; set; }
 
@@ -36,7 +27,7 @@ public class RehearsalRecord
     public double? DurationMinutes { get; set; }
 
     public EvidenceCheckOutcome BackupRestoreOutcome { get; set; } = EvidenceCheckOutcome.NotPerformed;
-    /// <summary>The specific U11/U12 restore evidence this rehearsal's backup-restore step relied on, when known — reused, not duplicated.</summary>
+    /// <summary>The restore evidence this rehearsal relied on, when known.</summary>
     public int? LinkedRestoreEventId { get; set; }
     public RestoreEvent? LinkedRestoreEvent { get; set; }
 

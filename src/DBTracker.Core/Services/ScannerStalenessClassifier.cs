@@ -20,11 +20,7 @@ public record ScannerHealth(
     DateTime? NextExpectedCheckUtc,
     string RecoveryHint);
 
-/// <summary>
-/// Separates "is the scanner itself still running" (U02) from "is the backup healthy" — an old
-/// successful scan can go stale even though its last result was Success, and a stale/erroring
-/// scanner must never be read as proof a backup is fine. Pure (no I/O).
-/// </summary>
+/// <summary>Whether the scanner itself is still running, separate from backup health. A stale or erroring scanner is never proof a backup is fine.</summary>
 public static class ScannerStalenessClassifier
 {
     public static ScannerHealth Classify(
@@ -47,9 +43,7 @@ public static class ScannerStalenessClassifier
                 "This instance has never been scanned. Use \"Scan now\" or wait for the next background sweep.");
         }
 
-        // scanIntervalMinutes <= 0 means the periodic background sweep is disabled (manual "Scan
-        // now" only, same convention as BackupScanHostedService) — there's no schedule to have
-        // gone stale against, so only Error/NeverScanned/Healthy apply, never Stale.
+        // An interval <= 0 means the background sweep is off (manual Scan now only), so nothing can go Stale.
         if (scanIntervalMinutes <= 0)
         {
             return lastScanStatus == ScanStatus.Error

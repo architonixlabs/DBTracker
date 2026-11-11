@@ -2,12 +2,7 @@ using DBTracker.Core.Enums;
 
 namespace DBTracker.Core.Entities;
 
-/// <summary>
-/// Tracks the human response to an instance's alertable health (U08) — assignment, acknowledgement,
-/// a note/runbook/ticket reference, and escalation — entirely separate from BackupHealthCalculator's
-/// output. Acknowledging or assigning an incident never changes the computed health; it only records
-/// that someone is on it.
-/// </summary>
+/// <summary>The human response to an alert: assignment, acknowledgement, ticket reference, escalation. It never changes computed health.</summary>
 public class Incident
 {
     public int Id { get; set; }

@@ -2,13 +2,7 @@ using DBTracker.Core.Enums;
 
 namespace DBTracker.Core.Entities;
 
-/// <summary>
-/// A "this contact info looks wrong" request (U21) — any authenticated viewer (e.g. Dev, who isn't
-/// authorized to edit the instance directly) can submit one; only an authorized reviewer
-/// (Roles.CanEditPolicy) can approve or reject it. Approving applies only the proposed fields that
-/// were actually filled in — an empty proposed field means "no change", same convention U17's CSV
-/// importer uses for "field present but absent from this row".
-/// </summary>
+/// <summary>A request from any signed-in user to fix an instance's contact details. Only CanEditPolicy roles approve it, and only filled-in proposed fields are applied.</summary>
 public class ContactCorrectionRequest
 {
     public int Id { get; set; }

@@ -1,11 +1,6 @@
 namespace DBTracker.Core.Entities;
 
-/// <summary>
-/// Explicit user-to-team membership (U21) — the basis for "My instances" and team-scoped
-/// notification subscriptions, instead of matching a user against a raw free-text contact email.
-/// Purely a personalization link: it narrows what's shown as relevant, never what the user's role
-/// already allows them to see or do.
-/// </summary>
+/// <summary>A user's membership in a team. It drives My instances and team subscriptions, never access.</summary>
 public class TeamMembership
 {
     public int Id { get; set; }

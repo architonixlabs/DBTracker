@@ -8,19 +8,8 @@ namespace DBTracker.Infrastructure.Notifications;
 public record NotificationInboxItem(int Id, int? DatabaseInstanceId, string InstanceName, string Message, NotificationSeverity Severity, DateTime CreatedAtUtc, bool IsRead);
 public record NotificationInboxPage(IReadOnlyList<NotificationInboxItem> Items, int TotalCount, int UnreadCount);
 
-/// <summary>
-/// Uses its own short-lived DbContext per call (via the factory) rather than an injected scoped
-/// one — this service is used from NotificationBell, which renders on every page alongside that
-/// page's own ambient scoped context, so sharing one would race.
-///
-/// Notifications themselves stay a shared/broadcast table (U07 didn't change who an alert is
-/// about), but read state is now personal: NotificationReadState is a per-(notification,user) row,
-/// and a user who subscribes (NotificationSubscription) only sees the slice they opted into. A
-/// user's first-ever visit treats every notification that already existed at that moment as
-/// already read — the "migration" of the old shared world, applied lazily per user rather than as
-/// a single big-bang backfill — so nobody is confronted with years of backlog as unread; only
-/// notifications created after that first visit are ever unread for them.
-/// </summary>
+/// <summary>Uses a short-lived DbContext per call because NotificationBell renders beside every page's own scoped context, and sharing one would race.</summary>
+/// <remarks>Notifications are broadcast; read state is per user. On a user's first visit, every existing notification is marked read, so nobody starts with a backlog of unread alerts.</remarks>
 public class NotificationService(IDbContextFactory<DBTrackerDbContext> factory)
 {
     public async Task<NotificationInboxPage> GetInboxAsync(string userId, int page = 1, int pageSize = 20)

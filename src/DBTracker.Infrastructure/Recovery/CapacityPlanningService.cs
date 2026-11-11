@@ -13,12 +13,7 @@ public record CapacityPlanningView(
     IReadOnlyList<WorkloadComparison> Comparisons,
     CapacityForecastResult Forecast);
 
-/// <summary>
-/// D19 — capacity/performance planning evidence: imported/referenced measurements plus the migration
-/// space estimate and pre/post workload comparisons they support. CapacityForecastBuilder (pure)
-/// does all the actual projection math; this service is only the I/O around it, same split as every
-/// other D16-D20 service.
-/// </summary>
+/// <summary>Capacity measurements, migration space estimates and workload comparisons. Projection math lives in CapacityForecastBuilder.</summary>
 public class CapacityPlanningService(IDbContextFactory<DBTrackerDbContext> factory, AuditRecorder audit)
 {
     public async Task<CapacityPlanningView?> GetForInstanceAsync(int instanceId, double? capacityLimitGb)

@@ -2,10 +2,7 @@ using DBTracker.Core.Entities;
 
 namespace DBTracker.Core.Services;
 
-/// <summary>
-/// Diffs two snapshots of a DatabaseInstance's editable fields into change-log entries — audit
-/// evidence of who changed what, not just that the record was touched. Pure (no I/O).
-/// </summary>
+/// <summary>Diffs two snapshots of an instance's editable fields into change-log entries.</summary>
 public static class InstanceChangeLogBuilder
 {
     public static IReadOnlyList<InstanceChangeLog> Diff(DatabaseInstance before, DatabaseInstance after, string changedBy, DateTime nowUtc)

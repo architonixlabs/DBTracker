@@ -5,13 +5,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace DBTracker.Infrastructure.MigrationPlanning;
 
-/// <summary>
-/// D07 — manual technical-dependency mapping per instance. There is deliberately no auto-discovery
-/// here; every row is entered by a person and every write goes through U19 audit. ImpactAsync is the
-/// read path the per-instance migration page uses to show downstream consumers/unresolved
-/// dependencies before a shared-engine change — it's pure arithmetic (DependencyImpactAssessor) over
-/// whatever has actually been recorded.
-/// </summary>
+/// <summary>Manually mapped dependencies per instance, with audited writes. ImpactAsync shows downstream consumers and unresolved dependencies before a shared-engine change.</summary>
 public class DependencyService(IDbContextFactory<DBTrackerDbContext> factory, AuditRecorder audit)
 {
     public async Task<List<InstanceDependency>> ListForInstanceAsync(int instanceId)

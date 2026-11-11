@@ -5,12 +5,7 @@ namespace DBTracker.Core.Services;
 
 public record WebhookAlertPayload(string Event, string Text, string InstanceName, string Application, string Company, string Department, string Health, DateTime TimestampUtc);
 
-/// <summary>
-/// Builds the payload for an outbound webhook alert. Generic on purpose — a top-level "text" field
-/// is understood by Slack incoming webhooks and most other generic receivers, so this stays usable
-/// without assuming one specific platform. Pure (no I/O, no serialization — the caller serializes
-/// and sends it).
-/// </summary>
+/// <summary>Webhook alert payload. A top-level "text" field works with Slack incoming webhooks and most generic receivers; the caller serializes and sends it.</summary>
 public static class WebhookPayloadBuilder
 {
     public static WebhookAlertPayload BuildAlertPayload(DatabaseInstance instance, BackupHealth health, DateTime nowUtc)

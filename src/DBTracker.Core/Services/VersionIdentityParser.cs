@@ -3,7 +3,7 @@ using DBTracker.Core.Enums;
 
 namespace DBTracker.Core.Services;
 
-/// <summary>Result of normalizing one raw version string into structured identity fields (D01).</summary>
+/// <summary>Structured identity fields parsed from one raw version string.</summary>
 public record VersionParseResult(
     VersionResolutionStatus Status,
     string Family,
@@ -18,12 +18,7 @@ public record VersionParseResult(
         new(VersionResolutionStatus.Unresolved, "", null, null, "", "", "", reason);
 }
 
-/// <summary>
-/// Pure, engine-specific normalization of a raw version string (D01) — no universal semantic-version
-/// rule, because the vendor review found engine-specific numbering (SQL Server's marketing year vs.
-/// internal build, Oracle's "19c" naming, MySQL/MariaDB ambiguity) makes a generic parser actively
-/// wrong. Unresolved/NeedsReview are correct outcomes, never silently defaulted to "compliant".
-/// </summary>
+/// <summary>Engine-specific version normalization. A generic semver rule is wrong here (SQL Server marketing year vs build, Oracle "19c", MySQL/MariaDB ambiguity); Unresolved and NeedsReview are valid outcomes.</summary>
 public static class VersionIdentityParser
 {
     public static VersionParseResult Parse(DatabaseEngine engine, string? rawVersionText)
@@ -113,8 +108,7 @@ public static class VersionIdentityParser
     {
         if (raw.Contains("MariaDB", StringComparison.OrdinalIgnoreCase))
         {
-            // Related but distinct product under the same engine enum value — flagged, not silently
-            // treated as MySQL itself, since support/patch rules differ between the two.
+            // MariaDB shares the MySQL engine value but has different support and patch rules, so it's flagged.
             var m = Regex.Match(raw, @"(\d+)\.(\d+)\.(\d+)");
             int? maj = m.Success ? int.Parse(m.Groups[1].Value) : null;
             int? min = m.Success ? int.Parse(m.Groups[2].Value) : null;

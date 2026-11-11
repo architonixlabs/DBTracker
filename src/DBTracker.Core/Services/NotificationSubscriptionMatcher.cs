@@ -3,12 +3,7 @@ using DBTracker.Core.Enums;
 
 namespace DBTracker.Core.Services;
 
-/// <summary>
-/// Whether a subscription (U07) applies to a given instance/company. Purely a narrowing filter on
-/// top of an already-broadcast notification — a subscription can never surface an instance the
-/// subscriber wasn't already authorized to see, since the app has no per-instance row-level
-/// security today (that's deferred to U21); it only decides what a user is told about.
-/// </summary>
+/// <summary>Whether a subscription applies to an instance or company. Only narrows an already-broadcast notification; it can't surface anything the subscriber couldn't already see.</summary>
 public static class NotificationSubscriptionMatcher
 {
     public static bool Matches(NotificationSubscription subscription, int instanceId, string company, int? ownerTeamId = null) => subscription.Scope switch
@@ -17,8 +12,7 @@ public static class NotificationSubscriptionMatcher
         SubscriptionScope.Instance => subscription.DatabaseInstanceId == instanceId,
         SubscriptionScope.Company => !string.IsNullOrWhiteSpace(company) &&
             string.Equals(subscription.Company, company, StringComparison.OrdinalIgnoreCase),
-        // U21: a team subscription is still just a narrowing filter on an already-broadcast alert —
-        // it can't surface an instance the subscriber's role didn't already let them see.
+        // Team subscriptions narrow too; they never widen what the subscriber's role can see.
         SubscriptionScope.Team => ownerTeamId is not null && subscription.TeamId == ownerTeamId,
         _ => false
     };

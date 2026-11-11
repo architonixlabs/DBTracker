@@ -2,11 +2,7 @@ using DBTracker.Core.Enums;
 
 namespace DBTracker.Core.Services;
 
-/// <summary>
-/// A flat, denormalized row for the Instances list/dashboard — carries only the fields those views
-/// render, so the query that produces it (InstanceOverviewService) never has to pull each
-/// instance's full BackupRecords/RestoreEvents graph just to show a grid (U06).
-/// </summary>
+/// <summary>A flat row carrying only what the Instances list and dashboard render, so the query never loads full backup/restore history.</summary>
 public record InstanceListRow(
     int Id,
     string Name,
@@ -45,7 +41,7 @@ public enum InstanceSortKey
     Environment
 }
 
-/// <summary>Everything the Instances list needs to reproduce a view from a URL (U05) — every field round-trips through query-string parameters.</summary>
+/// <summary>Everything needed to reproduce an Instances view from a URL; every field round-trips through the query string.</summary>
 public record InstanceListQuery(
     string? Search = null,
     DatabaseEngine? Engine = null,
@@ -71,11 +67,7 @@ public record InstanceListResult(IReadOnlyList<InstanceListRow> Items, int Total
     public int TotalPages => PageSize <= 0 ? 1 : Math.Max(1, (int)Math.Ceiling(TotalCount / (double)PageSize));
 }
 
-/// <summary>
-/// Pure filter/sort/page over an already-materialized set of rows (U05/U06) — no EF, no I/O, so
-/// the query logic that drives the Instances list, saved views and shareable URLs is fully
-/// unit-testable independent of the database.
-/// </summary>
+/// <summary>Filter, sort and page over materialized rows, shared by the Instances list, saved views and shareable URLs.</summary>
 public static class InstanceListFilter
 {
     public const int MaxPageSize = 200;
@@ -153,9 +145,7 @@ public static class InstanceListFilter
 
         if (query.MyInstancesOnly)
         {
-            // U21: "mine" now means contact email match (unchanged, Epic 12 behavior) OR team
-            // membership OR being the backup contact — never a broader access grant, just a wider
-            // personalization match than a single free-text email.
+            // Mine means contact email, backup contact, or team membership. A personalization match, never an access grant.
             items = items.Where(r => IsMine(r, query.MyEmail, query.MyTeamIds));
         }
 
@@ -174,12 +164,7 @@ public static class InstanceListFilter
     public static IReadOnlyList<string> SplitTags(string tags) =>
         tags.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
-    /// <summary>
-    /// U21: whether an instance counts as "mine" for a given viewer — contact email, backup contact
-    /// email, or owner-team membership. Pure/testable so this personalization rule can be verified
-    /// without a database; it is a visibility *filter*, never a grant — it only ever narrows what a
-    /// role-authorized viewer is shown, same note as NotificationSubscriptionMatcher.
-    /// </summary>
+    /// <summary>Whether an instance counts as mine: contact email, backup contact email, or owner-team membership. It only narrows what an authorized viewer sees.</summary>
     public static bool IsMine(InstanceListRow row, string? myEmail, IReadOnlySet<int>? myTeamIds)
     {
         if (!string.IsNullOrWhiteSpace(myEmail) &&

@@ -3,13 +3,7 @@ using DBTracker.Core.Enums;
 
 namespace DBTracker.Core.Services;
 
-/// <summary>
-/// D18 — pure staleness/outcome classification for one MaintenanceEvidenceRecord, kept on its own
-/// axis from BackupHealth (U04's "separate concerns" pattern) and always describing a recorded,
-/// point-in-time result rather than continuously measured HA health. A Failed outcome always wins
-/// regardless of how recently it ran; a Passed outcome with no recorded schedule stays Unknown rather
-/// than being assumed Current.
-/// </summary>
+/// <summary>Staleness and outcome of one recorded maintenance result, separate from backup health. Failed always wins; a Passed result with no schedule stays Unknown, not Current.</summary>
 public static class MaintenanceEvidenceStalenessClassifier
 {
     public static MaintenanceEvidenceStatus Classify(MaintenanceEvidenceRecord record, DateTime nowUtc)

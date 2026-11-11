@@ -3,7 +3,7 @@ using DBTracker.Core.Enums;
 
 namespace DBTracker.Core.Services;
 
-/// <summary>Four distinct facts about one instance's patch position (D04) — never collapsed into a single "update available" signal.</summary>
+/// <summary>Four separate facts about an instance's patch position, never collapsed into one "update available" signal.</summary>
 public record PatchBaselineResult(
     string InstalledLabel,
     ReleaseCatalogEntry? LatestApplicableBranchPatch,
@@ -12,15 +12,8 @@ public record PatchBaselineResult(
     bool IsMajorUpgradeFromApproved,
     string Notes);
 
-/// <summary>
-/// Pure comparison logic for D04. Previews are excluded by default (includePreview). The approved
-/// target only ever comes from an explicit, reviewed, non-expired ApprovedPatchBaseline — this
-/// method never promotes "newest GA" into "approved" on its own, so an unsupported/unreviewed
-/// target is never auto-recommended. A same-branch patch and a different-major "approved" target
-/// are reported as separate facts (IsMajorUpgradeFromApproved) rather than one blended
-/// recommendation, because a patch within a supported branch is a materially different action from
-/// a major-version migration.
-/// </summary>
+/// <summary>Patch-position comparison. Previews are excluded by default, and the approved target only comes from a reviewed, unexpired baseline, never from newest GA.</summary>
+/// <remarks>A same-branch patch and a major-version approved target are reported separately (IsMajorUpgradeFromApproved), since they are very different actions.</remarks>
 public static class PatchBaselineComparer
 {
     public static PatchBaselineResult Compare(

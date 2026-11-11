@@ -2,17 +2,7 @@ using DBTracker.Core.Enums;
 
 namespace DBTracker.Core.Entities;
 
-/// <summary>
-/// D20 — a TLS certificate or recovery-key/encryption-certificate dependency for one instance.
-/// SecretStoreReference is a pointer into an approved secret-management system (e.g. a Vault path or
-/// key-vault secret name) and must never hold the actual secret/private key — there is deliberately
-/// no field on this entity that could hold one, and SecretLeakGuard additionally screens free-text
-/// fields (Notes, RenewalEvidenceText) before they're ever shown or exported. VerifiedBackupRestoreAccess/
-/// LastAccessCheckAtUtc record that someone proved the key can actually decrypt a real backup/restore
-/// without storing any private material to do it. LastRotatedAtUtc/RotationIntervalDays are a wholly
-/// separate concept from ExpiresAtUtc — a certificate's expiry and its key's rotation cadence are
-/// evaluated independently (CertificateExpiryEvaluator vs. KeyRotationEvaluator).
-/// </summary>
+/// <summary>A TLS certificate or recovery-key dependency for one instance. Holds only a secret-store reference, never key material; expiry and key rotation are evaluated separately.</summary>
 public class CertificateDependency
 {
     public int Id { get; set; }
@@ -48,7 +38,7 @@ public class CertificateDependency
 
     public string Notes { get; set; } = string.Empty;
 
-    /// <summary>Dedupe state for the expiry-notice sweep (CertificateExpiryService), same pattern as D03's SupportRunwayService/VersionIdentity.LastRunwayNoticeThresholdDays — reuses SupportRunwayNoticeEvaluator's generic threshold logic rather than a parallel implementation.</summary>
+    /// <summary>Dedupe state for the expiry-notice sweep, so each threshold notifies once.</summary>
     public int? LastExpiryNoticeThresholdDays { get; set; }
     public DateTime? LastExpiryNoticeAtUtc { get; set; }
 

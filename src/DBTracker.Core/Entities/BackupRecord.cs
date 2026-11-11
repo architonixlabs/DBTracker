@@ -23,25 +23,15 @@ public class BackupRecord
     /// <summary>File name matched on the shared drive, for Discovered records — used to avoid re-importing the same file.</summary>
     public string SourceFile { get; set; } = string.Empty;
 
-    /// <summary>Exact file size in bytes at discovery time, for Discovered records — the dedup signature (with SourceFile) that lets a changed file reusing the same name be recorded as new evidence rather than silently skipped or duplicated. Null for Manual records and for Discovered records predating U01.</summary>
+    /// <summary>Exact byte size at discovery. With SourceFile it is the dedup signature, so a changed file reusing a name counts as new evidence. Null for Manual records and older Discovered records.</summary>
     public long? ObservedFileBytes { get; set; }
 
-    /// <summary>
-    /// The authenticated user who entered this record (U11) — distinct from TimestampUtc, which is
-    /// when the backup actually occurred and may be backdated after an incident. Empty for
-    /// system-generated Discovered records (there's no human "entry").
-    /// </summary>
+    /// <summary>The authenticated user who entered this record. TimestampUtc is when the backup occurred and may be backdated. Empty for Discovered records.</summary>
     public string RecordedByUserName { get; set; } = string.Empty;
 
     public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
 
-    /// <summary>
-    /// Which backup-chain member (D16) this record actually satisfies, when it's something
-    /// BackupType alone can't express (WAL archive, binlog, a separate archival copy). Null means
-    /// "map from Type" (Full→Base, Differential→Differential, TransactionLog→TransactionLog) —
-    /// BackupChainCoverageCalculator applies that fallback itself, so existing/legacy records never
-    /// need backfilling for chain coverage to work.
-    /// </summary>
+    /// <summary>The chain member this record satisfies when Type can't express it (WAL, binlog, archival copy). Null maps from Type, so older records need no backfill.</summary>
     public ChainMemberType? ChainRole { get; set; }
 
     public ICollection<BackupRecordCorrection> Corrections { get; set; } = new List<BackupRecordCorrection>();

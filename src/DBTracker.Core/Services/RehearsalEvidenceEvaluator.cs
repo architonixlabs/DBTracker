@@ -3,7 +3,7 @@ using DBTracker.Core.Enums;
 
 namespace DBTracker.Core.Services;
 
-/// <summary>D11 — the status of the latest rehearsal evidence for one instance/campaign pairing, and why.</summary>
+/// <summary>Status of the latest rehearsal for an instance/campaign pairing, and why.</summary>
 public enum RehearsalReadinessStatus
 {
     /// <summary>No rehearsal has ever been recorded for this pairing.</summary>
@@ -21,12 +21,7 @@ public record RehearsalReadinessResult(RehearsalReadinessStatus Status, string R
     public bool BlocksNormalReadiness => Status != RehearsalReadinessStatus.Passed;
 }
 
-/// <summary>
-/// Pure (no I/O) evaluation of whether the latest D11 rehearsal for a pairing is current and
-/// passing. A missing or stale rehearsal is never silently treated as passing, and a newer-format
-/// backup/restore step is never implied to always restore cleanly to an older engine — this
-/// evaluator only reports what was actually recorded, it performs no restore itself.
-/// </summary>
+/// <summary>Whether the latest rehearsal is current and passing. Missing or stale rehearsals never pass; this only reads what was recorded and performs no restore.</summary>
 public static class RehearsalEvidenceEvaluator
 {
     public const int DefaultValidityDays = 180;

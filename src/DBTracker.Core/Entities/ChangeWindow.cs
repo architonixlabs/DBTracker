@@ -2,15 +2,7 @@ using DBTracker.Core.Enums;
 
 namespace DBTracker.Core.Entities;
 
-/// <summary>
-/// D12 — a planned, future, timezone-labelled change window for a D10 MigrationCampaign. Creating
-/// this record is purely a planning fact: it never executes anything and never sends any
-/// notification by itself (no code path here calls IEmailSender/IWebhookSender/NotificationService).
-/// Status only ever advances via ChangeWindowService, which checks ChangeWindowApprovalGate (all
-/// required ChangeWindowApprovals recorded by an authorized approver, or an active linked
-/// EmergencyException) before allowing Approved, mirroring how D10's CampaignStateTransitionValidator
-/// gates MigrationCampaign.State.
-/// </summary>
+/// <summary>A planned, timezone-labelled change window. Creating one executes nothing and sends nothing; it reaches Approved only through ChangeWindowService's approval gate.</summary>
 public class ChangeWindow
 {
     public int Id { get; set; }
@@ -34,7 +26,7 @@ public class ChangeWindow
 
     public ChangeWindowStatus Status { get; set; } = ChangeWindowStatus.Planned;
 
-    /// <summary>A recorded emergency exception (D14) that lets this window proceed without every normal approval having been recorded — never set implicitly.</summary>
+    /// <summary>An emergency exception that lets this window proceed without every normal approval. Never set implicitly.</summary>
     public int? EmergencyExceptionId { get; set; }
     public ReadinessException? EmergencyException { get; set; }
 

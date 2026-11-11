@@ -2,13 +2,7 @@ using DBTracker.Core.Enums;
 
 namespace DBTracker.Core.Entities;
 
-/// <summary>
-/// A curated, reviewed source-to-target support rule (D08) — the only thing PathSupportClassifier can
-/// ever match a pairing against. Only Supported or Blocked are ever stored here; Unknown is what a
-/// pairing gets when no rule matches, never a row of its own. Build ranges are inclusive and compared
-/// with VersionBuildComparer (the same engine-agnostic numeric comparer Epic 18's patch/advisory logic
-/// uses); an empty min/max/field means "no constraint on this dimension" for that rule.
-/// </summary>
+/// <summary>A curated Supported or Blocked rule for a source-to-target pairing. No match means Unknown; empty ranges mean no constraint.</summary>
 public class PathSupportRule
 {
     public int Id { get; set; }

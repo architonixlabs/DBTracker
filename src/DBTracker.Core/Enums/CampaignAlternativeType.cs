@@ -1,6 +1,5 @@
 namespace DBTracker.Core.Enums;
 
-/// <summary>D10 — a campaign can record and compare alternatives rather than assuming upgrade is the only option.</summary>
 public enum CampaignAlternativeType
 {
     Upgrade,

@@ -5,12 +5,7 @@ namespace DBTracker.Infrastructure.Scanning;
 
 public record ConnectivityResult(bool Success, string? Error, TimeSpan Elapsed, DateTime CheckedAtUtc, TimeSpan Timeout);
 
-/// <summary>
-/// A lightweight TCP reachability check for the "Test connection" button on the instance detail
-/// page — proves the host:port accepts a connection, not that the database itself is healthy
-/// (that's what backup records are for). Deliberately just a socket connect, no per-engine driver,
-/// so it works the same way for every engine without adding five database client dependencies.
-/// </summary>
+/// <summary>A plain TCP connect for Test connection. Proves host:port accepts connections, not that the database is healthy; no per-engine driver needed.</summary>
 public class ConnectivityChecker
 {
     public async Task<ConnectivityResult> CheckAsync(string host, int port, TimeSpan timeout, CancellationToken ct = default)

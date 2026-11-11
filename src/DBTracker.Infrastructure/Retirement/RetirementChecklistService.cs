@@ -14,17 +14,8 @@ public record RetirementChecklistView(
     bool HasActiveException,
     bool CanRetire);
 
-/// <summary>
-/// D22 — the decommission/source-retirement checklist. EvaluateAsync is the only place that gathers
-/// evidence from D07 (InstanceDependency), D16 (BackupChainCoverageCalculator), D17
-/// (BackupCopyAvailabilityEvaluator), D20 (CertificateDependency) and D13 (ChangeValidation's
-/// rollback-retention deadline) and hands it to the pure RetirementChecklistGateEvaluator — nothing
-/// here recomputes or duplicates that evidence. CompleteRetirementAsync is deliberately the *only*
-/// path that can retire an instance: when every gate passes (or a scoped, currently-Active D14
-/// ReadinessException targeting this checklist exists), it calls the pre-existing U14
-/// InstanceArchiveService.ArchiveAsync — the same archive mechanism Epic 16 already built, with its
-/// existing preview/reason/history behavior untouched — rather than writing IsArchived here directly.
-/// </summary>
+/// <summary>Retirement checklists. EvaluateAsync gathers the evidence and RetirementChecklistGateEvaluator decides.</summary>
+/// <remarks>CompleteRetirementAsync is the only path that retires an instance, and it does so through InstanceArchiveService.ArchiveAsync, never by writing IsArchived.</remarks>
 public class RetirementChecklistService(
     IDbContextFactory<DBTrackerDbContext> factory,
     AuditRecorder audit,
@@ -184,12 +175,7 @@ public class RetirementChecklistService(
             reason: $"{(isApplicationOwner ? "Application owner" : "Platform")} sign-off by {signedBy}");
     }
 
-    /// <summary>
-    /// Re-evaluates every gate; refuses (ok=false, reason) unless every gate passes or a scoped,
-    /// currently-Active D14 exception targeting this checklist exists. On success, this is the only
-    /// method that calls InstanceArchiveService.ArchiveAsync — the existing U14 mechanism — and then
-    /// stamps RetiredAtUtc/RetiredBy on the checklist for lineage. It never writes IsArchived itself.
-    /// </summary>
+    /// <summary>Re-evaluates every gate and refuses unless all pass or an active scoped exception exists. On success, archives through InstanceArchiveService and stamps RetiredAtUtc/RetiredBy.</summary>
     public async Task<(bool Ok, string Reason)> CompleteRetirementAsync(int checklistId, string reason, string actorId, string actorName)
     {
         var view = await GetViewAsync(checklistId);

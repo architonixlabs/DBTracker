@@ -6,21 +6,14 @@ using QRCoder;
 
 namespace Microsoft.AspNetCore.Routing;
 
-/// <summary>
-/// Minimal-API endpoints behind the QR "sign in with your phone" flow. The create/qr/status/redeem
-/// endpoints are deliberately AllowAnonymous — the desktop calling them isn't signed in yet, that's
-/// the whole point. Only /approve and /deny require auth, since only an already-authenticated phone
-/// session may vouch for a new device.
-/// </summary>
+/// <summary>QR phone sign-in endpoints. create/qr/status/redeem are anonymous because the desktop isn't signed in yet; only approve/deny require an authenticated phone.</summary>
 internal static class DeviceLinkEndpointRouteBuilderExtensions
 {
     public static IEndpointConventionBuilder MapDeviceLinkEndpoints(this IEndpointRouteBuilder endpoints)
     {
         var group = endpoints.MapGroup("/device-link");
 
-        // create/status/redeem are called via JS fetch() from the (unauthenticated) desktop page,
-        // not a real HTML form — no antiforgery token exists to send, and none is needed: there's
-        // no ambient authenticated session for a forged cross-site request to ride on here.
+        // Called via JS fetch from the anonymous desktop page, so there's no antiforgery token, and no session for a forged request to ride on.
         group.MapPost("/create", async ([FromServices] DeviceLinkService service) =>
         {
             var token = await service.CreateTokenAsync();

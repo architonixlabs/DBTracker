@@ -2,16 +2,7 @@ using DBTracker.Core.Enums;
 
 namespace DBTracker.Core.Entities;
 
-/// <summary>
-/// One curated/imported product release and its support milestones (D02) — a reviewed fact,
-/// attributable to a source, not a live feed. GA/Mainstream/Extended/ESU dates each carry their own
-/// precision (vendor pages often publish only a quarter or year) and the whole row can be flagged
-/// TBD/conflicting rather than forcing a fabricated exact date. IsManualOverride distinguishes an
-/// internally-curated/overridden fact from the vendor-sourced one it replaces; the override itself
-/// carries its own reason/reviewer/expiry so it doesn't quietly become permanent. A failed refresh
-/// (RefreshAsync on ReleaseCatalogService) never clears existing fields — it only sets IsStale/
-/// LastRefreshError so the UI can show "last known, now stale" instead of losing the fact.
-/// </summary>
+/// <summary>A curated product release and its support milestones, attributed to a source. Each date has its own precision, overrides carry a reason and expiry, and a failed refresh marks the row stale instead of clearing it.</summary>
 public class ReleaseCatalogEntry
 {
     public int Id { get; set; }

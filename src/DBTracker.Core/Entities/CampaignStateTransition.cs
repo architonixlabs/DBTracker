@@ -2,7 +2,7 @@ using DBTracker.Core.Enums;
 
 namespace DBTracker.Core.Entities;
 
-/// <summary>One recorded state change on a D10 MigrationCampaign, validated against CampaignStateTransitionValidator before being written — the campaign's full history, append-only.</summary>
+/// <summary>One validated state change on a migration campaign. Append-only history.</summary>
 public class CampaignStateTransition
 {
     public int Id { get; set; }

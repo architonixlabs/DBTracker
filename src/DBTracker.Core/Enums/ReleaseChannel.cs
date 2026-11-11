@@ -1,6 +1,6 @@
 namespace DBTracker.Core.Enums;
 
-/// <summary>A catalogued release's channel (D02). Previews are excluded from automatic patch-baseline recommendations by default (D04).</summary>
+/// <summary>A catalogued release's channel. Previews are excluded from patch-baseline recommendations by default.</summary>
 public enum ReleaseChannel
 {
     GA,

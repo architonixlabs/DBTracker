@@ -2,15 +2,7 @@ using DBTracker.Core.Enums;
 
 namespace DBTracker.Core.Entities;
 
-/// <summary>
-/// D21 — one support/maintenance agreement reference, linkable to one or more products/deployments
-/// via SupportContractAssignment. This records a contractual/commercial fact distinct from D02/D03's
-/// vendor-lifecycle facts: EntitlementStatusClassifier reads only this table (plus "now"), never
-/// ReleaseCatalogEntry/SupportRunwayDecision, so a product's lifecycle phase and its entitlement
-/// status are always computed independently and can legitimately disagree. RenewalEvidenceReference
-/// is a pointer (ticket/document id) — not a scanned contract upload; this app stores no contract
-/// documents.
-/// </summary>
+/// <summary>A support agreement reference covering one or more instances. Entitlement is computed from this table only, so it can legitimately disagree with the product's lifecycle phase.</summary>
 public class SupportContract
 {
     public int Id { get; set; }

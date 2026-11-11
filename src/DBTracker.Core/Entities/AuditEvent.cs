@@ -2,18 +2,8 @@ using DBTracker.Core.Enums;
 
 namespace DBTracker.Core.Entities;
 
-/// <summary>
-/// A single general-purpose audit entry (U19) — actor, time, action, target and optional
-/// reason/before/after, applied across instance create/edit/archive/unarchive, maintenance windows,
-/// CSV import/bulk edit, account changes and manual evidence corrections. This is the shared schema
-/// U08/U11/U14/U16/U17 were told not to wait for; U10/U11 already shipped with their own
-/// self-contained actor/timestamp capture (see BACKLOG.md) and were deliberately not refactored onto
-/// this to avoid touching already-shipped, tested code.
-///
-/// NOTE: this is an application-level log, not tamper-proof — anyone with direct database access
-/// (e.g. a DBA on DBTracker's own backing store) can alter or delete rows here. It records normal
-/// application activity, not a cryptographically verifiable chain of custody.
-/// </summary>
+/// <summary>A general-purpose audit entry: actor, time, action, target, and optional reason and before/after JSON.</summary>
+/// <remarks>Application-level log only: anyone with direct database access can alter or delete rows.</remarks>
 public class AuditEvent
 {
     public int Id { get; set; }

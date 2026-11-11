@@ -2,7 +2,7 @@ using DBTracker.Core.Enums;
 
 namespace DBTracker.Core.Services;
 
-/// <summary>Raw per-instance facts the D15 lifecycle workspace is built from — one row per DatabaseInstance, never per cluster node (ClusterNodeCount is carried as metadata on the row instead of expanding into separate rows).</summary>
+/// <summary>Raw facts for one workspace row. One row per instance, never per cluster node; ClusterNodeCount is metadata.</summary>
 public record LifecycleWorkspaceInput(
     int InstanceId,
     string InstanceName,
@@ -18,7 +18,7 @@ public record LifecycleWorkspaceInput(
     CampaignState? LatestCampaignState,
     int ExpiringExceptionCount);
 
-/// <summary>One computed workspace row — adds the derived unknown/stale-identity and blocked/late flags on top of the raw input facts.</summary>
+/// <summary>A computed workspace row, adding the unknown/stale-identity and blocked/late flags.</summary>
 public record LifecycleWorkspaceRow(
     int InstanceId,
     string InstanceName,
@@ -37,7 +37,7 @@ public record LifecycleWorkspaceRow(
     bool IsBlockedOrLate,
     DateTime? IdentityObservedAtUtc);
 
-/// <summary>Every filter dimension D15 asks for. A null/false field means "don't filter on this".</summary>
+/// <summary>Workspace filters. A null/false field means don't filter on it.</summary>
 public record LifecycleWorkspaceFilter(
     DatabaseEngine? Engine = null,
     string? FamilyContains = null,
@@ -49,7 +49,7 @@ public record LifecycleWorkspaceFilter(
     string? OwnerTeamNameContains = null,
     CampaignState? CampaignState = null);
 
-/// <summary>Denominator/unknown-count facts shown alongside every D15 view and export — never hidden behind a filtered count alone.</summary>
+/// <summary>Denominator and unknown counts shown with every view and export, never just a filtered count.</summary>
 public record LifecycleWorkspaceSummary(
     int Denominator,
     int MatchingCount,
@@ -57,12 +57,7 @@ public record LifecycleWorkspaceSummary(
     int UnknownSupportPhaseCount,
     DateTime? OldestObservedAtUtc);
 
-/// <summary>
-/// Pure (no I/O) projection/filter/summary engine for D15's lifecycle workspace — the same shape as
-/// InstanceListRow/InstanceListFilter from U06, applied to lifecycle facts instead of backup health.
-/// BuildRows never expands a cluster into one row per node; ClusterNodeCount stays metadata on the
-/// single instance row so counts shown on the workspace/reports never double-count nodes.
-/// </summary>
+/// <summary>Projection, filter and summary for the lifecycle workspace. Clusters are never expanded per node, so counts never double up.</summary>
 public static class LifecycleWorkspaceBuilder
 {
     public const int DefaultStaleIdentityDays = 365;

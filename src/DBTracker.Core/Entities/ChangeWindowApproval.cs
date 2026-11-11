@@ -2,12 +2,7 @@ using DBTracker.Core.Enums;
 
 namespace DBTracker.Core.Entities;
 
-/// <summary>
-/// One required approval row on a D12 ChangeWindow. RequiredScope is a free-text label (e.g. "DBA",
-/// "Change manager", "Application owner", "Security") checked against the acting user's roles by the
-/// pure ChangeWindowApprovalAuthorizer before Decision/ApproverName/ApproverUserId can be recorded —
-/// an explicit role/scope check, not just a free-text name field.
-/// </summary>
+/// <summary>One required approval on a change window. RequiredScope is checked against the approver's roles before a decision can be recorded.</summary>
 public class ChangeWindowApproval
 {
     public int Id { get; set; }

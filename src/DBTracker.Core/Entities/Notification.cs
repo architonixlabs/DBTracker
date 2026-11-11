@@ -10,11 +10,11 @@ public class Notification
     public int? DatabaseInstanceId { get; set; }
     public DatabaseInstance? DatabaseInstance { get; set; }
 
-    /// <summary>Instance name/company at the time of the alert, kept even if the instance is later archived/removed — also what NotificationSubscriptionMatcher (U07) matches a Company-scoped subscription against.</summary>
+    /// <summary>Instance name and company at alert time, kept after archive; Company-scoped subscriptions match on it.</summary>
     public string InstanceName { get; set; } = string.Empty;
     public string Company { get; set; } = string.Empty;
 
-    /// <summary>Owner team at the time of the alert (U21), denormalized the same way Company already is — so a later team reassignment doesn't retroactively change which past alerts a Team-scoped subscription matches.</summary>
+    /// <summary>Owner team at alert time, so a later reassignment doesn't change which past alerts a team subscription matches.</summary>
     public int? OwnerTeamId { get; set; }
 
     public string Message { get; set; } = string.Empty;

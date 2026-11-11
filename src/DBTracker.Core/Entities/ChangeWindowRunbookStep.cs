@@ -1,6 +1,6 @@
 namespace DBTracker.Core.Entities;
 
-/// <summary>One itemized runbook/checklist step attached to a D12 ChangeWindow. IsCompleted is a plain self-reported checkbox — it is not wired to any execution, same as the journal itself.</summary>
+/// <summary>One runbook step on a change window. IsCompleted is self-reported and triggers nothing.</summary>
 public class ChangeWindowRunbookStep
 {
     public int Id { get; set; }

@@ -6,13 +6,7 @@ using Microsoft.Extensions.Logging;
 
 namespace DBTracker.Infrastructure.Lifecycle;
 
-/// <summary>
-/// Periodic sweep for D03's support-runway notices — same shape as AlertCheckHostedService.
-/// "SupportRunway:IntervalMinutes" (default 1440, once a day — a support deadline doesn't need
-/// 10-minute polling); &lt;= 0 disables it. The same logic is also reachable synchronously via an
-/// explicit "Evaluate now" admin action (SupportRunwayService.EvaluateAndNotifyAsync) for testing
-/// and for an administrator who doesn't want to wait for the next sweep.
-/// </summary>
+/// <summary>Periodic support-runway notice sweep. SupportRunway:IntervalMinutes (default 1440); &lt;= 0 disables it.</summary>
 public class SupportRunwayCheckHostedService(
     IServiceScopeFactory scopeFactory,
     IConfiguration configuration,

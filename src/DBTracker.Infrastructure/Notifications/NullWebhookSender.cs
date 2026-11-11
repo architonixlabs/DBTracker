@@ -3,7 +3,7 @@ using Microsoft.Extensions.Logging;
 
 namespace DBTracker.Infrastructure.Notifications;
 
-/// <summary>Default sender when no webhook URL is configured — logs instead of sending, never throws.</summary>
+/// <summary>Default when no webhook URL is configured: logs instead of sending.</summary>
 public class NullWebhookSender(ILogger<NullWebhookSender> logger) : IWebhookSender
 {
     public Task SendAsync(WebhookAlertPayload payload, CancellationToken ct = default)

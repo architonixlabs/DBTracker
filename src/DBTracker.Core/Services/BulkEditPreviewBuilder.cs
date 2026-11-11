@@ -2,16 +2,13 @@ using DBTracker.Core.Entities;
 
 namespace DBTracker.Core.Services;
 
-/// <summary>Which fields a bulk edit changes — null/false means "leave this field alone" (U17). Archiving is deliberately not an option here; that stays a separate, individually-confirmed action (U14).</summary>
+/// <summary>Which fields a bulk edit changes; null/false leaves a field alone. Archiving is deliberately not offered here.</summary>
 public record BulkEditRequest(bool SetOwner, string? Company, string? Department, string? ContactName, string? ContactEmail, bool SetTags, string? Tags, bool SetRetention, int? RetentionPolicyDays);
 
 public record BulkEditFieldDiff(string Field, string Before, string After);
 public record BulkEditRowPreview(int InstanceId, string InstanceName, IReadOnlyList<BulkEditFieldDiff> Changes);
 
-/// <summary>
-/// Builds the before/after diff preview for a bulk owner/tag/retention edit across many instances
-/// (U17) — pure (no DB writes); the caller applies the same request after the user confirms.
-/// </summary>
+/// <summary>Before/after preview for a bulk owner/tag/retention edit; the caller applies the same request after confirmation.</summary>
 public static class BulkEditPreviewBuilder
 {
     public static IReadOnlyList<BulkEditRowPreview> Preview(IReadOnlyList<DatabaseInstance> instances, BulkEditRequest request)
@@ -48,7 +45,7 @@ public static class BulkEditPreviewBuilder
         return rows;
     }
 
-    /// <summary>Applies the request to an in-memory instance — the caller is responsible for persisting it. Separate from Preview so "what would change" and "what actually changed" can never drift.</summary>
+    /// <summary>Applies the request to an in-memory instance; the caller persists it. Kept beside Preview so preview and result can't drift.</summary>
     public static void Apply(DatabaseInstance instance, BulkEditRequest request)
     {
         if (request.SetOwner)

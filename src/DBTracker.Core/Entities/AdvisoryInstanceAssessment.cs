@@ -2,12 +2,7 @@ using DBTracker.Core.Enums;
 
 namespace DBTracker.Core.Entities;
 
-/// <summary>
-/// The applicability pairing between one advisory and one instance (D05). AdvisoryApplicabilityClassifier
-/// supplies an initial Potential/NotApplicable/Unknown suggestion from version-range matching alone,
-/// but it can never set Confirmed — only a reviewer, with evidence, can. IsReviewed guards automatic
-/// re-evaluation (EvaluateAdvisoriesForInstanceAsync) from overwriting a human's own classification.
-/// </summary>
+/// <summary>Pairs one advisory with one instance. The classifier only suggests Potential/NotApplicable/Unknown; Confirmed needs a reviewer, and IsReviewed stops re-evaluation overwriting a human classification.</summary>
 public class AdvisoryInstanceAssessment
 {
     public int Id { get; set; }

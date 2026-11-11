@@ -5,12 +5,7 @@ namespace DBTracker.Core.Services;
 
 public record ChangeWindowApprovalGateResult(bool CanProceed, IReadOnlyList<string> OutstandingApprovals, bool UsedEmergencyException);
 
-/// <summary>
-/// Pure (no I/O) gate deciding whether a D12 ChangeWindow may advance past Planned. Every recorded
-/// ChangeWindowApproval must be Approved — a single Rejected or still-pending approval blocks, unless
-/// an active, linked D14 emergency exception is supplied, in which case the window may proceed with
-/// that explicitly recorded as an urgent exception rather than pretending every gate passed.
-/// </summary>
+/// <summary>Whether a change window may advance past Planned. Every approval must be Approved, unless an active linked emergency exception is supplied, which is then recorded as such.</summary>
 public static class ChangeWindowApprovalGate
 {
     public static ChangeWindowApprovalGateResult Evaluate(IReadOnlyList<ChangeWindowApproval> approvals, bool hasActiveEmergencyException)

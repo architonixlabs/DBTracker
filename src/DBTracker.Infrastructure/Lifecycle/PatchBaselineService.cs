@@ -6,12 +6,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace DBTracker.Infrastructure.Lifecycle;
 
-/// <summary>
-/// D04 — approved organizational patch baselines, and the per-instance Available/Applicable/
-/// Approved comparison. The approved target is only ever set here, explicitly, by a reviewer; it
-/// is never derived automatically from "newest GA" (PatchBaselineComparer enforces that at the
-/// pure-logic level too).
-/// </summary>
+/// <summary>Approved patch baselines and the per-instance comparison. The approved target is only set here, by a reviewer.</summary>
 public class PatchBaselineService(IDbContextFactory<DBTrackerDbContext> factory, AuditRecorder audit, ReleaseCatalogService catalog)
 {
     public async Task<List<ApprovedPatchBaseline>> ListAsync()
@@ -37,8 +32,7 @@ public class PatchBaselineService(IDbContextFactory<DBTrackerDbContext> factory,
     {
         using var db = await factory.CreateDbContextAsync();
 
-        // Superseding, not overwriting: the previous active baseline for this family is deactivated
-        // (preserved for history) rather than mutated, so an audit trail of approved targets survives.
+        // Supersede rather than overwrite: the previous baseline is deactivated and kept for history.
         var previous = await db.ApprovedPatchBaselines.Where(b => b.Engine == engine && b.Family == family && b.IsActive).ToListAsync();
         foreach (var p in previous)
         {

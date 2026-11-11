@@ -12,14 +12,8 @@ public record RoleChangeResult(bool Succeeded, string? Error);
 public record DeactivateResult(bool Succeeded, string? Error);
 public record ResetLinkOutcome(bool AccountExists, EmailSendResult? EmailResult);
 
-/// <summary>
-/// Admin-facing account lifecycle operations (U16): role changes, deactivate/reactivate, and
-/// expiring single-use reset/invite links built on ASP.NET Core Identity's own data-protection
-/// token provider (GeneratePasswordResetTokenAsync) rather than a second parallel token table — the
-/// token is already scoped to the user's current security stamp, so a successful ResetPasswordAsync
-/// rotates the stamp and the same token can never be replayed. Every mutating call here is audited
-/// (U19) and goes through the "don't remove the last active Admin" guard.
-/// </summary>
+/// <summary>Admin account operations: role changes, deactivate/reactivate, and reset/invite links. Every change is audited and guarded against removing the last active Admin.</summary>
+/// <remarks>Reset links use Identity's own token provider; a successful reset rotates the security stamp, so a link can't be replayed.</remarks>
 public class AccountLifecycleService(
     UserManager<ApplicationUser> userManager,
     DBTrackerDbContext db,
@@ -63,10 +57,7 @@ public class AccountLifecycleService(
         await userManager.RemoveFromRolesAsync(user, currentRoles);
         await userManager.AddToRoleAsync(user, newRole);
 
-        // A role downgrade (Admin losing Admin) may reduce what the user's existing session is
-        // allowed to do — rotate the security stamp so any active session re-validates against the
-        // new role within IdentityRevalidatingAuthenticationStateProvider's revalidation window
-        // (30 minutes) instead of continuing on stale claims until the cookie itself expires.
+        // Rotate the security stamp so active sessions pick up the reduced role within the 30-minute revalidation window.
         if (currentRoles.Contains(Roles.Admin) && newRole != Roles.Admin)
         {
             await userManager.UpdateSecurityStampAsync(user);
@@ -104,11 +95,8 @@ public class AccountLifecycleService(
 
         if (!isActive)
         {
-            // Revoke the ability to use any session/device-link already issued to this account:
-            // rotating the stamp invalidates the cookie claim within the revalidation window, and
-            // any pending (not-yet-redeemed) device-link token this user had already approved for a
-            // new device must stop working too, or a deactivated account could still bootstrap a
-            // brand-new signed-in session through that side channel.
+            // Rotating the stamp ends cookie sessions within the revalidation window; pending device-link tokens must also be revoked,
+            // or a deactivated account could still sign in a new device.
             await userManager.UpdateSecurityStampAsync(user);
             var pendingApprovedLinks = await db.DeviceLinkTokens
                 .Where(t => t.ApprovedByUserId == userId && t.Status == DeviceLinkStatus.Approved)
@@ -147,13 +135,7 @@ public class AccountLifecycleService(
         return true;
     }
 
-    /// <summary>
-    /// Neutral "forgot password" response (U16): always returns a token/link when the account
-    /// exists and a provider is configured, but the caller shows the same generic confirmation text
-    /// to the requester either way — this method's AccountExists flag is for the admin-triggered
-    /// "send reset link" path (which already knows the account exists) and tests, not for rendering
-    /// a different message to an anonymous requester.
-    /// </summary>
+    /// <summary>Forgot-password support. Callers always show the same confirmation text; AccountExists is for the admin path and tests, never for anonymous requesters.</summary>
     public async Task<ResetLinkOutcome> SendPasswordResetLinkAsync(string email, string baseUri, string actorId = "", string actorName = "")
     {
         var user = await userManager.FindByEmailAsync(email);

@@ -6,12 +6,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace DBTracker.Infrastructure.Ownership;
 
-/// <summary>
-/// "This contact info looks wrong" requests (U21) — any authenticated viewer can submit one; only an
-/// authorized reviewer (Roles.CanEditPolicy) can approve or reject it. Approving applies only the
-/// proposed fields the requester actually filled in (ContactCorrectionApplier) and records both a
-/// U19 audit event and a U12-style instance change-log entry, same as every other contact edit.
-/// </summary>
+/// <summary>Contact correction requests. Anyone signed in can submit; CanEditPolicy roles approve, which applies only the filled-in fields and writes an audit event and change-log entry.</summary>
 public class ContactCorrectionService(IDbContextFactory<DBTrackerDbContext> factory, AuditRecorder audit)
 {
     public async Task<List<ContactCorrectionRequest>> ListPendingAsync()
@@ -99,8 +94,7 @@ public class ContactCorrectionService(IDbContextFactory<DBTrackerDbContext> fact
         return true;
     }
 
-    // A detached, unsaved copy of just the contact fields InstanceChangeLogBuilder diffs — avoids
-    // picking up EF change-tracking noise from the tracked `instance` we're about to mutate in place.
+    // A detached copy of the contact fields to diff, avoiding change-tracking noise from the tracked instance.
     private static DatabaseInstance Clone(DatabaseInstance instance) => new()
     {
         Id = instance.Id,

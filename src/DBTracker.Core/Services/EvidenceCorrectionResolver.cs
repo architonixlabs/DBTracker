@@ -3,12 +3,7 @@ using DBTracker.Core.Enums;
 
 namespace DBTracker.Core.Services;
 
-/// <summary>
-/// Resolves the "effective" value of a field that may have append-only corrections layered over it
-/// (U11). The original record is never mutated — effective value is the newest correction's New
-/// value for that field, falling back to the record's own original value when there's no correction.
-/// Pure (no I/O).
-/// </summary>
+/// <summary>The effective value of a field with append-only corrections: the newest correction's value, or the original when there is none.</summary>
 public static class EvidenceCorrectionResolver
 {
     public static BackupStatus EffectiveStatus(BackupRecord record, IReadOnlyCollection<BackupRecordCorrection> corrections)

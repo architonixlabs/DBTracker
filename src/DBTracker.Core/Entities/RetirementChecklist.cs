@@ -1,15 +1,6 @@
 namespace DBTracker.Core.Entities;
 
-/// <summary>
-/// D22 — one decommission/source-retirement checklist for an instance, optionally tied to the D10
-/// MigrationCampaign that replaced it. The computed gates (consumers/dependencies, jobs/replicas,
-/// final recoverable backup/key evidence, rollback-window closure, and the two D21-adjacent/sign-off
-/// gates below) are evaluated live by RetirementChecklistGateEvaluator from other epics' own records —
-/// nothing here duplicates that evidence. Only the genuinely manual facts live as fields on this row:
-/// legal-hold review, application/platform sign-off, an externally performed cleanup note, and the
-/// cost/contract review flag. RetiredAtUtc/RetiredBy is stamped only after RetirementChecklistService
-/// actually calls the existing U14 InstanceArchiveService — this entity never archives anything itself.
-/// </summary>
+/// <summary>A decommission checklist for one instance. Gates are evaluated live from other records; only manual facts (legal hold, sign-off, cleanup note, cost review) live here, and retiring goes through InstanceArchiveService.</summary>
 public class RetirementChecklist
 {
     public int Id { get; set; }
@@ -17,7 +8,7 @@ public class RetirementChecklist
     public int DatabaseInstanceId { get; set; }
     public DatabaseInstance? DatabaseInstance { get; set; }
 
-    /// <summary>Optional link to the D10 campaign that replaced this instance, if any — a standalone decommission (no migration campaign) is equally valid.</summary>
+    /// <summary>Optional campaign that replaced this instance; a standalone decommission is equally valid.</summary>
     public int? MigrationCampaignId { get; set; }
     public MigrationCampaign? MigrationCampaign { get; set; }
 
@@ -33,11 +24,11 @@ public class RetirementChecklist
     /// <summary>Note describing any externally performed access-revocation/monitoring-cleanup (the tracker doesn't execute this itself).</summary>
     public string ExternalCleanupNotes { get; set; } = string.Empty;
 
-    /// <summary>D21 cost/contract review — reviewer confirms the entitlement/cost facts have actually been looked at before retiring, not that coverage is necessarily active.</summary>
+    /// <summary>Reviewer confirms entitlement and cost facts were checked before retiring, not that coverage is active.</summary>
     public bool CostContractReviewed { get; set; }
     public string CostContractReviewNotes { get; set; } = string.Empty;
 
-    /// <summary>Free-text note on where/how the final recoverable backup/key-access snapshot was retained, alongside the computed D16/D17/D20 evidence check.</summary>
+    /// <summary>Where the final recoverable backup and key-access evidence was retained.</summary>
     public string FinalBackupEvidenceNotes { get; set; } = string.Empty;
 
     public DateTime? RetiredAtUtc { get; set; }

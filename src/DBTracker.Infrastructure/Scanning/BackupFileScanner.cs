@@ -15,19 +15,11 @@ public enum ScanOutcome
 
 public record ScanResult(ScanOutcome Outcome, int FilesDiscovered, string? ErrorMessage = null);
 
-/// <summary>A file observed on an instance's backup file location, with the eligibility decision the scanner (or a dry-run preview) made about it (U01).</summary>
+/// <summary>A file seen at a backup location, with the eligibility decision the scan or preview made.</summary>
 public record FilePreview(string FileName, long SizeBytes, DateTime LastWriteUtc, FileEligibility Eligibility, string Reason, bool AlreadyKnown);
 
-/// <summary>
-/// Scans an instance's configured backup file location (UNC path or local folder) and records any
-/// eligible file not already known as a Discovered BackupRecord. Eligibility (U01) excludes files
-/// that don't match the instance's configured name pattern, are zero-length, or are still being
-/// written (detected via two stats a short delay apart). Matching is by name AND exact byte size,
-/// so a changed file reusing an old name is recorded as new evidence rather than being silently
-/// skipped or treated as a duplicate of the original. A unique DB constraint (see
-/// DBTrackerDbContext) plus a per-row catch below means concurrent scans never double-insert the
-/// same evidence even if both observe the same new file in the same sweep.
-/// </summary>
+/// <summary>Scans an instance's backup location and records eligible files not already known as Discovered records. Matching is by name and exact size, so a changed file reusing a name counts as new evidence.</summary>
+/// <remarks>A unique index plus the per-row catch below stops concurrent scans double-inserting the same file.</remarks>
 public class BackupFileScanner(DBTrackerDbContext db)
 {
     /// <summary>Delay between the two stability checks used to decide a file isn't still being written.</summary>
@@ -111,7 +103,7 @@ public class BackupFileScanner(DBTrackerDbContext db)
         }
     }
 
-    /// <summary>Dry run (no writes) of what a scan would do right now — lets an instance's rules be previewed before saving them (U01).</summary>
+    /// <summary>Dry run of a scan, so rules can be previewed before saving.</summary>
     public async Task<IReadOnlyList<FilePreview>> PreviewAsync(string backupFileLocation, string backupFileNamePatterns, int? instanceId = null, CancellationToken ct = default)
     {
         var evaluations = await EvaluateFilesAsync(backupFileLocation, backupFileNamePatterns, ct);
@@ -180,7 +172,7 @@ public class BackupFileScanner(DBTrackerDbContext db)
 
     private sealed record KnownSignatures(HashSet<string> NamesWithUnknownSignature, HashSet<(string Name, long Bytes)> Signatures, HashSet<string> AllKnownNames);
 
-    /// <summary>Pure matching logic kept for the pre-U01 name-only scanning path, still used by legacy Discovered records with no byte signature. Unit-testable without touching the file system or a database.</summary>
+    /// <summary>Name-only matching, still used for older Discovered records with no byte signature.</summary>
     public static IEnumerable<string> FindNewFiles(IEnumerable<string> alreadyKnownFileNames, IEnumerable<string> fileNamesOnDisk)
     {
         var known = new HashSet<string>(alreadyKnownFileNames, StringComparer.OrdinalIgnoreCase);

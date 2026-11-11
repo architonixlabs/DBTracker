@@ -6,11 +6,7 @@ namespace DBTracker.Core.Services;
 
 public record ComplianceReportRow(DatabaseInstance Instance, BackupHealth Health, DateTime? LastBackupUtc, bool RestoreTested);
 
-/// <summary>
-/// Builds the plain-text body of the scheduled/on-demand management report — a leadership-readable
-/// roll-up of backup health and restore-test coverage, reusing the same data the Compliance view
-/// shows. Pure (no I/O), so it's unit-testable without a database.
-/// </summary>
+/// <summary>Plain-text body of the management report: backup health and restore-test coverage, from the same data as the Compliance view.</summary>
 public static class ComplianceReportBuilder
 {
     public static string BuildPlainTextBody(IReadOnlyCollection<ComplianceReportRow> rows, DateTime asOfUtc)

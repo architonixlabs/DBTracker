@@ -2,13 +2,7 @@ using DBTracker.Core.Enums;
 
 namespace DBTracker.Core.Entities;
 
-/// <summary>
-/// An internal, reviewed organizational target for one product family (D04) — deliberately a
-/// separate entity from ReleaseCatalogEntry (vendor fact) so "approved" is never conflated with
-/// "available" or "newest GA". Only ever set explicitly by a reviewer; PatchBaselineComparer never
-/// invents one from the newest GA release on its own. Expired/inactive baselines stop being
-/// recommended but are preserved for history.
-/// </summary>
+/// <summary>A reviewer-approved target build for a product family, kept separate from ReleaseCatalogEntry so approved is never read as newest GA. Expired baselines stay for history.</summary>
 public class ApprovedPatchBaseline
 {
     public int Id { get; set; }

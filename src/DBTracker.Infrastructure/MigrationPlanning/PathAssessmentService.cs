@@ -6,13 +6,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace DBTracker.Infrastructure.MigrationPlanning;
 
-/// <summary>
-/// D08 — curated source-to-target support rules (PathSupportRule, admin-managed) and the per-instance
-/// assessments evaluated against them (PathAssessment). EvaluateAsync always re-runs
-/// PathSupportClassifier and persists its result — a rule with no match is stored as Unknown exactly
-/// as the classifier reports it, never coerced into Supported. This never produces an executable
-/// migration script.
-/// </summary>
+/// <summary>Curated path rules and per-instance assessments. EvaluateAsync stores the classifier's result as-is, so no match stays Unknown.</summary>
 public class PathAssessmentService(IDbContextFactory<DBTrackerDbContext> factory, AuditRecorder audit)
 {
     public async Task<List<PathSupportRule>> ListRulesAsync(DatabaseEngine? engine = null)

@@ -1,11 +1,6 @@
 namespace DBTracker.Core.Entities;
 
-/// <summary>
-/// D21 — join row linking one SupportContract to one covered DatabaseInstance. A contract can cover
-/// several instances (one row each) and an instance can carry more than one contract (e.g. a prior
-/// expired agreement kept for history plus a current renewal) — EntitlementStatusClassifier looks at
-/// every assignment for the instance and reports the most favorable current status.
-/// </summary>
+/// <summary>Links a contract to a covered instance. An instance can carry several contracts; the most favorable current status wins.</summary>
 public class SupportContractAssignment
 {
     public int Id { get; set; }

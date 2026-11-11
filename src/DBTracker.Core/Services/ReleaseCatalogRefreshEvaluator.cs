@@ -2,17 +2,10 @@ using DBTracker.Core.Entities;
 
 namespace DBTracker.Core.Services;
 
-/// <summary>Pure result of attempting to refresh one catalogue entry (D02).</summary>
+/// <summary>Result of attempting to refresh one catalogue entry.</summary>
 public record ReleaseCatalogRefreshOutcome(bool Succeeded, string Error);
 
-/// <summary>
-/// Whether a catalogue-entry "refresh" attempt can succeed, and why not when it can't. This app
-/// deliberately does not call any live vendor website (per the review: "a unit test must not
-/// depend on today's live vendor website", and the delivery recommendation to curate facts
-/// manually before building live feeds) — a refresh only re-confirms a source that's actually
-/// configured. On failure, the caller (ReleaseCatalogService) must retain every existing field
-/// unchanged and only record the staleness warning.
-/// </summary>
+/// <summary>Whether a catalogue refresh can succeed, and why not. No live vendor site is called; on failure the caller keeps every field and records only the staleness warning.</summary>
 public static class ReleaseCatalogRefreshEvaluator
 {
     public static ReleaseCatalogRefreshOutcome Evaluate(ReleaseCatalogEntry entry)

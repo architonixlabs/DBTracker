@@ -2,13 +2,7 @@ using DBTracker.Core.Enums;
 
 namespace DBTracker.Core.Entities;
 
-/// <summary>
-/// The DBA's recorded response to a support-runway deadline on one instance (D03) — a newer
-/// release or an approaching end-of-support date is information, not an automatic mandate; this is
-/// where the actual chosen action (upgrade/patch/replace/retire/exception) and its reference get
-/// written down. ActionReference is deliberately just free text/a reference for now — full
-/// workflow entities for each action type are D08-D14 (later epic) scope.
-/// </summary>
+/// <summary>The DBA's recorded response to a support-runway deadline (upgrade, patch, replace, retire, exception). ActionReference is free text.</summary>
 public class SupportRunwayDecision
 {
     public int Id { get; set; }

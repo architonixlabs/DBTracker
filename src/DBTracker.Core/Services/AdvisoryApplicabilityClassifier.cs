@@ -3,16 +3,9 @@ using DBTracker.Core.Enums;
 
 namespace DBTracker.Core.Services;
 
-/// <summary>Pure, automatic suggestion for one advisory/instance pairing (D05).</summary>
 public record AdvisoryClassificationResult(AdvisoryClassification Classification, string Reasoning);
 
-/// <summary>
-/// Automatic initial classification from version-range matching alone (D05). Deliberately never
-/// returns Confirmed — a build-in-range match is only ever Potential, because distribution
-/// backports and managed-service patching can both mean a version number alone doesn't determine
-/// exposure. Only a human reviewer (AdvisoryService.ReviewAssessmentAsync) can set Confirmed or
-/// override this to NotApplicable with their own evidence.
-/// </summary>
+/// <summary>Initial classification from version-range matching. Never returns Confirmed: an in-range build is only Potential, since backports and managed patching mean the version alone doesn't prove exposure.</summary>
 public static class AdvisoryApplicabilityClassifier
 {
     public static AdvisoryClassificationResult Classify(AdvisoryRecord advisory, VersionIdentity installed, bool distributionProvidesBackport)

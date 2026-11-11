@@ -7,15 +7,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace DBTracker.Infrastructure.MigrationPlanning;
 
-/// <summary>
-/// D10 — migration campaigns ("waves"): grouped affected deployments, accountable Team owners
-/// (Epic 17), recorded alternatives and an append-only state-transition/approval history.
-/// TransitionAsync is the only way State changes and the only thing that writes
-/// CampaignStateTransition; it validates against the pure CampaignStateTransitionValidator first and
-/// refuses (returning a reason) rather than writing an invalid jump. Reaching Scheduled (or any other
-/// state) never touches PathAssessment/ReadinessChecklist/SupportRunway — scheduling a campaign
-/// cannot, by construction, change or imply anything about risk/readiness recorded elsewhere.
-/// </summary>
+/// <summary>Migration campaigns: affected deployments, owning teams, recorded alternatives, and append-only transition and approval history.</summary>
 public class CampaignService(IDbContextFactory<DBTrackerDbContext> factory, AuditRecorder audit, CampaignCompletionGateService completionGate)
 {
     public async Task<List<MigrationCampaign>> ListAsync()
@@ -114,7 +106,7 @@ public class CampaignService(IDbContextFactory<DBTrackerDbContext> factory, Audi
         return alternative;
     }
 
-    /// <summary>Marks one alternative as chosen and every other alternative on the same campaign as not chosen — recording the comparison, not just the final pick.</summary>
+    /// <summary>Marks one alternative chosen and the rest not chosen, keeping the comparison.</summary>
     public async Task<bool> ChooseAlternativeAsync(int campaignId, int alternativeId, string actorName)
     {
         using var db = await factory.CreateDbContextAsync();
@@ -137,16 +129,8 @@ public class CampaignService(IDbContextFactory<DBTrackerDbContext> factory, Audi
         return true;
     }
 
-    /// <summary>
-    /// The only path that changes MigrationCampaign.State. Validates against
-    /// CampaignStateTransitionValidator first; an invalid jump is refused (ok=false, with a reason)
-    /// and nothing is written. Reaching Completed specifically (D13/D14) additionally requires
-    /// CampaignCompletionGateService to confirm every linked instance has passing post-change
-    /// validation, required sign-offs and current rehearsal evidence — or a currently-active,
-    /// campaign-scoped D14 exception — so a bare field edit elsewhere in the app can never complete a
-    /// change on its own. Every other transition still only ever writes the CampaignStateTransition
-    /// history row and nothing else, so it cannot imply a change to risk/readiness tracked elsewhere.
-    /// </summary>
+    /// <summary>The only path that changes MigrationCampaign.State. Invalid jumps are refused with a reason and nothing is written; Completed additionally requires CampaignCompletionGateService to pass.</summary>
+    /// <remarks>Other transitions write only the history row, so they can't imply any change to risk or readiness.</remarks>
     public async Task<(bool Ok, string Reason)> TransitionAsync(int campaignId, CampaignState toState, string reason, string actorName)
     {
         using var db = await factory.CreateDbContextAsync();
