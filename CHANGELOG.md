@@ -27,12 +27,17 @@ All notable changes to DBTracker are recorded here. Versions follow [Semantic Ve
 - **Cost figures.** Cost estimate amounts no longer appear in the audit trail or its export, or
   through its search, for roles that can't see them. DBAs can record support contracts, which carry
   no amounts.
+- **Installer.**
+  - On a first install, the port check also refuses a port another program is already listening on.
+  - Setup no longer reinstalls an older Hosting Bundle (and restarts IIS) on a server with a newer
+    .NET 10 patch.
+  - The SQL Server Express option says that ticking it accepts Microsoft's license terms.
 - **Backup scanning.** A backup file rewritten under the same name and size is recorded as a new
   backup. Log backups (`.trn`, or a `log` part in the name) and differentials are recorded as such
   instead of as full backups, and the scan preview shows the type.
 - **Documentation.**
-  - The 1.0.0 notes below say the tray restarts the site; it starts and stops the site and restarts
-    the app pool.
+  - The 1.0.0 notes below list a tray site restart, which was missing; **Admin > Restart the site**
+    now exists.
   - `installer\build.ps1` now writes `SHA256SUMS.txt`, which the setup guide refers to.
   - DEPLOYMENT.md explains that tray access tokens survive uninstall and how to revoke them.
 

@@ -1841,6 +1841,41 @@ the auditor and from search; DBA contract access; same-size rewrite and log typi
 tests were updated for the archive choice and the explicit checklist start.
 
 - 2026-11-11 | UPDATE-026 | Closes G01-G08 (Epic 24), G19 and G24 after their acceptance checks: 664 unit tests and the full E2E suite (109 of 109 before G23/G24, then the import, instance and ownership tests after them) pass. G19: `installeruild.ps1` writes `SHA256SUMS.txt` (sha256sum format) and SETUP-GUIDE.md gives a one-line check, verified against a real build output. G23 is partly delivered: the instance template now has an example row, allowed values as `#` comment lines (ignored on import), a column guide on the import page, and the 12 missing columns (Region, Cluster, ReplicaSet, Criticality, OwnerTeam by name, BackupContactName/Email/Phone, BackupFileNamePatterns, ConnectivityHost/Port, RestoreTestIntervalDays). The backup and restore history import is still to do, so G23 stays open. Also from G12: InstanceValidator now rejects a connectivity port outside 1-65535 instead of silently using the default.
+- 2026-11-11 | UPDATE-027 | Progress on G16, G20, G21 and G22. Persona notes are inline.
+  - **G16 (partial).**
+    - Port check: on a first install it now also refuses a port any program is listening on, even
+      when IIS config is readable (Sam).
+    - Hosting Bundle detection: Setup accepts any 20.x ASP.NET Core Module at or above the pinned
+      build, so a server on a newer .NET 10 patch is not given an older bundle and an IIS restart. A
+      21.x module still needs the pinned runtime folder.
+    - SQL Express: the Options hint says that ticking it accepts Microsoft's license terms (Angela).
+      The download note says the SQL Express installer fetches its own media.
+    - Tray: Admin > Restart the site added (stop then start), with a tray test.
+    - Docs: DEPLOYMENT.md hash statements corrected.
+    - Kept: the two-poll delay before a tray status notification (avoids noise on app pool recycles;
+      Sam). The guide already says "when the state changes and stays changed".
+    - Still open: a keep-data checkbox in the MSI's own uninstall screens (the default keeps data, and
+      full removal is `RemoveData=1`). All installer changes still need a Hyper-V run (G18).
+  - **G20 (partial).**
+    - Built: the app no longer redirects `/healthz` and `/api/tray` to HTTPS when the request comes
+      from the same machine (`HttpsRedirectExemption`, unit tested), so adding an HTTPS binding
+      doesn't break the tray (Sam). The token never crosses the network over HTTP (Angela).
+    - Docs: DEPLOYMENT.md explains adding the binding.
+    - Still open: choosing a certificate and creating the HTTPS binding inside the MSI.
+  - **G21 (partial).**
+    - Code platform: `tools/scan.sh` runs the shared code-platform scan (SonarQube, Dependency-Track,
+      DefectDojo) through `DockerSecurity/code-platform/scan-project.sh`, with no tokens in the repo.
+    - CI: `.github/workflows/ci.yml` builds, runs unit and tray tests and produces a CycloneDX SBOM
+      (command verified locally with CycloneDX 6.3.1).
+    - Logs: `tools/Ship-IisLogs.ps1` sends the site's IIS W3C logs to `/srv/weblogs/dbtracker/` for
+      GoAccess, and DEPLOYMENT.md explains scheduling it.
+    - README has a "Quality checks" section.
+    - Still open: the first scan itself, because Docker Desktop was not running on this machine.
+  - **G22 (partial).**
+    - Verified: `dotnet publish src/DBTracker.Web -p:PublishProfile=FolderProfile` succeeds and the
+      output has `web.config` and no Development or Testing settings.
+    - Still open: the tray checks (autostart, admin prompts, closing on uninstall), which need the
+      Hyper-V desktop run with G18.
 - 2026-11-11 | UPDATE-025 | Clarifies the Progress log's D22 entry (see UPDATE-022): after G01, "NotApplicable is not treated as passing" is replaced by "NotApplicable only when proven" and "no second archive path" holds for retirements. The D21 entry's "a DBA can record a contract" is true after G06. Earlier wording is kept as history.
 
 ### Epic 25 - Finish partly built features

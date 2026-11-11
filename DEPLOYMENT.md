@@ -209,6 +209,14 @@ In IIS Manager:
    certificate for anything beyond a test box: the app handles sign-in cookies and, once configured,
    database and mail credentials.
 
+   The MSI creates an HTTP binding only. To add HTTPS after installing, add an `https` binding with
+   your certificate to the `DBTracker` site in IIS Manager.
+   - **Keep the HTTP binding.** Browsers that reach it are redirected to HTTPS.
+   - **The tray keeps working.** It polls `http://localhost:<port>`, and the app answers its
+     `/healthz` and `/api/tray` requests over HTTP only when they come from the same machine, so its
+     token never crosses the network.
+   - **Don't open the HTTP port** in the firewall if you want HTTPS-only access from other machines.
+
 With ApplicationPoolIdentity the pool runs as the virtual account `IIS APPPOOL\DBTracker`. The next
 steps grant that account what it needs.
 
@@ -304,6 +312,16 @@ still unconfigured, such as scanning, alerts or the report distribution list.
 
 If you loaded sample data, deactivate the demo accounts from the **Users** page, or reinstall without
 sample data, before real users rely on the site.
+
+**Central log analytics.** Architonix apps send their web logs to the shared GoAccess server, which
+reads `/srv/weblogs/<app>/` on 192.168.1.8. Because DBTracker runs under IIS on Windows,
+`tools\Ship-IisLogs.ps1` copies the site's IIS W3C logs to `ram@192.168.1.8:/srv/weblogs/dbtracker/`
+with `scp`, sending only files that are new or changed since its last run.
+- **Schedule:** run it from Task Scheduler, every 15 minutes for example, as an administrator account,
+  since reading IIS configuration needs administrator rights.
+- **SSH key:** the account needs an SSH key that the server accepts. Nothing prompts for a password.
+- **Check first:** `-WhatIf` shows what it would send.
+- **GoAccess format:** use the W3C log format for this folder.
 
 ## 8. Backup-share permissions
 

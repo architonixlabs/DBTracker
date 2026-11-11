@@ -102,29 +102,35 @@ namespace DBTracker.CustomActions
             return int.TryParse(portText, out port);
         }
 
-        public static string FindPortConflict(int port, string ownSiteName, string applicationHostConfigPath, bool isUpgradeOrRepair)
+        public static string FindPortConflict(int port, string ownSiteName, string applicationHostConfigPath, bool isUpgradeOrRepair) =>
+            FindPortConflict(port, ownSiteName, applicationHostConfigPath, isUpgradeOrRepair,
+                p => IPGlobalProperties.GetIPGlobalProperties().GetActiveTcpListeners().Any(e => e.Port == p));
+
+        /// <summary>An IIS site bound to the port, or (on a first install) any program already listening on it, such as
+        /// another web server or a SQL Server endpoint. An upgrade or repair of our own site is listening there itself.</summary>
+        public static string FindPortConflict(int port, string ownSiteName, string applicationHostConfigPath, bool isUpgradeOrRepair, Func<int, bool> isListening)
         {
             try
             {
                 var clash = ReadIisBindings(applicationHostConfigPath)
                     .FirstOrDefault(b => b.Port == port && !b.SiteName.Equals(ownSiteName, StringComparison.OrdinalIgnoreCase));
-                return clash == null
-                    ? null
-                    : "Port " + port + " is already used by the IIS site \"" + clash.SiteName + "\". Choose another port, for example in the 8xxx or 9xxx range.";
+                if (clash != null)
+                {
+                    return "Port " + port + " is already used by the IIS site \"" + clash.SiteName + "\". Choose another port, for example in the 8xxx or 9xxx range.";
+                }
             }
             catch (Exception ex) when (ex is UnauthorizedAccessException || ex is IOException || ex is System.Xml.XmlException)
             {
-                // Without admin rights applicationHost.config is unreadable; fall back to what is listening now.
-                // An upgrade of our own site would be listening on this port, so only flag it on a first install.
-                if (isUpgradeOrRepair)
-                {
-                    return null;
-                }
-                var listening = IPGlobalProperties.GetIPGlobalProperties().GetActiveTcpListeners().Any(e => e.Port == port);
-                return listening
-                    ? "Port " + port + " is already in use on this computer. Choose another port, for example in the 8xxx or 9xxx range."
-                    : null;
+                // Without admin rights applicationHost.config is unreadable; the listener check below still applies.
             }
+
+            if (isUpgradeOrRepair)
+            {
+                return null;
+            }
+            return isListening(port)
+                ? "Port " + port + " is already in use on this computer by another program. Choose another port, for example in the 8xxx or 9xxx range."
+                : null;
         }
 
         public static bool IsLocalSqlServer(string server)

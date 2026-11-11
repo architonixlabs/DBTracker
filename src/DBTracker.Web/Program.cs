@@ -175,7 +175,11 @@ if (app.Environment.IsProduction())
     app.UseHsts();
 }
 app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
-app.UseHttpsRedirection();
+// The tray polls these over loopback http and doesn't follow redirects; see HttpsRedirectExemption.
+app.UseWhen(
+    ctx => !DBTracker.Core.Services.HttpsRedirectExemption.Applies(ctx.Request.Path.Value,
+        ctx.Connection.RemoteIpAddress is { } ip && System.Net.IPAddress.IsLoopback(ip)),
+    branch => branch.UseHttpsRedirection());
 
 app.UseInstallGate(installState);
 

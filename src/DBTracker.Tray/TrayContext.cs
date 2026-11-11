@@ -86,6 +86,7 @@ namespace DBTracker.Tray
                 new ToolStripSeparator(),
                 AdminItem("Start the s&ite", AdminAction.StartSite),
                 AdminItem("Stop the sit&e", AdminAction.StopSite),
+                AdminItem("Restart the site", AdminAction.RestartSite),
                 new ToolStripSeparator(),
                 _copyKeyItem,
             });

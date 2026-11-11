@@ -52,7 +52,10 @@
     <!-- Hosting Bundle: the ASP.NET Core Module V2 is only installed by the Hosting Bundle (the SDK and
          plain runtime installers don't add it), and its major version tracks the .NET major (20.x = .NET 10).
          The ASP.NET Core Shared Framework registry keys aren't written for .NET 10 runtimes installed by
-         the SDK, so the runtime is detected by its folder instead. -->
+         the SDK, so the runtime is detected by its folder instead. A 20.x module at or above the pinned
+         build means this or a newer .NET 10 Hosting Bundle (which brings its runtime) is installed, so a
+         server already on a later 10.0 patch isn't given an older bundle and an IIS restart. A 21.x module
+         comes from a later .NET, which says nothing about .NET 10, so then the pinned runtime folder decides. -->
     <util:FileSearch Id="AncmSearch" Variable="AncmVersion" Path="[ProgramFiles64Folder]IIS\Asp.Net Core Module\V2\aspnetcorev2.dll" Result="version" />
     <util:DirectorySearch Id="AspNetCoreRuntimeSearch" Variable="AspNetCoreRuntimePresent" Path="[ProgramFiles64Folder]dotnet\shared\Microsoft.AspNetCore.App\$(var.AspNetCoreRuntimeVersion)" Result="exists" />
 
@@ -81,7 +84,7 @@
                   DisplayName="ASP.NET Core $(var.AspNetCoreRuntimeVersion) Hosting Bundle"
                   InstallArguments="/install /quiet /norestart"
                   RepairArguments="/repair /quiet /norestart"
-                  DetectCondition="AncmVersion &gt;= v$(var.AncmMinVersion) AND AspNetCoreRuntimePresent"
+                  DetectCondition="AncmVersion &gt;= v$(var.AncmMinVersion) AND (AncmVersion &lt; v21.0.0.0 OR AspNetCoreRuntimePresent)"
                   PerMachine="yes"
                   Permanent="yes"
                   Vital="yes"
@@ -104,7 +107,7 @@
                   Name="SetupHelper\Restart\DBTracker.SetupHelper.exe"
                   CacheId="DBTracker.SetupHelper.RestartIis.$(var.BundleVersion)"
                   InstallArguments="restart-iis"
-                  DetectCondition="AncmVersion &gt;= v$(var.AncmMinVersion) AND AspNetCoreRuntimePresent"
+                  DetectCondition="AncmVersion &gt;= v$(var.AncmMinVersion) AND (AncmVersion &lt; v21.0.0.0 OR AspNetCoreRuntimePresent)"
                   PerMachine="yes"
                   Permanent="yes"
                   Vital="yes"

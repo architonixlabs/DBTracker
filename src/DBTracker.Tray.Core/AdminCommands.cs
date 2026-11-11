@@ -11,6 +11,7 @@ namespace DBTracker.Tray.Core
         StartSite,
         StopSite,
         CopySetupKey,
+        RestartSite,
     }
 
     // The elevated copy of the tray exe receives only the action name; it reads site and pool names
@@ -27,6 +28,7 @@ namespace DBTracker.Tray.Core
             [AdminAction.StartSite] = "start-site",
             [AdminAction.StopSite] = "stop-site",
             [AdminAction.CopySetupKey] = "copy-setup-key",
+            [AdminAction.RestartSite] = "restart-site",
         };
 
         public static string ToArgument(AdminAction action) => Names[action];
@@ -63,6 +65,7 @@ namespace DBTracker.Tray.Core
                 case AdminAction.RestartAppPool: return new[] { "stop apppool " + pool, "start apppool " + pool };
                 case AdminAction.StartSite: return new[] { "start site " + site };
                 case AdminAction.StopSite: return new[] { "stop site " + site };
+                case AdminAction.RestartSite: return new[] { "stop site " + site, "start site " + site };
                 default: return new string[0];
             }
         }
@@ -76,6 +79,7 @@ namespace DBTracker.Tray.Core
                 case AdminAction.RestartAppPool: return "Restart the app pool";
                 case AdminAction.StartSite: return "Start the site";
                 case AdminAction.StopSite: return "Stop the site";
+                case AdminAction.RestartSite: return "Restart the site";
                 case AdminAction.CopySetupKey: return "Copy the setup key";
                 default: return action.ToString();
             }
