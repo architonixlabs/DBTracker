@@ -2314,6 +2314,9 @@ fallback.
   - Development and Testing still fail loudly.
   - The E2E test `DatabaseUnavailableAtStartupTests` starts a Production-mode copy against a missing SQL Server and checks
     the 503, `Retry-After` and degraded health.
+  - The first version gated on "not migrated yet", which held the sign-in page after a fresh install finished the wizard;
+    the install E2E tests caught it. The gate now applies only while an installed app is actually waiting for its database.
+  - Full E2E: 145 of 147, with the 2 wizard failures fixed and rerun green.
 
 ### Audit corrections to existing text
 

@@ -13,16 +13,19 @@ namespace DBTracker.Web.Install;
 /// briefly, then the site answers 503 with an explanation while <see cref="DatabaseReadinessService"/> keeps retrying.</remarks>
 public sealed class DatabaseReadiness
 {
-    private volatile bool _ready;
+    private volatile bool _waiting;
 
-    public bool IsReady => _ready;
+    /// <summary>True only after an installed app failed to reach its database, until a retry succeeds. A fresh install never
+    /// waits: the setup wizard creates and migrates the database itself before it marks the app installed.</summary>
+    public bool IsWaiting => _waiting;
     public string? LastError { get; private set; }
     public DateTime? LastAttemptUtc { get; private set; }
 
-    internal void MarkReady() { _ready = true; LastError = null; }
+    internal void MarkReady() { _waiting = false; LastError = null; }
 
     internal void MarkFailed(Exception error)
     {
+        _waiting = true;
         LastAttemptUtc = DateTime.UtcNow;
         LastError = error.GetBaseException().Message;
     }
@@ -53,7 +56,7 @@ public sealed class DatabaseReadinessService(
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        while (state.IsInstalled && !readiness.IsReady && !stoppingToken.IsCancellationRequested)
+        while (readiness.IsWaiting && !stoppingToken.IsCancellationRequested)
         {
             await Task.Delay(TimeSpan.FromSeconds(DatabaseReadinessGate.RetryAfterSeconds), stoppingToken);
             try
@@ -77,7 +80,7 @@ public static class DatabaseReadinessExtensions
     public static IApplicationBuilder UseDatabaseReadinessGate(this IApplicationBuilder app, InstallState state, DatabaseReadiness readiness) =>
         app.Use(async (context, next) =>
         {
-            if (!state.IsInstalled || readiness.IsReady || DatabaseReadinessGate.Allows(context.Request.Path.Value))
+            if (!readiness.IsWaiting || DatabaseReadinessGate.Allows(context.Request.Path.Value))
             {
                 await next();
                 return;
