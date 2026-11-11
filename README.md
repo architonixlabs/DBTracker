@@ -24,6 +24,10 @@ The connection string lives in `src/DBTracker.Web/appsettings.json`
 (`ConnectionStrings:DBTracker`) and defaults to `Server=localhost` with
 integrated security — no secrets required.
 
+## Deploying to IIS
+See [DEPLOYMENT.md](DEPLOYMENT.md). A first-run wizard at `/install` creates the database and the
+first Admin account.
+
 ## Project layout
 - `src/DBTracker.Core` — domain entities and backup-health logic
 - `src/DBTracker.Infrastructure` — EF Core DbContext, migrations, queries
