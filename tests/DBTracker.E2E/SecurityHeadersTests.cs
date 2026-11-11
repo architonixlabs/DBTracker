@@ -43,7 +43,7 @@ public class SecurityHeadersTests
         Assert.That(headers["referrer-policy"], Is.EqualTo("strict-origin-when-cross-origin"));
         Assert.That(headers["x-frame-options"], Is.EqualTo("DENY"));
 
-        await _page.FillAsync("input[autocomplete=username]", "admin@architonixlabs.com");
+        await _page.FillAsync("input[autocomplete~=username]", "admin@architonixlabs.com");
         await _page.FillAsync("input[autocomplete=current-password]", "ArxDemo#2026!");
         await _page.ClickAsync("button[type=submit]");
         await _page.WaitForURLAsync(url => !url.Contains("/Account/Login"), new PageWaitForURLOptions { Timeout = 15000 });
@@ -70,7 +70,7 @@ public class SecurityHeadersTests
     {
         _page = await GlobalSetup.Server.Browser.NewPageAsync();
         await _page.GotoAsync(TestServerFixture.BaseUrl + "/Account/Login", new PageGotoOptions { WaitUntil = WaitUntilState.Load });
-        await _page.FillAsync("input[autocomplete=username]", "dev.patel@ediqra.com");
+        await _page.FillAsync("input[autocomplete~=username]", "dev.patel@ediqra.com");
         await _page.FillAsync("input[autocomplete=current-password]", "ArxDemo#2026!");
         await _page.ClickAsync("button[type=submit]");
         await _page.WaitForURLAsync(url => !url.Contains("/Account/Login"), new PageWaitForURLOptions { Timeout = 15000 });

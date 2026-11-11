@@ -1,5 +1,6 @@
 using DBTracker.Core.Entities;
 using DBTracker.Infrastructure.Identity;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 
@@ -86,7 +87,24 @@ public class DBTrackerDbContext : IdentityDbContext<ApplicationUser>
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        // The Identity schema version (3 for G26's AspNetUserPasskeys table) comes from IdentityOptions.Stores.SchemaVersion in
+        // Program.cs, which base.OnModelCreating reads through the application service provider. dotnet ef builds the model from
+        // the same host, so migrations see it too.
         base.OnModelCreating(modelBuilder);
+
+        // Version 3 includes version 2's shorter key columns (128) and PhoneNumber (256). Keep the version 1 sizes already in the database,
+        // so moving to version 3 only adds the passkey table and doesn't rebuild the login and token primary keys.
+        modelBuilder.Entity<IdentityUserLogin<string>>(entity =>
+        {
+            entity.Property(e => e.LoginProvider).Metadata.SetMaxLength(null);
+            entity.Property(e => e.ProviderKey).Metadata.SetMaxLength(null);
+        });
+        modelBuilder.Entity<IdentityUserToken<string>>(entity =>
+        {
+            entity.Property(e => e.LoginProvider).Metadata.SetMaxLength(null);
+            entity.Property(e => e.Name).Metadata.SetMaxLength(null);
+        });
+        modelBuilder.Entity<ApplicationUser>().Property(e => e.PhoneNumber).Metadata.SetMaxLength(null);
 
         modelBuilder.Entity<ApplicationUser>(entity =>
         {

@@ -127,7 +127,7 @@ public class NotificationsAndUsersTests
     private async Task LoginAsync(string email, string password)
     {
         await GotoAsync("/Account/Login");
-        await _page.FillAsync("input[autocomplete=username]", email);
+        await _page.FillAsync("input[autocomplete~=username]", email);
         await _page.FillAsync("input[autocomplete=current-password]", password);
 
         await _page.ClickAsync("button[type=submit]");

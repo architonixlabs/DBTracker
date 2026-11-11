@@ -57,6 +57,7 @@ builder.Services.AddScoped<InstanceArchiveService>();
 builder.Services.AddScoped<InstanceBulkEditService>();
 builder.Services.AddScoped<AccountLifecycleService>();
 builder.Services.AddScoped<PersonalAccessTokenService>();
+builder.Services.AddScoped<PasskeyService>();
 
 builder.Services.AddScoped<TeamService>();
 builder.Services.AddScoped<BackupPolicyService>();
@@ -154,6 +155,8 @@ builder.Services.AddIdentityCore<ApplicationUser>(options =>
     {
         options.SignIn.RequireConfirmedAccount = false;
         options.Password.RequireNonAlphanumeric = false;
+        // G26: version 3 adds the AspNetUserPasskeys table used by Identity's passkey store.
+        options.Stores.SchemaVersion = IdentitySchemaVersions.Version3;
     })
     .AddRoles<IdentityRole>()
     .AddEntityFrameworkStores<DBTrackerDbContext>()
@@ -161,6 +164,21 @@ builder.Services.AddIdentityCore<ApplicationUser>(options =>
     .AddDefaultTokenProviders();
 
 builder.Services.AddHttpContextAccessor();
+
+// G26 passkeys. ServerDomain is the WebAuthn RP ID; left empty, Identity uses the request's host. Passkeys only work over HTTPS
+// (or http://localhost), and changing the domain later strands every passkey registered under the old one. See DEPLOYMENT.md.
+builder.Services.Configure<IdentityPasskeyOptions>(options =>
+{
+    var serverDomain = builder.Configuration["Passkeys:ServerDomain"];
+    if (!string.IsNullOrWhiteSpace(serverDomain))
+    {
+        options.ServerDomain = serverDomain.Trim();
+    }
+    // Discoverable credentials, so a user can pick their passkey without typing an email first.
+    options.ResidentKeyRequirement = "required";
+    // A PIN, fingerprint or face check on every use, so a passkey stands in for the password rather than weakening it.
+    options.UserVerificationRequirement = "required";
+});
 
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
@@ -202,6 +220,7 @@ app.MapRazorComponents<App>()
 
 app.MapIdentityLogoutEndpoint();
 app.MapDeviceLinkEndpoints();
+app.MapPasskeyEndpoints();
 app.MapTrayApi();
 app.MapCspReports();
 

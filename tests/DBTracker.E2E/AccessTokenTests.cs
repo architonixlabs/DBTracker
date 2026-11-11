@@ -174,7 +174,7 @@ public class AccessTokenTests
     private static async Task LoginAsync(IPage page, string email, string password)
     {
         await GotoAsync(page, "/Account/Login");
-        await page.FillAsync("input[autocomplete=username]", email);
+        await page.FillAsync("input[autocomplete~=username]", email);
         await page.FillAsync("input[autocomplete=current-password]", password);
         await page.ClickAsync("button[type=submit]");
         await page.WaitForURLAsync(url => !url.Contains("/Account/Login"), new PageWaitForURLOptions { Timeout = 15000 });

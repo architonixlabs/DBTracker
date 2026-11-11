@@ -26,7 +26,7 @@ public class Epic22EntitlementAndRetirementTests
         }
         _page = await GlobalSetup.Server.Browser.NewPageAsync();
         await GotoAsync("/Account/Login");
-        await _page.FillAsync("input[autocomplete=username]", email);
+        await _page.FillAsync("input[autocomplete~=username]", email);
         await _page.FillAsync("input[autocomplete=current-password]", "ArxDemo#2026!");
 
         await _page.ClickAsync("button[type=submit]");
