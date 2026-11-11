@@ -287,6 +287,12 @@ Keep `App_Data\keys` unless you also intend to re-enter every saved secret.
 
 ## 11. Troubleshooting
 
+**Setup.exe fails right away with 0x800f0831 or 0x800f080c.** This copy of Windows does not include
+IIS: DISM reports every IIS feature name as unknown (`%TEMP%\DBTracker-SetupHelper.log` says so). It
+happens on Windows Home and inside Windows Sandbox. Install on Windows Server, or Windows 10/11 Pro,
+Enterprise or Education. For a throwaway test machine use a Hyper-V VM (see
+`installer\test\Start-HyperVTest.ps1`), not Windows Sandbox.
+
 **HTTP 500.19 (configuration error).** IIS cannot read `web.config`, usually because the ASP.NET Core
 Module is not installed. Install, or repair, the .NET 10 Hosting Bundle and run `iisreset`. Also check
 that the app pool identity can read the site folder.

@@ -75,6 +75,14 @@ namespace DBTracker.SetupHelper
                 return exitCode;
             }
 
+            // Seen when the Windows image has no IIS at all (Windows Home, Windows Sandbox): DISM reports
+            // every IIS feature name as unknown and returns one of these codes.
+            if (exitCode == unchecked((int)0x800F080C) || exitCode == unchecked((int)0x800F0831))
+            {
+                Log("This copy of Windows does not include IIS, so DBTracker cannot be installed on it. " +
+                    "Use Windows Server, or Windows 10/11 Pro, Enterprise or Education (not Home or Windows Sandbox).");
+            }
+
             Log($"DISM could not enable the IIS features (exit code {exitCode}). See %windir%\\Logs\\DISM\\dism.log.");
             return exitCode;
         }

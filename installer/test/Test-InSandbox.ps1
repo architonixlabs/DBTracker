@@ -4,7 +4,9 @@
 param(
     [string]$Installer = 'C:\Installer\DBTracker-Setup.exe',
     [string]$Results = 'C:\Results',
-    [int]$Port = 8150
+    [int]$Port = 8150,
+    [switch]$SkipSqlExpress,
+    [switch]$NoUi
 )
 
 $ErrorActionPreference = 'Continue'
@@ -13,11 +15,12 @@ Start-Transcript -Path (Join-Path $Results 'transcript.txt') -Force | Out-Null
 
 $summary = [ordered]@{ StartedAt = (Get-Date).ToString('o') }
 
-Write-Host "Running $Installer quietly with SQL Server Express..."
+$sqlExpress = if ($SkipSqlExpress) { '0' } else { '1' }
+Write-Host "Running $Installer quietly (SQL Server Express: $sqlExpress)..."
 $setupLog = Join-Path $Results 'DBTracker-Setup.log'
 $proc = Start-Process -FilePath $Installer -Wait -PassThru -ArgumentList @(
     '/quiet', '/norestart', '/log', "`"$setupLog`"",
-    'InstallSqlExpress=1', 'LaunchWizard=0', "SitePort=$Port")
+    "InstallSqlExpress=$sqlExpress", 'LaunchWizard=0', "SitePort=$Port")
 $summary.SetupExitCode = $proc.ExitCode
 $summary.FinishedAt = (Get-Date).ToString('o')
 
@@ -50,5 +53,7 @@ $summary | ConvertTo-Json | Set-Content -Path (Join-Path $Results 'results.json'
 $summary | Format-List | Out-String | Write-Host
 Stop-Transcript | Out-Null
 
-if ($summary.SetupKeyFileCreated) { Start-Process notepad.exe $keyFile }
-Start-Process "http://localhost:$Port/install"
+if (-not $NoUi) {
+    if ($summary.SetupKeyFileCreated) { Start-Process notepad.exe $keyFile -ErrorAction SilentlyContinue }
+    Start-Process "http://localhost:$Port/install"
+}
