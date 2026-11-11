@@ -1049,6 +1049,21 @@ authenticated role already, same as the rest of the app, so no separate "my apps
   Code, `/install` returned HTTP 200, setup key file created, Edge opened the wizard. **Not yet
   covered:** clicking through the bundle's Options page (the VM runs used `/passive`), uninstall, and
   an upgrade from one version to the next.
+- 2026-11-11 · Uninstall tested in the same VM with `installer\test\Test-HyperVUninstall.ps1`
+  (install with a SQL login, normal uninstall, reinstall plus `/uninstall RemoveData=1`, final
+  install). Three real bugs found and fixed: (1) the SQL login was never created, because
+  `EXEC(N'CREATE LOGIN ' + QUOTENAME(@login) ...)` is invalid T-SQL (EXEC takes only literals and
+  variables), reproduced with SET PARSEONLY and fixed by building the statement in a variable and
+  running it with sp_executesql; because a failed grant only warns, every install had "succeeded"
+  without it; (2) Setup.exe had no way to pass REMOVE_DATA, and the msiexec route left a stale "DBTracker
+  Setup" entry in Settings > Apps; the bundle now has a `RemoveData` variable; (3) deleting App_Data left
+  an empty install folder, because Windows Installer had already tried to remove it; the custom action
+  now removes it when empty. **Verified:** all six runs exit 0; normal uninstall removes site, pool,
+  port binding, program files and the Apps entries but keeps App_Data and the prerequisites;
+  `RemoveData=1` also removes App_Data and the folder; the login `IIS APPPOOL\DBTracker` with dbcreator
+  is created. The SQL login is deliberately kept on uninstall (a database may still map a user to it);
+  DEPLOYMENT.md gives the DROP LOGIN line. **Still not covered:** the Options page click-through and a
+  version-to-version upgrade.
 
 ## Out of scope (future)
 - Automated backup execution/orchestration (this tracks status, doesn't run backups)

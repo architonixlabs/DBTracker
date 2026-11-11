@@ -36,7 +36,11 @@ Server Express**, which only appears when no local SQL Server instance exists. F
 ```powershell
 DBTracker-Setup.exe /quiet SitePort=8200 InstallFolder="D:\Sites\DBTracker" SqlLoginServer=. LaunchWizard=0
 DBTracker-Setup.exe /quiet InstallSqlExpress=1
+DBTracker-Setup.exe /uninstall /quiet RemoveData=1
 ```
+
+When a local SQL Server already exists, Setup doesn't create the app pool's SQL login unless you name
+the server with `SqlLoginServer` (or fill in the field on the Options page).
 
 `/quiet` installs without prompts, and `/norestart` suppresses the restart prompt. Turning on IIS
 features, the Hosting Bundle or SQL Server Express sometimes needs a restart (exit code 3010); Setup.exe
@@ -69,12 +73,17 @@ msiexec /i DBTracker.msi /l*v install.log
 # Unattended, on another port, creating the SQL login on the local default instance
 msiexec /i DBTracker.msi /qn /l*v install.log SITE_PORT=8150 SQL_SERVER=. SQL_GRANT_LOGIN=1
 
-# Uninstall, keeping App_Data (the default)
-msiexec /x DBTracker.msi /qn /l*v uninstall.log
+# Uninstall, keeping App_Data (the default; same as Settings > Apps)
+DBTracker-Setup.exe /uninstall /quiet
 
 # Uninstall and delete App_Data (saved configuration, encryption keys, setup key)
-msiexec /x DBTracker.msi /qn /l*v uninstall.log REMOVE_DATA=1
+DBTracker-Setup.exe /uninstall /quiet RemoveData=1
 ```
+
+If you installed with `DBTracker-Setup.exe`, uninstall with it too (or from Settings > Apps, where it
+appears as "DBTracker Setup"). Running `msiexec /x` on the hidden MSI underneath works, but leaves a
+stale "DBTracker Setup" entry in Settings > Apps. `msiexec /x DBTracker.msi REMOVE_DATA=1` is only
+for machines where the MSI was installed on its own.
 
 The SQL login is created with your Windows credentials, so you need permission to create logins on
 that server. For SQL Server on the same machine the login is `IIS APPPOOL\<pool>`; for a server on
@@ -86,9 +95,12 @@ the install anyway; create the login by hand with the statements in section 5.
 the program files, keeps `App_Data`, and starts the pool again; pending database migrations apply on
 the next request. Installing an older version over a newer one is blocked.
 
-**Uninstall** (Settings > Apps, or `msiexec /x`) removes the site, the app pool and the program files.
-`App_Data` stays unless you pass `REMOVE_DATA=1`. The database is never touched. Prerequisites that
-Setup.exe installed (IIS features, the Hosting Bundle, SQL Server Express) also stay installed.
+**Uninstall** (Settings > Apps, or `DBTracker-Setup.exe /uninstall`) removes the site, the app pool
+and the program files. `App_Data` stays unless you pass `RemoveData=1`, in which case the install
+folder goes too. The database is never touched, and neither is the SQL login the installer created for
+the app pool: a DBTracker database may still have a user mapped to it. To remove it when you are done
+with DBTracker for good, run `DROP LOGIN [IIS APPPOOL\DBTracker];` on that SQL Server. Prerequisites
+that Setup.exe installed (IIS features, the Hosting Bundle, SQL Server Express) also stay installed.
 
 **Known gap.** If the .NET Hosting Bundle was installed before IIS, the ASP.NET Core Module files exist
 but IIS does not know about them, and neither installer can detect that. The site then fails with HTTP

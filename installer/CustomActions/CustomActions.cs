@@ -2,6 +2,7 @@ using System;
 using System.Data.SqlClient;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Net;
 using System.Runtime.InteropServices;
 using System.Security.AccessControl;
@@ -183,9 +184,12 @@ namespace DBTracker.CustomActions
                 ConnectTimeout = 15,
                 TrustServerCertificate = true,
             };
+            // EXEC(...) only accepts literals and variables joined with +, not function calls, so the
+            // quoted name is built into a variable first.
             const string sql =
-                "IF SUSER_ID(@login) IS NULL EXEC(N'CREATE LOGIN ' + QUOTENAME(@login) + N' FROM WINDOWS'); " +
-                "EXEC(N'ALTER SERVER ROLE dbcreator ADD MEMBER ' + QUOTENAME(@login));";
+                "DECLARE @quoted nvarchar(300) = QUOTENAME(@login); DECLARE @sql nvarchar(max); " +
+                "IF SUSER_ID(@login) IS NULL BEGIN SET @sql = N'CREATE LOGIN ' + @quoted + N' FROM WINDOWS'; EXEC sys.sp_executesql @sql; END; " +
+                "SET @sql = N'ALTER SERVER ROLE dbcreator ADD MEMBER ' + @quoted; EXEC sys.sp_executesql @sql;";
             try
             {
                 using (var connection = new SqlConnection(builder.ConnectionString))
@@ -221,6 +225,21 @@ namespace DBTracker.CustomActions
                     session.Log("DBTracker: could not delete " + appData + " yet (attempt " + attempt + "): " + ex.Message);
                     Thread.Sleep(2000);
                 }
+            }
+
+            // Windows Installer tried to remove the install folder earlier, while App_Data still existed.
+            var installFolder = Path.GetDirectoryName(appData.TrimEnd(Path.DirectorySeparatorChar));
+            try
+            {
+                if (!Directory.Exists(appData) && Directory.Exists(installFolder) && !Directory.EnumerateFileSystemEntries(installFolder).Any())
+                {
+                    Directory.Delete(installFolder);
+                    session.Log("DBTracker: deleted the now-empty " + installFolder);
+                }
+            }
+            catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException)
+            {
+                session.Log("DBTracker: could not delete " + installFolder + ": " + ex.Message);
             }
             return ActionResult.Success;
         }
