@@ -1472,3 +1472,40 @@ A newer release alone does not make migration required. No automatic upgrade exe
 - 2026-11-10 | UPDATE-014 | Extends U14: D22 adds retirement gates before archive; archive/unarchive itself remains the original U14 proposal.
 - 2026-11-10 | PLAN-001 | Start D01-D04 and lifecycle-only D15 with manual catalogue/attestation; establish U19 audit conventions early. Then D07-D14 migration readiness and D16 recovery evidence. Optional collectors/advisory integrations and wider operations follow; dependencies can constrain portions of an item without preventing an honest Unknown status.
 - 2026-11-10 | VALIDATION-001 | Before closing a D item, run its acceptance criteria and the synthetic boundary/applicability/rollback/role scenarios in DBA_LIFECYCLE_REVIEW.md. Verify engine-specific behavior against current authoritative guidance. This review made documentation changes only and does not establish fleet support status or migration readiness.
+
+## Installation roadmap - 2026-11-11
+
+2026-11-11 | NEW-003 | Added a first-run installation wizard and IIS packaging after the owner asked
+for a guided setup when DBTracker is downloaded or deployed to IIS. Persona check: Sam (admin/installer)
+is the main user, since today a deploy means hand-editing appsettings.json and the app crashes on boot
+when the database is unreachable; Priya (DBA) needs the wizard to prove the service identity can read
+backup shares; Angela (auditor) needs setup itself recorded and no published demo password left as the
+only way in; Marcus and Dev only need a working app on day one. Owner decisions: protect the wizard with
+a one-time setup key; offer optional sample data plus demo accounts behind a "not for production"
+warning. Found while scoping: a Production deploy today seeds no users at all, so nobody can log in.
+
+### Epic 23 - First-run installation
+
+- [ ] **2026-11-11 | I01 | NEW | P1 | L - Setup wizard at /install.**
+  **Acceptance:** an uninstalled app sends every page request to `/install` and starts no background
+  workers or migrations. Step 1 requires a one-time setup key that the app writes to
+  `App_Data/setup-key.txt` and its log on first start (constant-time compare, attempts rate-limited,
+  key deleted on completion). Database step: SQL Server name, database name, Windows (service identity)
+  or SQL login, encryption options, Test connection, create the database if missing, or use an existing
+  DBTracker database by applying pending migrations without dropping data. Migration step shows
+  progress. Optional sample data plus the five demo accounts, off by default, with a warning that the
+  password is public. First Admin account is always required. Optional email step (ArxMail first and
+  default, SMTP, or none) with a test send. Optional backup-share check that reports the running
+  identity and whether it can read the path. Finish writes `App_Data/dbtracker.config.json` (secrets
+  such as SQL or SMTP passwords encrypted with ASP.NET Data Protection, keys kept in App_Data), records
+  an audit event, and lands on the login page without a manual IIS restart. After completion `/install`
+  is closed; rerunning it means deleting the config file on the server. Existing deployments that
+  already have a connection string and an Admin are treated as installed; Development and Testing keep
+  today's behavior.
+
+- [ ] **2026-11-11 | I02 | NEW | P1 | S - IIS packaging and deployment guide.**
+  **Acceptance:** a project `web.config` for the ASP.NET Core Module (in-process, Production), a folder
+  publish profile, and `DEPLOYMENT.md` covering prerequisites (.NET 10 Hosting Bundle, IIS WebSocket
+  Protocol for Blazor Server, SQL Server), app pool and site setup, App_Data write permission, SQL access
+  for the app pool identity, where to find the setup key, backup-share permissions, upgrades, and how to
+  rerun the wizard. `dotnet publish` with the profile succeeds.
