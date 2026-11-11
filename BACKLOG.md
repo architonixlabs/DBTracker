@@ -1564,7 +1564,7 @@ that runs the MSI last.
   unless the user chooses otherwise. Verbose MSI log on request. Builds with `dotnet build`, no global
   WiX install.
 
-- [ ] **2026-11-11 | I04 | NEW | P1 | M - DBTracker-Setup.exe prerequisites bundle (WiX Burn).**
+- [x] **2026-11-11 | I04 | NEW | P1 | M - DBTracker-Setup.exe prerequisites bundle (WiX Burn).**
   **Acceptance:** detects and, after one confirmation, installs: IIS with the WebSocket Protocol and
   required features (DISM, Windows client and Server), the .NET 10 Hosting Bundle, and optionally SQL
   Server Express when no local instance exists (or skips it so the wizard can use a remote server).

@@ -1,0 +1,43 @@
+<Project Sdk="WixToolset.Sdk/5.0.2">
+
+  <PropertyGroup>
+    <OutputType>Bundle</OutputType>
+    <OutputName>DBTracker-Setup</OutputName>
+    <OutputPath>$(MSBuildThisFileDirectory)..\out\</OutputPath>
+    <BundleVersion Condition="'$(BundleVersion)' == ''">1.0.0</BundleVersion>
+    <DBTrackerMsiPath Condition="'$(DBTrackerMsiPath)' == ''">$(MSBuildThisFileDirectory)..\out\DBTracker.msi</DBTrackerMsiPath>
+    <PrereqMetadataFile>$(MSBuildThisFileDirectory)PrereqMetadata.generated.wxi</PrereqMetadataFile>
+    <SetupHelperProject>$(MSBuildThisFileDirectory)SetupHelper\DBTracker.SetupHelper.csproj</SetupHelperProject>
+    <SetupHelperPath>$(MSBuildThisFileDirectory)SetupHelper\bin\$(Configuration)\net462\DBTracker.SetupHelper.exe</SetupHelperPath>
+    <DefineConstants>BundleVersion=$(BundleVersion);DBTrackerMsiPath=$(DBTrackerMsiPath);SetupHelperPath=$(SetupHelperPath)</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="WixToolset.BootstrapperApplications.wixext" Version="5.0.2" />
+    <PackageReference Include="WixToolset.Util.wixext" Version="5.0.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="Get-PrereqMetadata.ps1" />
+    <None Include="Theme\DBTrackerTheme.xml" />
+    <None Include="Theme\DBTrackerTheme.wxl" />
+  </ItemGroup>
+
+  <!-- Pins the Hosting Bundle and SQL Server Express downloads (URL, size, SHA-512) when the generated
+       include is missing. Rerun Get-PrereqMetadata.ps1 to pick up a newer .NET patch. -->
+  <Target Name="GeneratePrereqMetadata" BeforeTargets="BeforeBuild" Condition="!Exists('$(PrereqMetadataFile)')">
+    <Exec Command="powershell.exe -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildThisFileDirectory)Get-PrereqMetadata.ps1&quot; -OutFile &quot;$(PrereqMetadataFile)&quot;" />
+  </Target>
+
+  <Target Name="BuildSetupHelper" BeforeTargets="BeforeBuild">
+    <!-- Restore needs its own evaluation, hence the throwaway property on the first call. -->
+    <MSBuild Projects="$(SetupHelperProject)" Targets="Restore" Properties="Configuration=$(Configuration);_SetupHelperRestore=1" />
+    <MSBuild Projects="$(SetupHelperProject)" Targets="Build" Properties="Configuration=$(Configuration)" />
+  </Target>
+
+  <Target Name="CheckDBTrackerMsi" BeforeTargets="BeforeBuild">
+    <Error Condition="!Exists('$(DBTrackerMsiPath)')"
+           Text="DBTracker.msi was not found at $(DBTrackerMsiPath). Build installer\DBTracker.Msi first (installer\build.ps1 does this), or pass /p:DBTrackerMsiPath=..." />
+  </Target>
+
+</Project>
