@@ -147,6 +147,7 @@ public class EvidenceAndHealthExplanationTests
     {
         await GotoAsync("/");
         await _page.WaitForSelectorAsync(".stat-strip");
+        await WaitForCircuitAsync();
 
         await Assertions.Expect(_page.Locator("text=Updated")).ToBeVisibleAsync();
 

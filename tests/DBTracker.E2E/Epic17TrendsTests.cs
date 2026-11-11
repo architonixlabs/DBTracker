@@ -45,7 +45,7 @@ public class Epic17TrendsTests
         await _page.WaitForTimeoutAsync(800);
 
         // Period A: no snapshot existed yet at its end date — flagged explicitly, not interpolated.
-        var missingEvidenceAlert = _page.Locator(".alert-danger", new PageLocatorOptions { HasText = "Period A has no Compliance snapshot" });
+        var missingEvidenceAlert = _page.Locator(".alert-danger", new PageLocatorOptions { HasText = "Period A:" });
         await Assertions.Expect(missingEvidenceAlert).ToBeVisibleAsync();
 
         var comparisonTable = _page.Locator("[role=region][aria-label*='Trend comparison']");

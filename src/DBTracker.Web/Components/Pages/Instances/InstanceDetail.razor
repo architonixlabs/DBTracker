@@ -1197,6 +1197,13 @@ else
     /// <summary>Converts a form's occurrence time from its chosen zone, or returns the error to show.</summary>
     private (DateTime Utc, string ZoneId)? ResolveOccurred(DateTime wallClock, string zoneChoice, out string? error)
     {
+        // The default is "now" rounded to the minute for display; left untouched it means now, not up to 59 seconds earlier.
+        if (wallClock == _entryDefaultLocal && zoneChoice != EventTimeZones.Utc)
+        {
+            error = null;
+            return (DateTime.UtcNow, EntryZone(zoneChoice).Id);
+        }
+
         var result = EventTimeZones.FromZone(wallClock, EntryZone(zoneChoice));
         error = result.Error ?? (result.Utc is { } u ? EventTimeZones.FutureError(u, DateTime.UtcNow) : null);
         return error is null ? (result.Utc!.Value, result.ZoneId) : null;

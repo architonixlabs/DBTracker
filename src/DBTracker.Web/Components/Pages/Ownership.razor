@@ -136,7 +136,7 @@
                                 {
                                     <tr>
                                         <td class="fw-semibold small">@p.Name</td>
-                                        <td class="small">v@p.Version</td>
+                                        <td class="small">v@(p.Version)</td>
                                         <td class="small">every @p.ExpectedBackupIntervalHours h</td>
                                         <td class="small">@(p.RetentionPolicyDays?.ToString() ?? "org default") d</td>
                                         <td class="small">@(p.RestoreTestIntervalDays?.ToString() ?? "org default") d</td>

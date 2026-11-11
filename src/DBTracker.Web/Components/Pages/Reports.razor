@@ -687,7 +687,7 @@ else
     private string RangeCaption() =>
         _range.IsCustom
             ? $"from {_range.Describe()} ({ZoneName}, inclusive)"
-            : $"for {_range.Describe()}";
+            : $"in the last {_range.PresetDays} day(s)";
 
     private static string SourceLabel(BackupSource source) => source switch
     {

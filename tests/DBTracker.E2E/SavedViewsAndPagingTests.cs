@@ -106,7 +106,8 @@ public class SavedViewsAndPagingTests
         await _page.WaitForSelectorAsync(".dbt-table table");
         await WaitForCircuitAsync();
 
-        await Assertions.Expect(_page.Locator("text=Page 1 of")).ToBeVisibleAsync();
+        // Clamps to the last page, whichever that is once other tests have added instances: "Page N of N".
+        await Assertions.Expect(_page.Locator(@"text=/Page (\d+) of \1\b/")).ToBeVisibleAsync();
         await Assertions.Expect(_page.Locator(".dbt-table tbody tr").First).ToBeVisibleAsync();
     }
 

@@ -123,7 +123,7 @@ public class EvidenceImportAndAuditTests
         await GotoAsync($"/instances/{id}/edit");
         await WaitForCircuitAsync();
         await _page.FillAsync("#ed-region", "us-east");
-        await _page.ClickAsync("button[type=submit]");
+        await _page.ClickAsync("button[type=submit]:text('Save changes')"); // not the sidebar's sign-out button
         await _page.WaitForURLAsync(url => url.EndsWith($"/instances/{id}"));
 
         await LoginAsync("angela.price@contoso.com");
@@ -164,7 +164,7 @@ public class EvidenceImportAndAuditTests
         }
 
         await _page.FillAsync("#ed-notes", "edited in the form");
-        await _page.ClickAsync("button[type=submit]");
+        await _page.ClickAsync("button[type=submit]:text('Save changes')"); // not the sidebar's sign-out button
         var conflict = _page.Locator("[data-testid=edit-conflict-table]");
         await Assertions.Expect(conflict).ToContainTextAsync("us-east");
         await Assertions.Expect(conflict).ToContainTextAsync("Only they changed");

@@ -39,7 +39,7 @@ else
         <select id="policy-select" class="form-select" value="@_selectedPolicyId" @onchange="OnPolicyChanged">
             @foreach (var p in _policies)
             {
-                <option value="@p.Id">@p.Name (v@p.Version: every @p.ExpectedBackupIntervalHours h, retain @(p.RetentionPolicyDays?.ToString() ?? "org default") d, restore-test every @(p.RestoreTestIntervalDays?.ToString() ?? "org default") d)</option>
+                <option value="@p.Id">@p.Name (v@(p.Version): every @p.ExpectedBackupIntervalHours h, retain @(p.RetentionPolicyDays?.ToString() ?? "org default") d, restore-test every @(p.RestoreTestIntervalDays?.ToString() ?? "org default") d)</option>
             }
         </select>
         <button type="button" class="btn btn-outline-secondary mt-3" @onclick="RefreshPreview" disabled="@(_selectedPolicyId == 0)">
