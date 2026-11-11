@@ -23,6 +23,7 @@
             The curated release/support catalogue, approved patch baselines, imported security advisories (D02, D04, D05),
             and the reviewed source-to-target path rules that instance migration pages are evaluated against.
             Facts here are curated/imported, not pulled from a live vendor feed. A failed refresh keeps the last-known facts and shows a staleness warning.
+            Vendor facts, internal policy (manual overrides and approved baselines) and contract coverage (on each instance's Entitlement page) are kept apart.
         </div>
     </div>
 </div>
@@ -67,21 +68,86 @@
                         </div>
                     </div>
                     <div class="row g-2 mb-2">
-                        <div class="col-6">
-                            <label for="lifecycle-mainstream-support-ends" class="form-label small">Mainstream support ends</label>
-                            <input id="lifecycle-mainstream-support-ends" type="date" class="form-control form-control-sm" @bind="_newMainstreamEnd" />
+                        <div class="col-4"><label class="form-label small mb-1" for="lifecycle-build">Build</label><input class="form-control form-control-sm" id="lifecycle-build" maxlength="100" @bind="_newBuild" @bind:event="oninput" data-testid="catalogue-build" /></div>
+                        <div class="col-4"><label class="form-label small mb-1" for="lifecycle-patch-train">Patch train</label><input class="form-control form-control-sm" id="lifecycle-patch-train" placeholder="e.g. CU, GDR, LTS" maxlength="100" @bind="_newPatchTrain" @bind:event="oninput" data-testid="catalogue-patch-train" /></div>
+                        <div class="col-4"><label class="form-label small mb-1" for="lifecycle-edition">Edition</label><input class="form-control form-control-sm" id="lifecycle-edition" placeholder="Empty means all" maxlength="100" @bind="_newEdition" @bind:event="oninput" data-testid="catalogue-edition" /></div>
+                    </div>
+                    <div class="row g-2 mb-2">
+                        <div class="col-6"><label class="form-label small mb-1" for="lifecycle-distribution">Distribution</label><input class="form-control form-control-sm" id="lifecycle-distribution" placeholder="Empty means all" maxlength="100" @bind="_newDistribution" @bind:event="oninput" /></div>
+                        <div class="col-6"><label class="form-label small mb-1" for="lifecycle-applicability">Applies when</label><input class="form-control form-control-sm" id="lifecycle-applicability" placeholder="e.g. community builds only" maxlength="1000" @bind="_newApplicability" @bind:event="oninput" data-testid="catalogue-applicability" /></div>
+                    </div>
+                    <fieldset class="mb-2">
+                        <legend class="small text-muted mb-1">Vendor support dates and how precisely each is known</legend>
+                        <div class="row g-2 mb-1">
+                            <div class="col-7">
+                                <label for="lifecycle-ga-date" class="form-label small mb-1">GA date</label>
+                                <input id="lifecycle-ga-date" type="date" class="form-control form-control-sm" @bind="_newGaDate" />
+                            </div>
+                            <div class="col-5">
+                                <label for="lifecycle-ga-precision" class="form-label small mb-1">GA date precision</label>
+                                <select id="lifecycle-ga-precision" class="form-select form-select-sm" @bind="_newGaPrecision">@PrecisionOptions</select>
+                            </div>
                         </div>
-                        <div class="col-6">
-                            <label for="lifecycle-extended-support-ends" class="form-label small">Extended support ends</label>
-                            <input id="lifecycle-extended-support-ends" type="date" class="form-control form-control-sm" @bind="_newExtendedEnd" />
+                        <div class="row g-2 mb-1">
+                            <div class="col-7">
+                                <label for="lifecycle-mainstream-support-ends" class="form-label small mb-1">Mainstream support ends</label>
+                                <input id="lifecycle-mainstream-support-ends" type="date" class="form-control form-control-sm" @bind="_newMainstreamEnd" />
+                            </div>
+                            <div class="col-5">
+                                <label for="lifecycle-mainstream-precision" class="form-label small mb-1">Mainstream precision</label>
+                                <select id="lifecycle-mainstream-precision" class="form-select form-select-sm" @bind="_newMainstreamPrecision">@PrecisionOptions</select>
+                            </div>
+                        </div>
+                        <div class="row g-2 mb-1">
+                            <div class="col-7">
+                                <label for="lifecycle-extended-support-ends" class="form-label small mb-1">Extended support ends</label>
+                                <input id="lifecycle-extended-support-ends" type="date" class="form-control form-control-sm" @bind="_newExtendedEnd" />
+                            </div>
+                            <div class="col-5">
+                                <label for="lifecycle-extended-precision" class="form-label small mb-1">Extended precision</label>
+                                <select id="lifecycle-extended-precision" class="form-select form-select-sm" @bind="_newExtendedPrecision">@PrecisionOptions</select>
+                            </div>
+                        </div>
+                        <div class="row g-2 mb-1">
+                            <div class="col-7">
+                                <label for="lifecycle-esu-ends" class="form-label small mb-1">ESU ends</label>
+                                <input id="lifecycle-esu-ends" type="date" class="form-control form-control-sm" @bind="_newEsuEnd" data-testid="catalogue-esu-end" />
+                            </div>
+                            <div class="col-5">
+                                <label for="lifecycle-esu-precision" class="form-label small mb-1">ESU precision</label>
+                                <select id="lifecycle-esu-precision" class="form-select form-select-sm" @bind="_newEsuPrecision">@PrecisionOptions</select>
+                            </div>
+                        </div>
+                        <div class="form-text mt-0">ESU dates count for an instance only while it has an active Extended coverage contract.</div>
+                    </fieldset>
+                    <div class="d-flex gap-3 mb-2">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" @bind="_newDatesAreTbd" id="dates-tbd" />
+                            <label class="form-check-label small" for="dates-tbd">Dates are TBD</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" @bind="_newDatesConflict" id="dates-conflict" />
+                            <label class="form-check-label small" for="dates-conflict">Sources disagree on dates</label>
                         </div>
                     </div>
-                    <div class="form-check mb-2">
-                        <input class="form-check-input" type="checkbox" @bind="_newDatesAreTbd" id="dates-tbd" />
-                        <label class="form-check-label small" for="dates-tbd">Dates are TBD</label>
+                    <div class="row g-2 mb-2">
+                        <div class="col-6"><label class="form-label small mb-1" for="lifecycle-timezone">Dates published in timezone</label><input class="form-control form-control-sm" id="lifecycle-timezone" maxlength="50" @bind="_newTimezone" @bind:event="oninput" /></div>
+                        <div class="col-6">
+                            <label for="lifecycle-retrieved" class="form-label small mb-1">Retrieved from source on</label>
+                            <input id="lifecycle-retrieved" type="date" class="form-control form-control-sm" @bind="_newRetrieved" />
+                        </div>
                     </div>
-                    <div class="mb-2"><label class="form-label small mb-1" for="lifecycle-source-url">Source URL</label><input class="form-control form-control-sm" placeholder="Source URL" id="lifecycle-source-url" @bind="_newSourceUrl" @bind:event="oninput" /></div>
+                    <div class="mb-2"><label class="form-label small mb-1" for="lifecycle-source-url">Source URL</label><input class="form-control form-control-sm" placeholder="Source URL" id="lifecycle-source-url" maxlength="500" @bind="_newSourceUrl" @bind:event="oninput" /></div>
+                    <div class="row g-2 mb-2">
+                        <div class="col-6"><label class="form-label small mb-1" for="lifecycle-source-reference">Source reference</label><input class="form-control form-control-sm" id="lifecycle-source-reference" placeholder="Document or page" maxlength="500" @bind="_newSourceReference" @bind:event="oninput" /></div>
+                        <div class="col-6"><label class="form-label small mb-1" for="lifecycle-release-notes">Release notes URL</label><input class="form-control form-control-sm" id="lifecycle-release-notes" maxlength="500" @bind="_newReleaseNotesUrl" @bind:event="oninput" data-testid="catalogue-release-notes" /></div>
+                    </div>
+                    @if (_createError is not null)
+                    {
+                        <p class="small mb-2" role="alert" style="color:var(--dbt-failed);">@_createError</p>
+                    }
                     <button class="btn btn-primary btn-sm" @onclick="CreateEntry" disabled="@(string.IsNullOrWhiteSpace(_newFamily) || string.IsNullOrWhiteSpace(_newLabel))">Add entry</button>
+                    <a class="btn btn-link btn-sm" href="/lifecycle/import" data-testid="lifecycle-import-link">Import from CSV</a>
                 </div>
             </div>
             <div class="col-lg-7">
@@ -110,10 +176,66 @@
                                 <button class="btn btn-outline-secondary btn-sm" @onclick="() => RefreshEntry(e.Id)">Refresh</button>
                             </div>
                             <p class="small text-muted mb-1">
-                                Mainstream ends: @(e.MainstreamSupportEndUtc?.ToString("yyyy-MM-dd") ?? "not recorded") ·
-                                Extended ends: @(e.ExtendedSupportEndUtc?.ToString("yyyy-MM-dd") ?? "not recorded") ·
-                                @(e.DatesAreTbd ? "dates TBD" : "")
+                                @(e.Major is null ? "" : $"Version {e.Major}{(e.Minor is { } emn ? $".{emn}" : "")}")@(string.IsNullOrWhiteSpace(e.Build) ? "" : $" build {e.Build}")
+                                @(string.IsNullOrWhiteSpace(e.PatchTrain) ? "" : $" · train {e.PatchTrain}")
+                                @(string.IsNullOrWhiteSpace(e.Edition) ? " · all editions" : $" · edition {e.Edition}")
+                                @(string.IsNullOrWhiteSpace(e.Distribution) ? "" : $" · distribution {e.Distribution}")
                             </p>
+                            <div class="small mb-1" data-testid="catalogue-vendor-facts">
+                                <span class="text-muted">Vendor facts:</span>
+                                GA @DateWithPrecision(e.GaDateUtc, e.GaDatePrecision) ·
+                                mainstream ends @DateWithPrecision(e.MainstreamSupportEndUtc, e.MainstreamSupportEndPrecision) ·
+                                extended ends @DateWithPrecision(e.ExtendedSupportEndUtc, e.ExtendedSupportEndPrecision) ·
+                                ESU ends @DateWithPrecision(e.EsuSupportEndUtc, e.EsuSupportEndPrecision)
+                                (@e.DateTimezone)@(e.DatesAreTbd ? " · dates TBD" : "")@(e.DatesConflict ? " · sources disagree, needs review" : "")
+                            </div>
+                            @if (!string.IsNullOrWhiteSpace(e.ApplicabilityNotes))
+                            {
+                                <div class="small mb-1"><span class="text-muted">Applies when:</span> @e.ApplicabilityNotes</div>
+                            }
+                            <div class="small mb-1">
+                                <span class="text-muted">Source:</span>
+                                @if (!string.IsNullOrWhiteSpace(e.SourceUrl))
+                                {
+                                    <a href="@e.SourceUrl" target="_blank" rel="noopener noreferrer">@(string.IsNullOrWhiteSpace(e.SourceReference) ? e.SourceUrl : e.SourceReference)</a>
+                                }
+                                else
+                                {
+                                    <span>@(string.IsNullOrWhiteSpace(e.SourceReference) ? "not recorded" : e.SourceReference)</span>
+                                }
+                                · retrieved @(e.RetrievedAtUtc?.ToString("yyyy-MM-dd") ?? "not recorded")
+                                · reviewed @(e.ReviewedAtUtc is { } rv ? $"{rv:yyyy-MM-dd} by {e.ReviewedBy}" : "not yet")
+                                @if (!string.IsNullOrWhiteSpace(e.ReleaseNotesUrl))
+                                {
+                                    <span> · <a href="@e.ReleaseNotesUrl" target="_blank" rel="noopener noreferrer">Release notes</a></span>
+                                }
+                            </div>
+                            @if (e.IsManualOverride)
+                            {
+                                <div class="small mb-1" data-testid="catalogue-override-facts" style="color:var(--dbt-overdue);">
+                                    Internal override, not a vendor fact: @e.OverrideReason. Reviewed by @e.OverrideReviewedBy.
+                                    @(e.OverrideExpiresUtc is { } oe ? (oe <= DateTime.UtcNow ? $"Expired {oe:yyyy-MM-dd}: its dates aren't used until reviewed." : $"Expires {oe:yyyy-MM-dd}.") : "No expiry set.")
+                                    The vendor values before the override are kept in the revision history.
+                                </div>
+                            }
+                            @if (_revisions.TryGetValue(e.Id, out var revs) && revs.Count > 0)
+                            {
+                                <details class="small mb-1" data-testid="catalogue-revisions">
+                                    <summary>Revision history (@revs.Count)</summary>
+                                    <ul class="mb-1">
+                                        @foreach (var r in revs)
+                                        {
+                                            <li>
+                                                @r.RevisedAtUtc.ToLocalTime().ToString("MMM d, yyyy h:mm tt"), @r.RevisedBy: @r.ChangeSummary
+                                                @if (!string.IsNullOrWhiteSpace(r.SnapshotJson) && r.SnapshotJson != "{}")
+                                                {
+                                                    <details><summary>Values before this change</summary><code class="d-block text-break">@r.SnapshotJson</code></details>
+                                                }
+                                            </li>
+                                        }
+                                    </ul>
+                                </details>
+                            }
 
                             @if (_overridingId == e.Id)
                             {
@@ -127,7 +249,12 @@
                                             <label for="lifecycle-new-extended-end-date" class="form-label small">New extended-end date</label>
                                             <input id="lifecycle-new-extended-end-date" type="date" class="form-control form-control-sm" @bind="_overrideExtendedEnd" />
                                         </div>
+                                        <div class="col-6">
+                                            <label for="lifecycle-new-esu-end-date" class="form-label small">New ESU-end date</label>
+                                            <input id="lifecycle-new-esu-end-date" type="date" class="form-control form-control-sm" @bind="_overrideEsuEnd" />
+                                        </div>
                                     </div>
+                                    <p class="small text-muted mb-2">An override is internal policy. It replaces the vendor dates for runway and baselines until it expires, then the entry shows as needing review.</p>
                                     <div class="mb-2"><label class="form-label small mb-1" for="lifecycle-reason-required">Reason (required)</label><input class="form-control form-control-sm" placeholder="Reason (required)" id="lifecycle-reason-required" @bind="_overrideReason" @bind:event="oninput" /></div>
                                     <div class="mb-2"><label class="form-label small mb-1" for="lifecycle-reviewed-by-required">Reviewed by (required)</label><input class="form-control form-control-sm" placeholder="Reviewed by (required)" id="lifecycle-reviewed-by-required" @bind="_overrideReviewedBy" @bind:event="oninput" /></div>
                                     <div class="mb-2">
@@ -183,6 +310,11 @@
                         <label for="lifecycle-expires-optional" class="form-label small">Expires (optional)</label>
                         <input id="lifecycle-expires-optional" type="date" class="form-control form-control-sm" @bind="_baselineExpires" />
                     </div>
+                    <div class="mb-2">
+                        <label for="lifecycle-required-by" class="form-label small">Required by (optional internal deadline)</label>
+                        <input id="lifecycle-required-by" type="date" class="form-control form-control-sm" @bind="_baselineRequiredBy" data-testid="baseline-required-by" aria-describedby="lifecycle-required-by-help" />
+                        <div class="form-text" id="lifecycle-required-by-help">Your organization's date for being on the target. It is policy, separate from vendor support dates.</div>
+                    </div>
                     <div class="mb-2"><label class="form-label small mb-1" for="lifecycle-notes">Notes</label><input class="form-control form-control-sm" placeholder="Notes" id="lifecycle-notes" @bind="_baselineNotes" @bind:event="oninput" /></div>
                     <button class="btn btn-primary btn-sm" @onclick="SetBaseline" disabled="@(string.IsNullOrWhiteSpace(_baselineFamily) || _baselineTargetEntryId == 0 || string.IsNullOrWhiteSpace(_baselineReviewedBy))">Set baseline</button>
                 </div>
@@ -195,14 +327,15 @@
                 else
                 {
                     <table aria-label="Approved patch baselines" class="table table-sm dbt-table">
-                        <thead><tr><th>Engine/family</th><th>Target</th><th>Reviewed by</th><th>Expires</th><th>Active</th></tr></thead>
+                        <thead><tr><th>Engine/family</th><th>Target</th><th>Reviewed by</th><th>Required by</th><th>Expires</th><th>Active</th></tr></thead>
                         <tbody>
                             @foreach (var b in _baselinesList)
                             {
                                 <tr>
                                     <td class="small">@b.Engine / @b.Family</td>
-                                    <td class="small">@b.TargetReleaseCatalogEntry?.ReleaseLabel</td>
+                                    <td class="small">@b.TargetReleaseCatalogEntry?.ReleaseLabel @(string.IsNullOrWhiteSpace(b.TargetReleaseCatalogEntry?.Build) ? "" : $"(build {b.TargetReleaseCatalogEntry!.Build})")</td>
                                     <td class="small">@b.ReviewedBy</td>
+                                    <td class="small">@(b.RequiredByUtc?.ToString("yyyy-MM-dd") ?? "Not set")</td>
                                     <td class="small">@(b.ExpiresAtUtc?.ToString("yyyy-MM-dd") ?? "No expiry")</td>
                                     <td class="small">@(b.IsActive ? "Yes" : "No")</td>
                                 </tr>
@@ -251,6 +384,7 @@
                     </div>
                     <div class="mb-2"><label class="form-label small mb-1" for="lifecycle-provenance-url">Provenance URL</label><input class="form-control form-control-sm" placeholder="Provenance URL" id="lifecycle-provenance-url" @bind="_advProvenance" @bind:event="oninput" /></div>
                     <button class="btn btn-primary btn-sm" @onclick="ImportAdvisory" disabled="@(string.IsNullOrWhiteSpace(_advVendorId) || string.IsNullOrWhiteSpace(_advFamily))">Import advisory</button>
+                    <a class="btn btn-link btn-sm" href="/lifecycle/import">Import many from CSV</a>
                 </div>
             </div>
             <div class="col-lg-7">
@@ -338,6 +472,20 @@
                         <div class="col-6"><label class="form-label small mb-1" for="lifecycle-reviewed-by-required-3">Reviewed by (required)</label><input class="form-control form-control-sm" placeholder="Reviewed by (required)" id="lifecycle-reviewed-by-required-3" @bind="_ruleReviewedBy" @bind:event="oninput" /></div>
                     </div>
                     <div class="mb-2"><label class="form-label small mb-1" for="lifecycle-vendor-guidance-url">Vendor guidance URL</label><input class="form-control form-control-sm" placeholder="Vendor guidance URL" id="lifecycle-vendor-guidance-url" @bind="_ruleGuidanceUrl" @bind:event="oninput" /></div>
+                    <details class="mb-2">
+                        <summary class="small">Edition, platform, topology and constraints (empty means any)</summary>
+                        <div class="row g-2 mt-1">
+                            <div class="col-4"><label class="form-label small mb-1" for="rule-src-edition">Source edition</label><input id="rule-src-edition" class="form-control form-control-sm" maxlength="100" @bind="_ruleSourceEdition" @bind:event="oninput" /></div>
+                            <div class="col-4"><label class="form-label small mb-1" for="rule-src-platform">Source platform</label><input id="rule-src-platform" class="form-control form-control-sm" maxlength="100" @bind="_ruleSourcePlatform" @bind:event="oninput" /></div>
+                            <div class="col-4"><label class="form-label small mb-1" for="rule-src-topology">Source topology</label><input id="rule-src-topology" class="form-control form-control-sm" maxlength="100" @bind="_ruleSourceTopology" @bind:event="oninput" /></div>
+                            <div class="col-4"><label class="form-label small mb-1" for="rule-tgt-edition">Target edition</label><input id="rule-tgt-edition" class="form-control form-control-sm" maxlength="100" @bind="_ruleTargetEdition" @bind:event="oninput" /></div>
+                            <div class="col-4"><label class="form-label small mb-1" for="rule-tgt-platform">Target platform</label><input id="rule-tgt-platform" class="form-control form-control-sm" maxlength="100" @bind="_ruleTargetPlatform" @bind:event="oninput" /></div>
+                            <div class="col-4"><label class="form-label small mb-1" for="rule-tgt-topology">Target topology</label><input id="rule-tgt-topology" class="form-control form-control-sm" maxlength="100" @bind="_ruleTargetTopology" @bind:event="oninput" /></div>
+                            <div class="col-6"><label class="form-label small mb-1" for="rule-intermediate">Required intermediate versions</label><input id="rule-intermediate" class="form-control form-control-sm" maxlength="500" @bind="_ruleIntermediate" @bind:event="oninput" data-testid="rule-intermediate" /></div>
+                            <div class="col-6"><label class="form-label small mb-1" for="rule-downgrade">Downgrade constraints</label><input id="rule-downgrade" class="form-control form-control-sm" maxlength="500" @bind="_ruleDowngrade" @bind:event="oninput" data-testid="rule-downgrade" /></div>
+                            <div class="col-12"><label class="form-label small mb-1" for="rule-guidance-notes">Vendor guidance notes</label><input id="rule-guidance-notes" class="form-control form-control-sm" maxlength="1000" @bind="_ruleGuidanceNotes" @bind:event="oninput" /></div>
+                        </div>
+                    </details>
                     <button class="btn btn-primary btn-sm" @onclick="CreateRule" disabled="@(string.IsNullOrWhiteSpace(_ruleSourceFamily) || string.IsNullOrWhiteSpace(_ruleTargetFamily) || string.IsNullOrWhiteSpace(_ruleReviewedBy))">Add rule</button>
                     <p class="small text-muted mt-2 mb-0">A pairing with no matching rule below is always evaluated as Unknown on an instance's Migration page. It is never assumed to be Supported.</p>
                 </div>
@@ -357,7 +505,17 @@
                                 <tr>
                                     <td class="small">@r.Engine</td>
                                     <td class="small">@r.AssessmentType / @r.Method</td>
-                                    <td class="small">@r.SourceFamily (@r.SourceBuildMin–@r.SourceBuildMax) → @r.TargetFamily (@r.TargetBuildMin–@r.TargetBuildMax)</td>
+                                    <td class="small">
+                                        @r.SourceFamily (@r.SourceBuildMin–@r.SourceBuildMax) → @r.TargetFamily (@r.TargetBuildMin–@r.TargetBuildMax)
+                                        @if (!string.IsNullOrWhiteSpace(r.RequiredIntermediateVersions))
+                                        {
+                                            <div class="text-muted">Via: @r.RequiredIntermediateVersions</div>
+                                        }
+                                        @if (!string.IsNullOrWhiteSpace(r.DowngradeConstraints))
+                                        {
+                                            <div class="text-muted">Downgrade: @r.DowngradeConstraints</div>
+                                        }
+                                    </td>
                                     <td class="small">@r.Status</td>
                                     <td class="small">@r.ReviewedBy</td>
                                 </tr>
@@ -385,21 +543,26 @@
     // New catalogue entry form.
     private DatabaseEngine _newEngine = DatabaseEngine.PostgreSql;
     private string _newFamily = "", _newLabel = "", _newSourceUrl = "";
+    private string _newBuild = "", _newPatchTrain = "", _newEdition = "", _newDistribution = "", _newApplicability = "";
+    private string _newTimezone = "UTC", _newSourceReference = "", _newReleaseNotesUrl = "";
     private int? _newMajor, _newMinor;
     private ReleaseChannel _newChannel = ReleaseChannel.GA;
-    private DateTime? _newMainstreamEnd, _newExtendedEnd;
-    private bool _newDatesAreTbd;
+    private DateTime? _newMainstreamEnd, _newExtendedEnd, _newGaDate, _newEsuEnd, _newRetrieved;
+    private DatePrecision _newGaPrecision, _newMainstreamPrecision, _newExtendedPrecision, _newEsuPrecision;
+    private bool _newDatesAreTbd, _newDatesConflict;
+    private string? _createError;
+    private Dictionary<int, List<ReleaseCatalogRevision>> _revisions = new();
 
     // Manual override form.
     private int? _overridingId;
-    private DateTime? _overrideMainstreamEnd, _overrideExtendedEnd, _overrideExpires;
+    private DateTime? _overrideMainstreamEnd, _overrideExtendedEnd, _overrideEsuEnd, _overrideExpires;
     private string _overrideReason = "", _overrideReviewedBy = "";
 
     // Approved baseline form.
     private DatabaseEngine _baselineEngine = DatabaseEngine.PostgreSql;
     private string _baselineFamily = "", _baselineReviewedBy = "", _baselineNotes = "";
     private int _baselineTargetEntryId;
-    private DateTime? _baselineExpires;
+    private DateTime? _baselineExpires, _baselineRequiredBy;
 
     // Advisory import form.
     private DatabaseEngine _advEngine = DatabaseEngine.PostgreSql;
@@ -411,6 +574,8 @@
     private MigrationAssessmentType _ruleAssessmentType = MigrationAssessmentType.VersionUpgrade;
     private MigrationMethod _ruleMethod = MigrationMethod.InPlaceUpgrade;
     private string _ruleSourceFamily = "", _ruleTargetFamily = "", _ruleSourceMin = "", _ruleSourceMax = "", _ruleTargetMin = "", _ruleTargetMax = "", _ruleReviewedBy = "", _ruleGuidanceUrl = "";
+    private string _ruleSourceEdition = "", _ruleSourcePlatform = "", _ruleSourceTopology = "", _ruleTargetEdition = "", _ruleTargetPlatform = "", _ruleTargetTopology = "";
+    private string _ruleIntermediate = "", _ruleDowngrade = "", _ruleGuidanceNotes = "";
     private PathSupportStatus _ruleStatus = PathSupportStatus.Supported;
 
     protected override async Task OnInitializedAsync()
@@ -423,6 +588,7 @@
     private async Task LoadAll()
     {
         _entries = await Catalog.ListAsync();
+        _revisions = await Catalog.ListAllRevisionsAsync();
         _baselinesList = await Baselines.ListAsync();
         _advisoriesList = await Advisories.ListAsync();
         _pathRulesList = await PathRules.ListRulesAsync();
@@ -430,33 +596,77 @@
 
     private async Task CreateEntry()
     {
+        _createError = null;
+        if (!LifecycleCsvSupport.IsHttpUrlOrEmpty(_newSourceUrl.Trim()) || !LifecycleCsvSupport.IsHttpUrlOrEmpty(_newReleaseNotesUrl.Trim()))
+        {
+            _createError = "Source URL and release notes URL must be http:// or https:// links.";
+            return;
+        }
+
         var entry = new ReleaseCatalogEntry
         {
             Engine = _newEngine,
-            Family = _newFamily,
-            ReleaseLabel = _newLabel,
+            Family = _newFamily.Trim(),
+            ReleaseLabel = _newLabel.Trim(),
             Major = _newMajor,
             Minor = _newMinor,
+            Build = _newBuild.Trim(),
             Channel = _newChannel,
-            MainstreamSupportEndUtc = _newMainstreamEnd,
-            ExtendedSupportEndUtc = _newExtendedEnd,
+            PatchTrain = _newPatchTrain.Trim(),
+            Edition = _newEdition.Trim(),
+            Distribution = _newDistribution.Trim(),
+            ApplicabilityNotes = _newApplicability.Trim(),
+            GaDateUtc = AsUtcDate(_newGaDate),
+            GaDatePrecision = _newGaPrecision,
+            MainstreamSupportEndUtc = AsUtcDate(_newMainstreamEnd),
+            MainstreamSupportEndPrecision = _newMainstreamPrecision,
+            ExtendedSupportEndUtc = AsUtcDate(_newExtendedEnd),
+            ExtendedSupportEndPrecision = _newExtendedPrecision,
+            EsuSupportEndUtc = AsUtcDate(_newEsuEnd),
+            EsuSupportEndPrecision = _newEsuPrecision,
             DatesAreTbd = _newDatesAreTbd,
-            SourceUrl = _newSourceUrl
+            DatesConflict = _newDatesConflict,
+            DateTimezone = string.IsNullOrWhiteSpace(_newTimezone) ? "UTC" : _newTimezone.Trim(),
+            SourceUrl = _newSourceUrl.Trim(),
+            SourceReference = _newSourceReference.Trim(),
+            ReleaseNotesUrl = _newReleaseNotesUrl.Trim(),
+            RetrievedAtUtc = AsUtcDate(_newRetrieved)
         };
         await Catalog.CreateAsync(entry, _userName ?? "unknown");
         Toasts.Success($"Catalogue entry \"{_newLabel}\" added.");
         _newFamily = _newLabel = _newSourceUrl = "";
+        _newBuild = _newPatchTrain = _newEdition = _newDistribution = _newApplicability = _newSourceReference = _newReleaseNotesUrl = "";
+        _newTimezone = "UTC";
         _newMajor = _newMinor = null;
-        _newMainstreamEnd = _newExtendedEnd = null;
-        _newDatesAreTbd = false;
+        _newMainstreamEnd = _newExtendedEnd = _newGaDate = _newEsuEnd = _newRetrieved = null;
+        _newGaPrecision = _newMainstreamPrecision = _newExtendedPrecision = _newEsuPrecision = DatePrecision.Exact;
+        _newDatesAreTbd = _newDatesConflict = false;
         await LoadAll();
     }
+
+    private static DateTime? AsUtcDate(DateTime? date) => date is { } d ? DateTime.SpecifyKind(d.Date, DateTimeKind.Utc) : null;
+
+    private static string DateWithPrecision(DateTime? date, DatePrecision precision) => date is not { } d
+        ? "not recorded"
+        : precision switch
+        {
+            DatePrecision.Month => $"{d:yyyy-MM} (month)",
+            DatePrecision.Year => $"{d:yyyy} (year)",
+            DatePrecision.Unknown => $"{d:yyyy-MM-dd} (precision unknown, not used)",
+            _ => d.ToString("yyyy-MM-dd")
+        };
+
+    private RenderFragment PrecisionOptions => @<text>@foreach (var p in Enum.GetValues<DatePrecision>())
+    {
+        <option value="@p">@p</option>
+    }</text>;
 
     private void OpenOverride(ReleaseCatalogEntry entry)
     {
         _overridingId = entry.Id;
         _overrideMainstreamEnd = entry.MainstreamSupportEndUtc;
         _overrideExtendedEnd = entry.ExtendedSupportEndUtc;
+        _overrideEsuEnd = entry.EsuSupportEndUtc;
         _overrideReason = "";
         _overrideReviewedBy = "";
         _overrideExpires = null;
@@ -471,8 +681,9 @@
 
         var ok = await Catalog.ApplyManualOverrideAsync(id, _overrideReason, _overrideReviewedBy, _overrideExpires, entry =>
         {
-            entry.MainstreamSupportEndUtc = _overrideMainstreamEnd;
-            entry.ExtendedSupportEndUtc = _overrideExtendedEnd;
+            entry.MainstreamSupportEndUtc = AsUtcDate(_overrideMainstreamEnd);
+            entry.ExtendedSupportEndUtc = AsUtcDate(_overrideExtendedEnd);
+            entry.EsuSupportEndUtc = AsUtcDate(_overrideEsuEnd);
         }, _userName ?? "unknown");
 
         if (ok) Toasts.Success("Manual override applied."); else Toasts.Error("Override not applied. A reason and a reviewer are required.");
@@ -496,11 +707,12 @@
 
     private async Task SetBaseline()
     {
-        await Baselines.UpsertAsync(_baselineEngine, _baselineFamily, _baselineTargetEntryId, _baselineReviewedBy, _baselineExpires, _baselineNotes);
+        await Baselines.UpsertAsync(_baselineEngine, _baselineFamily, _baselineTargetEntryId, _baselineReviewedBy, AsUtcDate(_baselineExpires), _baselineNotes,
+            AsUtcDate(_baselineRequiredBy), _userName ?? "unknown");
         Toasts.Success("Approved patch baseline set.");
         _baselineFamily = _baselineReviewedBy = _baselineNotes = "";
         _baselineTargetEntryId = 0;
-        _baselineExpires = null;
+        _baselineExpires = _baselineRequiredBy = null;
         await LoadAll();
     }
 
@@ -537,6 +749,15 @@
             TargetFamily = _ruleTargetFamily,
             TargetBuildMin = _ruleTargetMin,
             TargetBuildMax = _ruleTargetMax,
+            SourceEdition = _ruleSourceEdition.Trim(),
+            SourcePlatform = _ruleSourcePlatform.Trim(),
+            SourceTopology = _ruleSourceTopology.Trim(),
+            TargetEdition = _ruleTargetEdition.Trim(),
+            TargetPlatform = _ruleTargetPlatform.Trim(),
+            TargetTopology = _ruleTargetTopology.Trim(),
+            RequiredIntermediateVersions = _ruleIntermediate.Trim(),
+            DowngradeConstraints = _ruleDowngrade.Trim(),
+            VendorGuidanceNotes = _ruleGuidanceNotes.Trim(),
             Status = _ruleStatus,
             VendorGuidanceUrl = _ruleGuidanceUrl,
             ReviewedBy = _ruleReviewedBy,
@@ -545,6 +766,8 @@
         await PathRules.CreateRuleAsync(rule, _userName ?? "unknown");
         Toasts.Success($"Path rule {_ruleSourceFamily} -> {_ruleTargetFamily} added ({_ruleStatus}).");
         _ruleSourceFamily = _ruleTargetFamily = _ruleSourceMin = _ruleSourceMax = _ruleTargetMin = _ruleTargetMax = _ruleReviewedBy = _ruleGuidanceUrl = "";
+        _ruleSourceEdition = _ruleSourcePlatform = _ruleSourceTopology = _ruleTargetEdition = _ruleTargetPlatform = _ruleTargetTopology = "";
+        _ruleIntermediate = _ruleDowngrade = _ruleGuidanceNotes = "";
         await LoadAll();
     }
 

@@ -93,14 +93,58 @@ public class RehearsalEvidenceEvaluatorTests
     }
 
     [Fact]
-    public void NotPerformedPerformanceCheck_DoesNotFail_OnlyExplicitFailureBlocks()
+    public void NotPerformedPerformanceCheck_Fails_ItIsNeverAPass()
     {
         var rehearsal = Passing();
         rehearsal.PerformanceCheckOutcome = EvidenceCheckOutcome.NotPerformed;
 
         var result = RehearsalEvidenceEvaluator.Evaluate(rehearsal, Now);
 
-        Assert.Equal(RehearsalReadinessStatus.Passed, result.Status);
+        Assert.Equal(RehearsalReadinessStatus.Failed, result.Status);
+        Assert.Contains("not performed", result.Reason);
+    }
+
+    [Fact]
+    public void MeasuredRpoOverTarget_Fails()
+    {
+        var rehearsal = Passing();
+        rehearsal.TargetRpoMinutes = 15;
+        rehearsal.MeasuredRpoMinutes = 22;
+
+        var result = RehearsalEvidenceEvaluator.Evaluate(rehearsal, Now);
+
+        Assert.Equal(RehearsalReadinessStatus.Failed, result.Status);
+        Assert.Contains("RPO", result.Reason);
+    }
+
+    [Fact]
+    public void RtoTargetWithNoMeasurement_Fails()
+    {
+        var rehearsal = Passing();
+        rehearsal.TargetRtoMinutes = 60;
+
+        var result = RehearsalEvidenceEvaluator.Evaluate(rehearsal, Now);
+
+        Assert.Equal(RehearsalReadinessStatus.Failed, result.Status);
+        Assert.Contains("no RTO was measured", result.Reason);
+    }
+
+    [Fact]
+    public void MeasurementsWithinTargets_Pass()
+    {
+        var rehearsal = Passing();
+        rehearsal.TargetRpoMinutes = 15;
+        rehearsal.MeasuredRpoMinutes = 15;
+        rehearsal.TargetRtoMinutes = 60;
+        rehearsal.MeasuredRtoMinutes = 42;
+
+        Assert.Equal(RehearsalReadinessStatus.Passed, RehearsalEvidenceEvaluator.Evaluate(rehearsal, Now).Status);
+    }
+
+    [Fact]
+    public void CompareObjective_NoTarget_HasNothingToCompare()
+    {
+        Assert.Null(RehearsalEvidenceEvaluator.CompareObjective("RPO", null, 999));
     }
 
     [Fact]

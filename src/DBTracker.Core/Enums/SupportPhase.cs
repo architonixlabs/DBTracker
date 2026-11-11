@@ -9,5 +9,8 @@ public enum SupportPhase
     /// <summary>Extended Security Updates / paid extended-support coverage beyond the standard lifecycle.</summary>
     Esu,
     EndOfLife,
-    Unknown
+    Unknown,
+
+    /// <summary>Facts exist but disagree or have lapsed (conflicting dates, an expired override, a version needing review). Kept apart from Unknown, which means no usable facts at all.</summary>
+    NeedsReview
 }

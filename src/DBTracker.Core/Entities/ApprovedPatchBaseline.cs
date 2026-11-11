@@ -16,6 +16,9 @@ public class ApprovedPatchBaseline
     public string ReviewedBy { get; set; } = string.Empty;
     public DateTime ReviewedAtUtc { get; set; } = DateTime.UtcNow;
     public DateTime? ExpiresAtUtc { get; set; }
+
+    /// <summary>Internal policy deadline: instances in this family should be on the target by this date. Separate from vendor support dates.</summary>
+    public DateTime? RequiredByUtc { get; set; }
     public string Notes { get; set; } = string.Empty;
 
     public bool IsActive { get; set; } = true;

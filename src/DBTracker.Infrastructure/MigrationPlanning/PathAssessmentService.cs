@@ -69,10 +69,11 @@ public class PathAssessmentService(IDbContextFactory<DBTrackerDbContext> factory
             MatchedRuleId = result.MatchedRule?.Id,
             Status = result.Status,
             StatusReasoning = result.Reasoning,
-            VendorGuidanceUrl = vendorGuidanceUrl,
-            VendorGuidanceNotes = vendorGuidanceNotes,
-            RequiredIntermediateVersions = requiredIntermediateVersions,
-            DowngradeConstraints = downgradeConstraints,
+            // A matched rule's reviewed guidance is carried onto the assessment, so it stays with the record even if the rule changes later.
+            VendorGuidanceUrl = string.IsNullOrWhiteSpace(vendorGuidanceUrl) ? result.MatchedRule?.VendorGuidanceUrl ?? "" : vendorGuidanceUrl,
+            VendorGuidanceNotes = Cap(PathSupportClassifier.MergeGuidance(vendorGuidanceNotes, result.MatchedRule?.VendorGuidanceNotes), 1000),
+            RequiredIntermediateVersions = Cap(PathSupportClassifier.MergeGuidance(requiredIntermediateVersions, result.MatchedRule?.RequiredIntermediateVersions), 500),
+            DowngradeConstraints = Cap(PathSupportClassifier.MergeGuidance(downgradeConstraints, result.MatchedRule?.DowngradeConstraints), 500),
             EvaluatedAtUtc = DateTime.UtcNow,
             EvaluatedBy = actorName
         };
@@ -84,4 +85,6 @@ public class PathAssessmentService(IDbContextFactory<DBTrackerDbContext> factory
 
         return assessment;
     }
+
+    private static string Cap(string value, int max) => value.Length <= max ? value : value[..max];
 }

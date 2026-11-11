@@ -39,6 +39,18 @@ public static class VersionDriftDetector
             }
         }
 
+        // Only compared when the observation recorded them; an empty observed value says nothing.
+        if (!string.IsNullOrWhiteSpace(observation.ObservedEdition) &&
+            !string.Equals(observation.ObservedEdition.Trim(), declared.Edition.Trim(), StringComparison.OrdinalIgnoreCase))
+        {
+            differing.Add("Edition");
+        }
+        if (!string.IsNullOrWhiteSpace(observation.ObservedCompatibilityLevel) &&
+            !string.Equals(observation.ObservedCompatibilityLevel.Trim(), declared.DatabaseCompatibilityLevel.Trim(), StringComparison.OrdinalIgnoreCase))
+        {
+            differing.Add("DatabaseCompatibilityLevel");
+        }
+
         return differing.Count == 0
             ? new DriftDetectionResult(DriftStatus.Match, [])
             : new DriftDetectionResult(DriftStatus.Drift, differing);

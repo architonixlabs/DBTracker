@@ -51,9 +51,19 @@ public static class RehearsalEvidenceEvaluator
             return new RehearsalReadinessResult(RehearsalReadinessStatus.Failed, "The application correctness check did not pass.");
         }
 
-        if (latest.PerformanceCheckOutcome == EvidenceCheckOutcome.Failed)
+        if (latest.PerformanceCheckOutcome != EvidenceCheckOutcome.Passed)
         {
-            return new RehearsalReadinessResult(RehearsalReadinessStatus.Failed, "The performance comparison did not pass.");
+            return new RehearsalReadinessResult(RehearsalReadinessStatus.Failed,
+                latest.PerformanceCheckOutcome == EvidenceCheckOutcome.NotPerformed
+                    ? "The performance comparison was not performed."
+                    : "The performance comparison did not pass.");
+        }
+
+        var objectiveFailure = CompareObjective("RPO", latest.TargetRpoMinutes, latest.MeasuredRpoMinutes)
+            ?? CompareObjective("RTO", latest.TargetRtoMinutes, latest.MeasuredRtoMinutes);
+        if (objectiveFailure is not null)
+        {
+            return new RehearsalReadinessResult(RehearsalReadinessStatus.Failed, objectiveFailure);
         }
 
         if (latest.PostCutoverWriteDisposition != PostCutoverWriteDisposition.NotApplicable &&
@@ -64,5 +74,23 @@ public static class RehearsalEvidenceEvaluator
         }
 
         return new RehearsalReadinessResult(RehearsalReadinessStatus.Passed, "Rehearsal evidence is current and every required step passed.");
+    }
+
+    /// <summary>A target with no measurement, or a measurement over the target, fails. No target means nothing to compare.</summary>
+    public static string? CompareObjective(string name, double? targetMinutes, double? measuredMinutes)
+    {
+        if (targetMinutes is not { } target)
+        {
+            return null;
+        }
+
+        if (measuredMinutes is not { } measured)
+        {
+            return $"A {name} target of {target:0.#} min is set, but no {name} was measured.";
+        }
+
+        return measured > target
+            ? $"Measured {name} of {measured:0.#} min is over the {target:0.#} min target."
+            : null;
     }
 }

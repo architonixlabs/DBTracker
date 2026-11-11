@@ -60,12 +60,28 @@ public class ReadinessChecklistService(IDbContextFactory<DBTrackerDbContext> fac
         return checklist;
     }
 
-    public async Task<ReadinessCheckItem> AddCustomCheckAsync(int checklistId, string label, string actorName)
+    /// <summary>Adds a check the standard areas don't cover. Like every check, it starts Unknown.</summary>
+    public async Task<ReadinessCheckItem?> AddCustomCheckAsync(int checklistId, string label, string actorName, ReadinessCheckArea area = ReadinessCheckArea.Other)
     {
+        if (string.IsNullOrWhiteSpace(label))
+        {
+            return null;
+        }
+
         using var db = await factory.CreateDbContextAsync();
-        var item = new ReadinessCheckItem { ReadinessChecklistId = checklistId, Area = ReadinessCheckArea.Other, Label = label, Status = ReadinessCheckStatus.Unknown };
+        var checklist = await db.ReadinessChecklists.Include(c => c.DatabaseInstance).FirstOrDefaultAsync(c => c.Id == checklistId);
+        if (checklist is null)
+        {
+            return null;
+        }
+
+        var item = new ReadinessCheckItem { ReadinessChecklistId = checklistId, Area = area, Label = label.Trim(), Status = ReadinessCheckStatus.Unknown };
         db.ReadinessCheckItems.Add(item);
+        checklist.UpdatedAtUtc = DateTime.UtcNow;
         await db.SaveChangesAsync();
+
+        await audit.RecordUserActionAsync("", actorName, "ReadinessCheckAdded", "DatabaseInstance",
+            checklist.DatabaseInstanceId.ToString(), checklist.DatabaseInstance?.Name ?? "", reason: $"Custom check: {item.Label} ({area})");
         return item;
     }
 
