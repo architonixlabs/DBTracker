@@ -16,14 +16,21 @@
 
 <PageTitle>@(_instance?.Name ?? "Instance") certificates · DBTracker</PageTitle>
 
-@if (!_loaded)
+@if (_loadFailed)
 {
-    <div class="spinner-ring"></div>
+    <div class="dbt-card" style="max-width:600px;">
+        <div class="empty-state py-4" role="alert"><i class="bi bi-exclamation-triangle" aria-hidden="true"></i> Couldn't load certificate dependencies. The database may be unreachable.</div>
+        <button type="button" class="btn btn-outline-secondary" @onclick="Retry">Try again</button>
+    </div>
+}
+else if (!_loaded)
+{
+    <div class="spinner-ring" role="status"><span class="visually-hidden">Loading certificate dependencies…</span></div>
 }
 else if (_instance is null)
 {
     <div class="dbt-card" style="max-width:600px;">
-        <div class="empty-state py-4"><i class="bi bi-question-diamond"></i> Instance #@Id doesn't exist.</div>
+        <div class="empty-state py-4"><i class="bi bi-question-diamond" aria-hidden="true"></i> Instance #@Id doesn't exist.</div>
         <a class="btn btn-outline-secondary" href="/instances">Back to instances</a>
     </div>
 }
@@ -31,25 +38,24 @@ else
 {
     <div class="app-topbar">
         <div>
-            <div class="eyebrow">Certificate and recovery-key dependency reminders</div>
             <h1>@_instance.Name</h1>
             <div class="subtitle">
-                @_instance.Engine · <a href="/instances/@Id">Back to instance detail</a> ·
-                Secret-store references only — never a password or private-key value, here or in the CSV export below.
+                Certificate and recovery-key reminders · @_instance.Engine · <a href="/instances/@Id">Back to instance detail</a><br />
+                Stores secret-store references only. No password or private-key value is kept here or in the CSV export.
             </div>
         </div>
         <div class="d-flex gap-2">
-            <button class="btn btn-outline-secondary" @onclick="ExportCsv" data-testid="export-certificates-csv">
-                <i class="bi bi-download"></i> Export CSV
+            <button type="button" class="btn btn-outline-secondary" @onclick="ExportCsv" data-testid="export-certificates-csv">
+                <i class="bi bi-download" aria-hidden="true"></i> Export CSV
             </button>
         </div>
     </div>
 
     @if (_rows.Count > 0)
     {
-        <div class="table-responsive mb-3" role="region" aria-label="Certificate dependencies">
+        <div class="table-responsive mb-3" role="region" aria-label="Certificate dependencies" tabindex="0">
             <table class="table table-sm dbt-table mb-0" data-testid="certificate-table">
-                <thead><tr><th>Kind</th><th>Label</th><th>Expires</th><th>Expiry status</th><th>Rotation status</th><th>Verified access</th><th></th></tr></thead>
+                <thead><tr><th scope="col">Kind</th><th scope="col">Label</th><th scope="col">Expires</th><th scope="col">Expiry status</th><th scope="col">Rotation status</th><th scope="col">Verified access</th><th scope="col"><span class="visually-hidden">Actions</span></th></tr></thead>
                 <tbody>
                     @foreach (var row in _rows)
                     {
@@ -69,7 +75,7 @@ else
                             </td>
                             <td class="small">
                                 <AuthorizeView Roles="@Roles.CanEditPolicy">
-                                    <button class="btn btn-link btn-sm p-0" @onclick="() => ToggleVerifiedAccess(row.Certificate)">
+                                    <button type="button" class="btn btn-link btn-sm p-0" @onclick="() => ToggleVerifiedAccess(row.Certificate)">
                                         @(row.Certificate.VerifiedBackupRestoreAccess ? "Clear verified access" : "Mark verified access")
                                     </button>
                                 </AuthorizeView>
@@ -82,33 +88,38 @@ else
     }
     else
     {
-        <div class="empty-state py-3"><i class="bi bi-shield-lock"></i> No certificate/recovery-key dependencies recorded yet.</div>
+        <div class="empty-state py-3">
+            <i class="bi bi-shield-lock" aria-hidden="true"></i> No certificate or recovery-key dependencies recorded yet.
+            <AuthorizeView Roles="@Roles.CanEditPolicy"><span>Record the first one in the form below.</span></AuthorizeView>
+        </div>
     }
 
     <AuthorizeView Roles="@Roles.CanEditPolicy">
         <div class="dbt-card">
-            <h2 class="h6 text-muted text-uppercase mb-3">Record a certificate/recovery-key dependency</h2>
+            <h2 class="h6 text-muted text-uppercase mb-3">Record a certificate or recovery-key dependency</h2>
             <div class="row g-2 mb-2">
                 <div class="col-md-3">
-                    <select class="form-select form-select-sm" @bind="_kind">
+                    <label class="form-label small mb-1" for="cert-kind">Kind</label>
+                    <select id="cert-kind" class="form-select form-select-sm" @bind="_kind">
                         @foreach (var k in Enum.GetValues<CertificateKind>())
                         {
                             <option value="@k">@k</option>
                         }
                     </select>
                 </div>
-                <div class="col-md-3"><input class="form-control form-control-sm" placeholder="Label" @bind="_label" @bind:event="oninput" /></div>
+                <div class="col-md-3"><label class="form-label small mb-1" for="cert-label">Label (required)</label><input id="cert-label" class="form-control form-control-sm" placeholder="Label" @bind="_label" @bind:event="oninput" /></div>
                 <div class="col-md-3">
-                    <input type="date" class="form-control form-control-sm" @bind="_expiresAt" title="Expires" />
+                    <label class="form-label small mb-1" for="cert-expires">Expires</label>
+                    <input id="cert-expires" type="date" class="form-control form-control-sm" @bind="_expiresAt" />
                 </div>
-                <div class="col-md-3"><input class="form-control form-control-sm" placeholder="Secret-store reference (never the secret itself)" @bind="_secretStoreReference" @bind:event="oninput" /></div>
+                <div class="col-md-3"><label class="form-label small mb-1" for="cert-secret-ref">Secret-store reference</label><input id="cert-secret-ref" class="form-control form-control-sm" placeholder="Secret-store reference (never the secret itself)" @bind="_secretStoreReference" @bind:event="oninput" /></div>
             </div>
             <div class="row g-2 mb-2">
-                <div class="col-md-3"><input type="number" class="form-control form-control-sm" placeholder="Rotation interval (days)" @bind="_rotationIntervalDays" /></div>
-                <div class="col-md-5"><input class="form-control form-control-sm" placeholder="Affected replicas/clients" @bind="_affectedReplicas" @bind:event="oninput" /></div>
-                <div class="col-md-4"><input class="form-control form-control-sm" placeholder="Owner name" @bind="_ownerName" @bind:event="oninput" /></div>
+                <div class="col-md-3"><label class="form-label small mb-1" for="cert-rotation">Rotation interval (days)</label><input id="cert-rotation" type="number" min="1" class="form-control form-control-sm" placeholder="Rotation interval (days)" @bind="_rotationIntervalDays" /></div>
+                <div class="col-md-5"><label class="form-label small mb-1" for="cert-affected">Affected replicas or clients</label><input id="cert-affected" class="form-control form-control-sm" placeholder="Affected replicas/clients" @bind="_affectedReplicas" @bind:event="oninput" /></div>
+                <div class="col-md-4"><label class="form-label small mb-1" for="cert-owner">Owner name</label><input id="cert-owner" class="form-control form-control-sm" placeholder="Owner name" @bind="_ownerName" @bind:event="oninput" /></div>
             </div>
-            <button class="btn btn-primary btn-sm" @onclick="AddCertificate" disabled="@string.IsNullOrWhiteSpace(_label)" data-testid="add-certificate">Record dependency</button>
+            <button type="button" class="btn btn-primary btn-sm" @onclick="AddCertificate" disabled="@string.IsNullOrWhiteSpace(_label)" data-testid="add-certificate">Record dependency</button>
         </div>
     </AuthorizeView>
 }
@@ -117,7 +128,7 @@ else
     [Parameter] public int Id { get; set; }
 
     private DatabaseInstance? _instance;
-    private bool _loaded;
+    private bool _loaded, _loadFailed;
     private string? _userName;
     private List<CertificateRow> _rows = new();
 
@@ -130,8 +141,21 @@ else
     {
         var state = await AuthProvider.GetAuthenticationStateAsync();
         _userName = state.User.Identity?.Name ?? "unknown";
-        await Load();
-        _loaded = true;
+        await Retry();
+    }
+
+    private async Task Retry()
+    {
+        _loadFailed = false;
+        try
+        {
+            await Load();
+            _loaded = true;
+        }
+        catch (Exception)
+        {
+            _loadFailed = true;
+        }
     }
 
     private async Task Load()
@@ -185,8 +209,7 @@ else
         sb.AppendLine("Kind,Label,ExpiresAtUtc,ExpiryStatus,RotationStatus,SecretStoreReference,VerifiedBackupRestoreAccess,Owner");
         foreach (var row in _rows)
         {
-            // SecretLeakGuard screens every free-text field a second time at export — belt and
-            // suspenders, since AddAsync already redacts on the way into the database.
+            // Second redaction layer at export; AddAsync already redacts on write.
             var reference = SecretLeakGuard.Redact(row.Certificate.SecretStoreReference);
             sb.AppendLine(string.Join(",",
                 Csv(row.Certificate.Kind.ToString()),

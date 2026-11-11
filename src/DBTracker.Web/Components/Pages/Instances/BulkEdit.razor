@@ -9,16 +9,15 @@
 
 <div class="app-topbar">
     <div>
-        <div class="eyebrow">Instance record</div>
         <h1>Bulk edit @_instanceIds.Count instance(s)</h1>
-        <div class="subtitle">Owner, tags and retention policy only — archiving stays a separate, individually-confirmed action.</div>
+        <div class="subtitle">Changes owner, tags and retention only. Archiving stays a separate, individually-confirmed action.</div>
     </div>
     <a class="btn btn-outline-secondary" href="/instances">Cancel</a>
 </div>
 
 @if (_instanceIds.Count == 0)
 {
-    <div class="empty-state"><i class="bi bi-inbox"></i> No instances selected. <a href="/instances">Go back and select some</a>.</div>
+    <div class="empty-state"><i class="bi bi-inbox" aria-hidden="true"></i> No instances selected. <a href="/instances">Select instances on the inventory list</a>.</div>
 }
 else
 {
@@ -32,10 +31,10 @@ else
         @if (_setOwner)
         {
             <div class="row g-2 mb-3 ms-4" style="max-width:700px;">
-                <div class="col-md-6"><input class="form-control form-control-sm" placeholder="Company" @bind="_company" @bind:event="oninput" /></div>
-                <div class="col-md-6"><input class="form-control form-control-sm" placeholder="Department" @bind="_department" @bind:event="oninput" /></div>
-                <div class="col-md-6"><input class="form-control form-control-sm" placeholder="Contact name" @bind="_contactName" @bind:event="oninput" /></div>
-                <div class="col-md-6"><input class="form-control form-control-sm" placeholder="Contact email" @bind="_contactEmail" @bind:event="oninput" /></div>
+                <div class="col-md-6"><label class="form-label small mb-1" for="bulk-company">Company</label><input id="bulk-company" class="form-control form-control-sm" placeholder="Company" @bind="_company" @bind:event="oninput" /></div>
+                <div class="col-md-6"><label class="form-label small mb-1" for="bulk-department">Department</label><input id="bulk-department" class="form-control form-control-sm" placeholder="Department" @bind="_department" @bind:event="oninput" /></div>
+                <div class="col-md-6"><label class="form-label small mb-1" for="bulk-contact-name">Contact name</label><input id="bulk-contact-name" class="form-control form-control-sm" placeholder="Contact name" @bind="_contactName" @bind:event="oninput" /></div>
+                <div class="col-md-6"><label class="form-label small mb-1" for="bulk-contact-email">Contact email</label><input id="bulk-contact-email" class="form-control form-control-sm" placeholder="Contact email" @bind="_contactEmail" @bind:event="oninput" /></div>
             </div>
         }
 
@@ -46,7 +45,8 @@ else
         @if (_setTags)
         {
             <div class="mb-3 ms-4" style="max-width:400px;">
-                <input class="form-control form-control-sm" placeholder="comma, separated, tags" @bind="_tags" @bind:event="oninput" />
+                <label class="form-label small mb-1" for="bulk-tags">Tags, separated by commas</label>
+                <input id="bulk-tags" class="form-control form-control-sm" placeholder="comma, separated, tags" @bind="_tags" @bind:event="oninput" />
             </div>
         }
 
@@ -57,27 +57,33 @@ else
         @if (_setRetention)
         {
             <div class="mb-3 ms-4" style="max-width:200px;">
-                <input type="number" class="form-control form-control-sm" @bind="_retentionDays" @bind:event="oninput" />
+                <label class="form-label small mb-1" for="bulk-retention">Retention (days)</label>
+                <input id="bulk-retention" type="number" min="1" class="form-control form-control-sm" @bind="_retentionDays" @bind:event="oninput" />
             </div>
         }
 
-        <button class="btn btn-outline-secondary" @onclick="RefreshPreview" disabled="@(!AnyFieldSelected)">
-            <i class="bi bi-eye"></i> Preview changes
+        <button type="button" class="btn btn-outline-secondary" @onclick="RefreshPreview" disabled="@(!AnyFieldSelected || _previewing)">
+            <i class="bi bi-eye" aria-hidden="true"></i> @(_previewing ? "Building preview…" : "Preview changes")
         </button>
     </div>
+
+    @if (_errorMessage is not null)
+    {
+        <div class="empty-state mb-3" role="alert"><i class="bi bi-exclamation-triangle" aria-hidden="true"></i> @_errorMessage</div>
+    }
 
     @if (_preview is not null)
     {
         <div class="dbt-card" style="max-width:900px;">
-            <h2 class="h6 text-muted text-uppercase mb-3">Before / after preview — @_preview.Count of @_instanceIds.Count instance(s) would change</h2>
+            <h2 class="h6 text-muted text-uppercase mb-3">Before / after preview: @_preview.Count of @_instanceIds.Count instance(s) would change</h2>
             @if (_preview.Count == 0)
             {
-                <div class="empty-state py-3"><i class="bi bi-inbox"></i>No instance would change with these values.</div>
+                <div class="empty-state py-3"><i class="bi bi-inbox" aria-hidden="true"></i> No instance would change with these values.</div>
             }
             else
             {
-                <table class="table table-sm dbt-table mb-3">
-                    <thead><tr><th>Instance</th><th>Field</th><th>Before</th><th>After</th></tr></thead>
+                <table class="table table-sm dbt-table mb-3" aria-label="Before and after values for each instance that would change">
+                    <thead><tr><th scope="col">Instance</th><th scope="col">Field</th><th scope="col">Before</th><th scope="col">After</th></tr></thead>
                     <tbody>
                         @foreach (var row in _preview)
                         {
@@ -86,14 +92,14 @@ else
                                 <tr>
                                     <td class="small">@row.InstanceName</td>
                                     <td class="small">@change.Field</td>
-                                    <td class="small text-muted">@(string.IsNullOrEmpty(change.Before) ? "—" : change.Before)</td>
-                                    <td class="small">@(string.IsNullOrEmpty(change.After) ? "—" : change.After)</td>
+                                    <td class="small text-muted">@(string.IsNullOrEmpty(change.Before) ? "(empty)" : change.Before)</td>
+                                    <td class="small">@(string.IsNullOrEmpty(change.After) ? "(empty)" : change.After)</td>
                                 </tr>
                             }
                         }
                     </tbody>
                 </table>
-                <button class="btn btn-primary" @onclick="Apply" disabled="@_applying">@(_applying ? "Applying…" : $"Apply to {_preview.Count} instance(s)")</button>
+                <button type="button" class="btn btn-primary" @onclick="Apply" disabled="@_applying">@(_applying ? "Applying…" : $"Apply to {_preview.Count} instance(s)")</button>
             }
         </div>
     }
@@ -107,7 +113,8 @@ else
     private string _company = "", _department = "", _contactName = "", _contactEmail = "", _tags = "";
     private int? _retentionDays;
     private IReadOnlyList<BulkEditRowPreview>? _preview;
-    private bool _applying;
+    private bool _applying, _previewing;
+    private string? _errorMessage;
     private string? _userId, _userName;
 
     private bool AnyFieldSelected => _setOwner || _setTags || _setRetention;
@@ -131,13 +138,38 @@ else
         _setTags, _tags,
         _setRetention, _retentionDays);
 
-    private async Task RefreshPreview() =>
-        _preview = await BulkEditService.PreviewAsync(_instanceIds, BuildRequest());
+    private async Task RefreshPreview()
+    {
+        _previewing = true;
+        try
+        {
+            _preview = await BulkEditService.PreviewAsync(_instanceIds, BuildRequest());
+            _errorMessage = null;
+        }
+        catch (Exception)
+        {
+            _errorMessage = "Couldn't build the preview. The database may be unreachable; try again.";
+        }
+        finally
+        {
+            _previewing = false;
+        }
+    }
 
     private async Task Apply()
     {
         _applying = true;
-        var result = await BulkEditService.ApplyAsync(_instanceIds, BuildRequest(), _userId ?? "", _userName ?? "unknown");
+        BulkEditApplyResult result;
+        try
+        {
+            result = await BulkEditService.ApplyAsync(_instanceIds, BuildRequest(), _userId ?? "", _userName ?? "unknown");
+        }
+        catch (Exception)
+        {
+            _applying = false;
+            _errorMessage = "Couldn't apply the changes. Nothing was saved; check the preview and try again.";
+            return;
+        }
         _applying = false;
 
         Toasts.Success(result.SkippedArchivedCount > 0

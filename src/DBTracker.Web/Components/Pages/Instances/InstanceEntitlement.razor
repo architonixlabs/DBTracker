@@ -14,14 +14,21 @@
 
 <PageTitle>@(_instance?.Name ?? "Instance") entitlement · DBTracker</PageTitle>
 
-@if (!_loaded)
+@if (_loadFailed)
 {
-    <div class="spinner-ring"></div>
+    <div class="dbt-card" style="max-width:600px;">
+        <div class="empty-state py-4" role="alert"><i class="bi bi-exclamation-triangle" aria-hidden="true"></i> Couldn't load support entitlement. The database may be unreachable.</div>
+        <button type="button" class="btn btn-outline-secondary" @onclick="Retry">Try again</button>
+    </div>
+}
+else if (!_loaded)
+{
+    <div class="spinner-ring" role="status"><span class="visually-hidden">Loading support entitlement…</span></div>
 }
 else if (_instance is null)
 {
     <div class="dbt-card" style="max-width:600px;">
-        <div class="empty-state py-4"><i class="bi bi-question-diamond"></i> Instance #@Id doesn't exist.</div>
+        <div class="empty-state py-4"><i class="bi bi-question-diamond" aria-hidden="true"></i> Instance #@Id doesn't exist.</div>
         <a class="btn btn-outline-secondary" href="/instances">Back to instances</a>
     </div>
 }
@@ -29,11 +36,10 @@ else
 {
     <div class="app-topbar">
         <div>
-            <div class="eyebrow">Support entitlement and edition-cost readiness</div>
             <h1>@_instance.Name</h1>
             <div class="subtitle">
-                @_instance.Engine · <a href="/instances/@Id">Back to instance detail</a> ·
-                <a href="/instances/@Id/lifecycle">Product lifecycle / support phase (D02-D03)</a>
+                Support entitlement and edition cost · @_instance.Engine · <a href="/instances/@Id">Back to instance detail</a> ·
+                <a href="/instances/@Id/lifecycle">Product lifecycle / support phase</a>
             </div>
         </div>
     </div>
@@ -41,11 +47,11 @@ else
     <div class="row g-3">
         <div class="col-lg-6">
             <div class="dbt-card h-100">
-                <h2 class="h6 text-muted text-uppercase mb-3">Entitlement status (D21)</h2>
+                <h2 class="h6 text-muted text-uppercase mb-3">Entitlement status</h2>
                 <p class="small text-muted">
-                    Computed only from support contracts linked below — never from this instance's lifecycle/support-phase status (D02-D03) above.
+                    Based only on the support contracts linked below, not on the product's vendor support phase.
                     A product can be inside its vendor's Mainstream support window with <strong>no contract on file</strong>, or past that window with
-                    <strong>Active</strong> paid Extended coverage; the two facts are tracked and shown independently on purpose.
+                    <strong>Active</strong> paid Extended coverage, so the two are shown separately.
                 </p>
                 <div class="mb-3">
                     <span class="badge-health dot @EntitlementCssClass(_entitlement!.Result.Status)" data-testid="entitlement-status">@_entitlement.Result.Status</span>
@@ -54,15 +60,15 @@ else
 
                 @if (_entitlement.Contracts.Count > 0)
                 {
-                    <table class="table table-sm dbt-table mb-0" data-testid="support-contract-table">
-                        <thead><tr><th>Vendor</th><th>Coverage</th><th>Start</th><th>End</th><th>Owner</th><th>Renewal evidence</th></tr></thead>
+                    <table class="table table-sm dbt-table mb-0" data-testid="support-contract-table" aria-label="Linked support contracts">
+                        <thead><tr><th scope="col">Vendor</th><th scope="col">Coverage</th><th scope="col">Start</th><th scope="col">End</th><th scope="col">Owner</th><th scope="col">Renewal evidence</th></tr></thead>
                         <tbody>
                             @foreach (var c in _entitlement.Contracts)
                             {
                                 <tr data-testid="support-contract-row">
                                     <td class="small">@c.Vendor</td>
                                     <td class="small">@c.CoverageType</td>
-                                    <td class="small">@(c.CoverageStartUtc?.ToString("yyyy-MM-dd") ?? "—")</td>
+                                    <td class="small">@(c.CoverageStartUtc?.ToString("yyyy-MM-dd") ?? "Not recorded")</td>
                                     <td class="small">@(c.CoverageEndUtc?.ToString("yyyy-MM-dd") ?? "open-ended")</td>
                                     <td class="small">@c.OwnerName</td>
                                     <td class="small">@c.RenewalEvidenceReference</td>
@@ -73,16 +79,17 @@ else
                 }
                 else
                 {
-                    <div class="empty-state py-2"><i class="bi bi-file-earmark-x"></i> No support contract linked yet.</div>
+                    <div class="empty-state py-2"><i class="bi bi-file-earmark-x" aria-hidden="true"></i> No support contract linked yet.</div>
                 }
 
                 <AuthorizeView Roles="@Roles.CommercialEvidencePolicy">
                     <hr />
                     <h3 class="small text-muted text-uppercase mb-2">Link a support contract</h3>
                     <div class="row g-2 mb-2">
-                        <div class="col-6"><input class="form-control form-control-sm" placeholder="Vendor" @bind="_vendor" @bind:event="oninput" /></div>
+                        <div class="col-6"><label class="form-label small mb-1" for="contract-vendor">Vendor (required)</label><input id="contract-vendor" class="form-control form-control-sm" placeholder="Vendor" @bind="_vendor" @bind:event="oninput" /></div>
                         <div class="col-6">
-                            <select class="form-select form-select-sm" @bind="_coverageType">
+                            <label class="form-label small mb-1" for="contract-coverage">Coverage type</label>
+                            <select id="contract-coverage" class="form-select form-select-sm" @bind="_coverageType">
                                 @foreach (var t in Enum.GetValues<SupportCoverageType>())
                                 {
                                     <option value="@t">@t</option>
@@ -92,35 +99,35 @@ else
                     </div>
                     <div class="row g-2 mb-2">
                         <div class="col-6">
-                            <label class="small text-muted">Coverage start</label>
-                            <input type="date" class="form-control form-control-sm" @bind="_coverageStart" />
+                            <label class="form-label small text-muted mb-1" for="contract-start">Coverage start</label>
+                            <input id="contract-start" type="date" class="form-control form-control-sm" @bind="_coverageStart" />
                         </div>
                         <div class="col-6">
-                            <label class="small text-muted">Coverage end</label>
-                            <input type="date" class="form-control form-control-sm" @bind="_coverageEnd" />
+                            <label class="form-label small text-muted mb-1" for="contract-end">Coverage end</label>
+                            <input id="contract-end" type="date" class="form-control form-control-sm" @bind="_coverageEnd" />
                         </div>
                     </div>
                     <div class="row g-2 mb-2">
-                        <div class="col-6"><input class="form-control form-control-sm" placeholder="Owner name" @bind="_ownerName" @bind:event="oninput" /></div>
-                        <div class="col-6"><input class="form-control form-control-sm" placeholder="Renewal evidence reference (ticket/PO id)" @bind="_renewalEvidence" @bind:event="oninput" /></div>
+                        <div class="col-6"><label class="form-label small mb-1" for="contract-owner">Owner name</label><input id="contract-owner" class="form-control form-control-sm" placeholder="Owner name" @bind="_ownerName" @bind:event="oninput" /></div>
+                        <div class="col-6"><label class="form-label small mb-1" for="contract-renewal">Renewal evidence</label><input id="contract-renewal" class="form-control form-control-sm" placeholder="Renewal evidence reference (ticket/PO id)" @bind="_renewalEvidence" @bind:event="oninput" /></div>
                     </div>
-                    <button class="btn btn-primary btn-sm" @onclick="LinkContract" disabled="@string.IsNullOrWhiteSpace(_vendor)" data-testid="link-support-contract">Link contract</button>
+                    <button type="button" class="btn btn-primary btn-sm" @onclick="LinkContract" disabled="@string.IsNullOrWhiteSpace(_vendor)" data-testid="link-support-contract">Link contract</button>
                 </AuthorizeView>
             </div>
         </div>
 
         <div class="col-lg-6">
             <div class="dbt-card h-100">
-                <h2 class="h6 text-muted text-uppercase mb-3">Target-edition cost estimates (D21)</h2>
+                <h2 class="h6 text-muted text-uppercase mb-3">Target-edition cost estimates</h2>
                 <p class="small text-muted">
-                    Reviewed target-edition licensing constraints and an estimated extended-support-or-migration cost — figures are commercial
-                    evidence, restricted to Admin/ITManager; every other role sees that an estimate exists without the dollar amount.
+                    Reviewed licensing constraints for the target edition, with an estimated extended-support or migration cost.
+                    Amounts are visible to Admin and IT Manager only; other roles see that an estimate exists, without the amount.
                 </p>
 
                 @if (_costEstimates.Count > 0)
                 {
-                    <table class="table table-sm dbt-table mb-0" data-testid="cost-estimate-table">
-                        <thead><tr><th>Type</th><th>Target edition/path</th><th>Amount</th><th>Date</th><th>Reviewer</th></tr></thead>
+                    <table class="table table-sm dbt-table mb-0" data-testid="cost-estimate-table" aria-label="Cost estimates">
+                        <thead><tr><th scope="col">Type</th><th scope="col">Target edition/path</th><th scope="col">Amount</th><th scope="col">Date</th><th scope="col">Reviewer</th></tr></thead>
                         <tbody>
                             @foreach (var e in _costEstimates)
                             {
@@ -137,7 +144,7 @@ else
                 }
                 else
                 {
-                    <div class="empty-state py-2"><i class="bi bi-cash-stack"></i> No cost estimate recorded yet.</div>
+                    <div class="empty-state py-2"><i class="bi bi-cash-stack" aria-hidden="true"></i> No cost estimate recorded yet.</div>
                 }
 
                 <AuthorizeView Roles="@Roles.CommercialEvidencePolicy">
@@ -145,24 +152,25 @@ else
                     <h3 class="small text-muted text-uppercase mb-2">Record a cost estimate</h3>
                     <div class="row g-2 mb-2">
                         <div class="col-6">
-                            <select class="form-select form-select-sm" @bind="_estimateType">
+                            <label class="form-label small mb-1" for="estimate-type">Estimate type</label>
+                            <select id="estimate-type" class="form-select form-select-sm" @bind="_estimateType">
                                 @foreach (var t in Enum.GetValues<CostEstimateType>())
                                 {
                                     <option value="@t">@t</option>
                                 }
                             </select>
                         </div>
-                        <div class="col-6"><input class="form-control form-control-sm" placeholder="Target edition/path" @bind="_targetEdition" @bind:event="oninput" /></div>
+                        <div class="col-6"><label class="form-label small mb-1" for="estimate-target">Target edition or path (required)</label><input id="estimate-target" class="form-control form-control-sm" placeholder="Target edition/path" @bind="_targetEdition" @bind:event="oninput" /></div>
                     </div>
-                    <div class="mb-2"><textarea class="form-control form-control-sm" rows="2" placeholder="Licensing constraints" @bind="_licensingNotes"></textarea></div>
+                    <div class="mb-2"><label class="form-label small mb-1" for="estimate-licensing">Licensing constraints</label><textarea id="estimate-licensing" class="form-control form-control-sm" rows="2" placeholder="Licensing constraints" @bind="_licensingNotes"></textarea></div>
                     <div class="row g-2 mb-2">
-                        <div class="col-4"><input type="number" step="0.01" class="form-control form-control-sm" placeholder="Amount" @bind="_amount" @bind:event="oninput" data-testid="cost-amount-input" /></div>
-                        <div class="col-4"><input class="form-control form-control-sm" placeholder="Currency" @bind="_currency" @bind:event="oninput" /></div>
-                        <div class="col-4"><input type="date" class="form-control form-control-sm" @bind="_estimateDate" /></div>
+                        <div class="col-4"><label class="form-label small mb-1" for="estimate-amount">Amount (required)</label><input id="estimate-amount" type="number" step="0.01" min="0.01" class="form-control form-control-sm" placeholder="Amount" @bind="_amount" @bind:event="oninput" data-testid="cost-amount-input" /></div>
+                        <div class="col-4"><label class="form-label small mb-1" for="estimate-currency">Currency</label><input id="estimate-currency" class="form-control form-control-sm" placeholder="Currency" @bind="_currency" @bind:event="oninput" /></div>
+                        <div class="col-4"><label class="form-label small mb-1" for="estimate-date">Estimate date</label><input id="estimate-date" type="date" class="form-control form-control-sm" @bind="_estimateDate" /></div>
                     </div>
-                    <div class="mb-2"><textarea class="form-control form-control-sm" rows="2" placeholder="Assumptions" @bind="_assumptions"></textarea></div>
-                    <div class="mb-2"><input class="form-control form-control-sm" placeholder="Reviewed by" @bind="_reviewedBy" @bind:event="oninput" /></div>
-                    <button class="btn btn-primary btn-sm" @onclick="AddCostEstimate" disabled="@(string.IsNullOrWhiteSpace(_targetEdition) || _amount <= 0)" data-testid="add-cost-estimate">Record estimate</button>
+                    <div class="mb-2"><label class="form-label small mb-1" for="estimate-assumptions">Assumptions</label><textarea id="estimate-assumptions" class="form-control form-control-sm" rows="2" placeholder="Assumptions" @bind="_assumptions"></textarea></div>
+                    <div class="mb-2"><label class="form-label small mb-1" for="estimate-reviewer">Reviewed by</label><input id="estimate-reviewer" class="form-control form-control-sm" placeholder="Reviewed by" @bind="_reviewedBy" @bind:event="oninput" /></div>
+                    <button type="button" class="btn btn-primary btn-sm" @onclick="AddCostEstimate" disabled="@(string.IsNullOrWhiteSpace(_targetEdition) || _amount <= 0)" data-testid="add-cost-estimate">Record estimate</button>
                 </AuthorizeView>
             </div>
         </div>
@@ -173,7 +181,7 @@ else
     [Parameter] public int Id { get; set; }
 
     private DatabaseInstance? _instance;
-    private bool _loaded;
+    private bool _loaded, _loadFailed;
     private string? _userName;
     private bool _canViewCommercial;
 
@@ -194,8 +202,21 @@ else
         var state = await AuthProvider.GetAuthenticationStateAsync();
         _userName = state.User.Identity?.Name ?? "unknown";
         _canViewCommercial = state.User.IsInRole(Roles.Admin) || state.User.IsInRole(Roles.ItManager);
-        await Load();
-        _loaded = true;
+        await Retry();
+    }
+
+    private async Task Retry()
+    {
+        _loadFailed = false;
+        try
+        {
+            await Load();
+            _loaded = true;
+        }
+        catch (Exception)
+        {
+            _loadFailed = true;
+        }
     }
 
     private async Task Load()

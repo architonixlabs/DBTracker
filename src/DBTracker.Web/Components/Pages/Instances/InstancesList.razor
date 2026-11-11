@@ -12,7 +12,6 @@
 
 <div class="app-topbar">
     <div>
-        <div class="eyebrow">Inventory</div>
         <h1>Database Instances</h1>
         <div class="subtitle">@(_result is null ? "" : $"{_result.TotalCount} matching instance(s)")</div>
     </div>
@@ -20,29 +19,29 @@
         <div class="small text-muted" role="status">
             @if (_refreshError is not null)
             {
-                <span style="color:var(--dbt-failed)"><i class="bi bi-exclamation-circle"></i> Refresh failed: @_refreshError</span>
+                <span style="color:var(--dbt-failed)"><i class="bi bi-exclamation-circle" aria-hidden="true"></i> Refresh failed: @_refreshError</span>
             }
-            else
+            else if (_result is not null)
             {
                 <span>Updated @_lastUpdatedUtc.ToLocalTime().ToString("h:mm:ss tt")</span>
             }
         </div>
         <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="RefreshNow" disabled="@_refreshing">
-            <i class="bi bi-arrow-clockwise"></i> @(_refreshing ? "Refreshing…" : "Refresh")
+            <i class="bi bi-arrow-clockwise" aria-hidden="true"></i> @(_refreshing ? "Refreshing…" : "Refresh")
         </button>
-        <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="ToggleAutoRefresh" title="Auto-refreshes every 30s while on">
-            <i class="bi @(_autoRefreshPaused ? "bi-play-fill" : "bi-pause-fill")"></i> Auto-refresh @(_autoRefreshPaused ? "paused" : "on")
+        <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="ToggleAutoRefresh" aria-pressed="@(!_autoRefreshPaused)" title="Refreshes the list every 30 seconds while on">
+            <i class="bi @(_autoRefreshPaused ? "bi-play-fill" : "bi-pause-fill")" aria-hidden="true"></i> Auto-refresh @(_autoRefreshPaused ? "paused" : "on")
         </button>
         <AuthorizeView Roles="@Roles.CanEditPolicy">
             <div class="d-flex gap-2">
                 <a class="btn btn-outline-secondary" href="/instances/archived">
-                    <i class="bi bi-archive"></i> Archived
+                    <i class="bi bi-archive" aria-hidden="true"></i> Archived
                 </a>
                 <a class="btn btn-outline-secondary" href="/instances/import">
-                    <i class="bi bi-upload"></i> Import CSV
+                    <i class="bi bi-upload" aria-hidden="true"></i> Import CSV
                 </a>
                 <a class="btn btn-primary" href="/instances/new">
-                    <i class="bi bi-plus-lg"></i> Add instance
+                    <i class="bi bi-plus-lg" aria-hidden="true"></i> Add instance
                 </a>
             </div>
         </AuthorizeView>
@@ -67,7 +66,7 @@
                     {
                         <div class="d-flex justify-content-between align-items-center mb-1">
                             <a href="@("/instances?" + v.QueryString)" class="small text-truncate" style="max-width:160px;">@v.Name</a>
-                            <button class="btn btn-link btn-sm text-danger p-0" title="Delete view" @onclick="() => DeleteView(v.Id)"><i class="bi bi-trash"></i></button>
+                            <button type="button" class="btn btn-link btn-sm text-danger p-0" title="Delete view" aria-label="Delete view @v.Name" @onclick="() => DeleteView(v.Id)"><i class="bi bi-trash" aria-hidden="true"></i></button>
                         </div>
                     }
                 }
@@ -76,14 +75,15 @@
                 @if (_savingView)
                 {
                     <div class="d-flex gap-1">
-                        <input class="form-control form-control-sm" placeholder="View name" @bind="_newViewName" />
-                        <button class="btn btn-primary btn-sm" @onclick="SaveCurrentView">Save</button>
+                        <label class="visually-hidden" for="new-view-name">View name</label>
+                        <input id="new-view-name" class="form-control form-control-sm" placeholder="View name" @bind="_newViewName" />
+                        <button type="button" class="btn btn-primary btn-sm" @onclick="SaveCurrentView">Save view</button>
                     </div>
                 }
                 else
                 {
-                    <button class="btn btn-outline-secondary btn-sm w-100" @onclick="() => _savingView = true">
-                        <i class="bi bi-plus"></i> Save current view
+                    <button type="button" class="btn btn-outline-secondary btn-sm w-100" @onclick="() => _savingView = true">
+                        <i class="bi bi-plus" aria-hidden="true"></i> Save current view
                     </button>
                 }
             </div>
@@ -91,8 +91,17 @@
     </div>
 </div>
 
-@if (_result is null)
+@if (_result is null && _refreshError is not null)
 {
+    <div class="empty-state" role="alert">
+        <i class="bi bi-exclamation-triangle" aria-hidden="true"></i>
+        Couldn't load the inventory. The database may be unreachable.
+        <button type="button" class="btn btn-outline-secondary btn-sm ms-2" @onclick="RefreshNow">Try again</button>
+    </div>
+}
+else if (_result is null)
+{
+    <span class="visually-hidden" role="status">Loading instances…</span>
     <div class="skeleton" style="height: 54px; margin-bottom: 1.25rem;"></div>
     <div class="dbt-table">
         @for (var i = 0; i < 7; i++)
@@ -239,7 +248,7 @@ else
 
         @if (HasFilters)
         {
-            <button class="btn btn-link btn-sm" @onclick="ClearFilters">Clear filters</button>
+            <button type="button" class="btn btn-link btn-sm" @onclick="ClearFilters">Clear filters</button>
         }
     </div>
 
@@ -247,10 +256,10 @@ else
         @if (_selectedIds.Count > 0)
         {
             <div class="d-flex align-items-center gap-2 mb-2">
-                <span class="small text-muted">@_selectedIds.Count selected</span>
-                <button class="btn btn-outline-secondary btn-sm" @onclick="GoToBulkEdit"><i class="bi bi-pencil-square"></i> Bulk edit selected</button>
-                <button class="btn btn-outline-secondary btn-sm" @onclick="GoToApplyPolicy"><i class="bi bi-shield-check"></i> Apply policy</button>
-                <button class="btn btn-link btn-sm" @onclick="() => _selectedIds.Clear()">Clear selection</button>
+                <span class="small text-muted" role="status">@_selectedIds.Count selected</span>
+                <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="GoToBulkEdit"><i class="bi bi-pencil-square" aria-hidden="true"></i> Bulk edit selected</button>
+                <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="GoToApplyPolicy"><i class="bi bi-shield-check" aria-hidden="true"></i> Apply policy</button>
+                <button type="button" class="btn btn-link btn-sm" @onclick="() => _selectedIds.Clear()">Clear selection</button>
             </div>
         }
     </AuthorizeView>
@@ -304,7 +313,7 @@ else
                             <HealthBadge Health="o.Health" />
                             @if (o.MaintenanceUntilUtc > DateTime.UtcNow)
                             {
-                                <i class="bi bi-cone-striped text-muted ms-1" title="Under maintenance — alerts suppressed"></i>
+                                <i class="bi bi-cone-striped text-muted ms-1" role="img" aria-label="Under maintenance, alerts suppressed" title="Under maintenance, alerts suppressed"></i>
                             }
                         </td>
                     </tr>
@@ -316,25 +325,35 @@ else
     @if (_result.Items.Count == 0)
     {
         <div class="empty-state">
-            <i class="bi bi-inbox"></i>
-            No instances match these filters.
+            <i class="bi bi-inbox" aria-hidden="true"></i>
+            @if (HasFilters)
+            {
+                <span>No instances match these filters. <button type="button" class="btn btn-link btn-sm p-0 align-baseline" @onclick="ClearFilters">Clear filters</button> to see the full inventory.</span>
+            }
+            else
+            {
+                <span>No instances in the inventory yet.</span>
+                <AuthorizeView Roles="@Roles.CanEditPolicy">
+                    <span><a href="/instances/new">Add an instance</a> or <a href="/instances/import">import a CSV</a>.</span>
+                </AuthorizeView>
+            }
         </div>
     }
     else
     {
-        <div class="d-flex justify-content-between align-items-center mt-3">
+        <nav class="d-flex justify-content-between align-items-center mt-3" aria-label="Instance list pages">
             <div class="small text-muted">
-                Page @_result.Page of @_result.TotalPages (@_result.TotalCount total — exports always cover every matching row, not just this page)
+                Page @_result.Page of @_result.TotalPages (@_result.TotalCount total). Exports always include every matching row, not just this page.
             </div>
             <div class="d-flex gap-2">
-                <button class="btn btn-outline-secondary btn-sm" disabled="@(_result.Page <= 1)" @onclick="() => GoToPage(_result.Page - 1)">
-                    <i class="bi bi-chevron-left"></i> Prev
+                <button type="button" class="btn btn-outline-secondary btn-sm" disabled="@(_result.Page <= 1)" @onclick="() => GoToPage(_result.Page - 1)">
+                    <i class="bi bi-chevron-left" aria-hidden="true"></i> Prev
                 </button>
-                <button class="btn btn-outline-secondary btn-sm" disabled="@(_result.Page >= _result.TotalPages)" @onclick="() => GoToPage(_result.Page + 1)">
-                    Next <i class="bi bi-chevron-right"></i>
+                <button type="button" class="btn btn-outline-secondary btn-sm" disabled="@(_result.Page >= _result.TotalPages)" @onclick="() => GoToPage(_result.Page + 1)">
+                    Next <i class="bi bi-chevron-right" aria-hidden="true"></i>
                 </button>
             </div>
-        </div>
+        </nav>
     }
 }
 
@@ -452,9 +471,8 @@ else
             _facetTags = Distinct(allForFacets.SelectMany(r => InstanceListFilter.SplitTags(r.Tags)));
             _facetRegions = Distinct(allForFacets.Select(r => r.Region));
             _facetClusters = Distinct(allForFacets.Select(r => r.Cluster));
-            // U21: "My instances" is shown at all only if the viewer actually owns something — via
-            // contact email, backup contact email, or team membership — not just whoever has no
-            // owned instances at all getting a dead-end filter.
+            // "My instances" only appears if the viewer owns something (contact email, backup
+            // contact email or team membership), so nobody gets a filter that always returns nothing.
             _hasOwnInstances = allForFacets.Any(r => InstanceListFilter.IsMine(r, _myEmail, _myTeamIds));
 
             _result = InstanceListFilter.Apply(allForFacets, BuildQuery());
@@ -495,9 +513,8 @@ else
         _searchDebounce?.Dispose();
     }
 
-    // Pushed to the URL with replace:true while typing (no history spam per keystroke), then a
-    // normal navigation happens for every other filter change — so back navigation restores the
-    // prior list state a step at a time (U05).
+    // Search uses replace:true so typing doesn't add a history entry per keystroke; every other
+    // filter change navigates normally, so Back restores the previous list state step by step.
     private void OnSearchInput(ChangeEventArgs e)
     {
         _search = e.Value?.ToString() ?? "";
@@ -608,7 +625,7 @@ else
         _savedViews = await SavedViews.ListAsync(_userId, "Instances");
     }
 
-    // U20: Escape closes the Views dropdown and returns focus to its toggle button.
+    // Escape closes the Views dropdown and returns focus to its toggle button.
     private async Task OnViewsKeyDown(KeyboardEventArgs e)
     {
         if (_viewsOpen && e.Key == "Escape")

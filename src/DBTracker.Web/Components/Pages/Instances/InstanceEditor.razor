@@ -15,7 +15,6 @@
 
 <div class="app-topbar">
     <div>
-        <div class="eyebrow">Instance record</div>
         <h1>@(Id is null ? "Add database instance" : $"Edit {_model.Name}")</h1>
         <div class="subtitle">Inventory, ownership and contact details</div>
     </div>
@@ -23,14 +22,14 @@
 
 @if (_loading)
 {
-    <div class="spinner-ring"></div>
+    <div class="spinner-ring" role="status"><span class="visually-hidden">Loading instance…</span></div>
 }
 else if (_notFound)
 {
     <div class="dbt-card" style="max-width: 600px;">
         <div class="empty-state py-4">
-            <i class="bi bi-question-diamond"></i>
-            Instance #@Id doesn't exist — it may have been deleted, or the link is wrong.
+            <i class="bi bi-question-diamond" aria-hidden="true"></i>
+            Instance #@Id doesn't exist. It may have been deleted, or the link is wrong.
         </div>
         <a class="btn btn-outline-secondary" href="/instances">Back to instances</a>
     </div>
@@ -38,11 +37,16 @@ else if (_notFound)
 else
 {
     <div class="dbt-card" style="max-width: 760px;">
+        @if (_saveError is not null)
+        {
+            <div class="alert alert-danger" role="alert">@_saveError</div>
+        }
+
         @if (_concurrencyConflict)
         {
-            <div class="alert alert-danger">
+            <div class="alert alert-danger" role="alert">
                 <strong>This record changed since you opened it.</strong> Someone else saved an update in the
-                meantime. Your edits below are preserved — reload to see the latest version (you'll lose these
+                meantime. Your edits below are kept. Reload to see the latest version (you'll lose these
                 edits), or save again to overwrite it with your changes.
                 <div class="mt-2 d-flex gap-2">
                     <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="ReloadDiscardingEdits">Reload latest, discard my edits</button>
@@ -70,13 +74,13 @@ else
             <h2 class="h6 text-muted text-uppercase mb-3">Identity</h2>
             <div class="row g-3 mb-4">
                 <div class="col-md-6">
-                    <label class="form-label">Instance name</label>
-                    <InputText class="form-control" @bind-Value="_model.Name" />
+                    <label class="form-label" for="ed-name">Instance name</label>
+                    <InputText id="ed-name" class="form-control" @bind-Value="_model.Name" aria-required="true" />
                     <ValidationMessage For="() => _model.Name" />
                 </div>
                 <div class="col-md-3">
-                    <label class="form-label">Engine</label>
-                    <InputSelect class="form-select" @bind-Value="_model.Engine">
+                    <label class="form-label" for="ed-engine">Engine</label>
+                    <InputSelect id="ed-engine" class="form-select" @bind-Value="_model.Engine">
                         @foreach (var e in Enum.GetValues<DatabaseEngine>())
                         {
                             <option value="@e">@e</option>
@@ -84,27 +88,27 @@ else
                     </InputSelect>
                 </div>
                 <div class="col-md-3">
-                    <label class="form-label">Version</label>
-                    <InputText class="form-control" @bind-Value="_model.Version" />
+                    <label class="form-label" for="ed-version">Version</label>
+                    <InputText id="ed-version" class="form-control" @bind-Value="_model.Version" />
                 </div>
             </div>
 
             <h2 class="h6 text-muted text-uppercase mb-3">Ownership</h2>
             <div class="row g-3 mb-4">
                 <div class="col-md-4">
-                    <label class="form-label">Application</label>
-                    <InputText class="form-control" @bind-Value="_model.Application" />
+                    <label class="form-label" for="ed-application">Application</label>
+                    <InputText id="ed-application" class="form-control" @bind-Value="_model.Application" />
                 </div>
                 <div class="col-md-4">
-                    <label class="form-label">Company</label>
-                    <InputText class="form-control" @bind-Value="_model.Company" />
+                    <label class="form-label" for="ed-company">Company</label>
+                    <InputText id="ed-company" class="form-control" @bind-Value="_model.Company" />
                 </div>
                 <div class="col-md-4">
-                    <label class="form-label">Department</label>
-                    <InputText class="form-control" @bind-Value="_model.Department" />
+                    <label class="form-label" for="ed-department">Department</label>
+                    <InputText id="ed-department" class="form-control" @bind-Value="_model.Department" />
                 </div>
                 <div class="col-md-6">
-                    <label class="form-label" for="owner-team">Owner team (U21)</label>
+                    <label class="form-label" for="owner-team">Owner team</label>
                     <InputSelect id="owner-team" class="form-select" @bind-Value="_model.OwnerTeamId">
                         <option value="">No team assigned</option>
                         @foreach (var t in _teams)
@@ -112,7 +116,7 @@ else
                             <option value="@t.Id">@t.Name</option>
                         }
                     </InputSelect>
-                    <div class="form-text">Powers "My instances" and team-scoped notification subscriptions. A personalization grouping only — it never grants access beyond a user's role.</div>
+                    <div class="form-text">Used for "My instances" and team notification subscriptions. It only groups instances; it never grants access beyond a user's role.</div>
                 </div>
                 <div class="col-md-6 d-flex align-items-end">
                     <div class="form-check">
@@ -125,38 +129,38 @@ else
             <h2 class="h6 text-muted text-uppercase mb-3">Contact</h2>
             <div class="row g-3 mb-4">
                 <div class="col-md-4">
-                    <label class="form-label">Contact name</label>
-                    <InputText class="form-control" @bind-Value="_model.ContactName" />
+                    <label class="form-label" for="ed-contact-name">Contact name</label>
+                    <InputText id="ed-contact-name" class="form-control" @bind-Value="_model.ContactName" />
                 </div>
                 <div class="col-md-4">
-                    <label class="form-label">Contact email</label>
-                    <InputText class="form-control" @bind-Value="_model.ContactEmail" />
+                    <label class="form-label" for="ed-contact-email">Contact email</label>
+                    <InputText id="ed-contact-email" class="form-control" @bind-Value="_model.ContactEmail" />
                     <ValidationMessage For="() => _model.ContactEmail" />
                 </div>
                 <div class="col-md-4">
-                    <label class="form-label">Contact phone</label>
-                    <InputText class="form-control" @bind-Value="_model.ContactPhone" />
+                    <label class="form-label" for="ed-contact-phone">Contact phone</label>
+                    <InputText id="ed-contact-phone" class="form-control" @bind-Value="_model.ContactPhone" />
                 </div>
                 <div class="col-md-4">
-                    <label class="form-label">Backup contact name</label>
-                    <InputText class="form-control" @bind-Value="_model.BackupContactName" />
+                    <label class="form-label" for="ed-backup-name">Backup contact name</label>
+                    <InputText id="ed-backup-name" class="form-control" @bind-Value="_model.BackupContactName" />
                 </div>
                 <div class="col-md-4">
-                    <label class="form-label">Backup contact email</label>
-                    <InputText class="form-control" @bind-Value="_model.BackupContactEmail" />
+                    <label class="form-label" for="ed-backup-email">Backup contact email</label>
+                    <InputText id="ed-backup-email" class="form-control" @bind-Value="_model.BackupContactEmail" />
                     <ValidationMessage For="() => _model.BackupContactEmail" />
                 </div>
                 <div class="col-md-4">
-                    <label class="form-label">Backup contact phone</label>
-                    <InputText class="form-control" @bind-Value="_model.BackupContactPhone" />
+                    <label class="form-label" for="ed-backup-phone">Backup contact phone</label>
+                    <InputText id="ed-backup-phone" class="form-control" @bind-Value="_model.BackupContactPhone" />
                 </div>
             </div>
 
             <h2 class="h6 text-muted text-uppercase mb-3">Topology</h2>
             <div class="row g-3 mb-4">
                 <div class="col-md-3">
-                    <label class="form-label">Role</label>
-                    <InputSelect class="form-select" @bind-Value="_model.Role">
+                    <label class="form-label" for="ed-role">Role</label>
+                    <InputSelect id="ed-role" class="form-select" @bind-Value="_model.Role">
                         @foreach (var r in Enum.GetValues<InstanceRole>())
                         {
                             <option value="@r">@r</option>
@@ -164,8 +168,8 @@ else
                     </InputSelect>
                 </div>
                 <div class="col-md-3">
-                    <label class="form-label">Environment</label>
-                    <InputSelect class="form-select" @bind-Value="_model.Environment">
+                    <label class="form-label" for="ed-environment">Environment</label>
+                    <InputSelect id="ed-environment" class="form-select" @bind-Value="_model.Environment">
                         @foreach (var e in Enum.GetValues<EnvironmentTier>())
                         {
                             <option value="@e">@e</option>
@@ -173,63 +177,63 @@ else
                     </InputSelect>
                 </div>
                 <div class="col-md-3">
-                    <label class="form-label">Database IP</label>
-                    <InputText class="form-control" @bind-Value="_model.DatabaseIp" />
+                    <label class="form-label" for="ed-db-ip">Database IP</label>
+                    <InputText id="ed-db-ip" class="form-control" @bind-Value="_model.DatabaseIp" />
                 </div>
                 <div class="col-md-3">
-                    <label class="form-label">Server IP</label>
-                    <InputText class="form-control" @bind-Value="_model.ServerIp" />
+                    <label class="form-label" for="ed-server-ip">Server IP</label>
+                    <InputText id="ed-server-ip" class="form-control" @bind-Value="_model.ServerIp" />
                 </div>
                 <div class="col-md-4">
-                    <label class="form-label">Region</label>
-                    <InputText class="form-control" @bind-Value="_model.Region" placeholder="us-east-1" />
+                    <label class="form-label" for="ed-region">Region</label>
+                    <InputText id="ed-region" class="form-control" @bind-Value="_model.Region" placeholder="us-east-1" />
                 </div>
                 <div class="col-md-4">
-                    <label class="form-label">Cluster</label>
-                    <InputText class="form-control" @bind-Value="_model.Cluster" placeholder="cluster-a" />
+                    <label class="form-label" for="ed-cluster">Cluster</label>
+                    <InputText id="ed-cluster" class="form-control" @bind-Value="_model.Cluster" placeholder="cluster-a" />
                 </div>
                 <div class="col-md-4">
-                    <label class="form-label">Replica set</label>
-                    <InputText class="form-control" @bind-Value="_model.ReplicaSet" placeholder="rs0" />
+                    <label class="form-label" for="ed-replica-set">Replica set</label>
+                    <InputText id="ed-replica-set" class="form-control" @bind-Value="_model.ReplicaSet" placeholder="rs0" />
                 </div>
             </div>
 
-            <h2 class="h6 text-muted text-uppercase mb-3">Connectivity check (U18)</h2>
+            <h2 class="h6 text-muted text-uppercase mb-3">Connectivity check</h2>
             <div class="row g-3 mb-4">
                 <div class="col-md-6">
-                    <label class="form-label">Host/DNS override (optional)</label>
-                    <InputText class="form-control" @bind-Value="_model.ConnectivityHostOverride" placeholder="Defaults to Server IP, then Database IP" />
+                    <label class="form-label" for="ed-conn-host">Host/DNS override (optional)</label>
+                    <InputText id="ed-conn-host" class="form-control" @bind-Value="_model.ConnectivityHostOverride" placeholder="Defaults to Server IP, then Database IP" />
                 </div>
                 <div class="col-md-6">
-                    <label class="form-label">Port override (optional)</label>
-                    <InputNumber class="form-control" @bind-Value="_model.ConnectivityPortOverride" placeholder="Defaults to the engine's conventional port" />
-                    <div class="form-text">An out-of-range port (not 1-65535) falls back to the engine default rather than being used as-is.</div>
+                    <label class="form-label" for="ed-conn-port">Port override (optional)</label>
+                    <InputNumber id="ed-conn-port" class="form-control" @bind-Value="_model.ConnectivityPortOverride" placeholder="Defaults to the engine's conventional port" aria-describedby="ed-conn-port-help" />
+                    <div class="form-text" id="ed-conn-port-help">A port outside 1-65535 is ignored and the engine's default port is used instead.</div>
                 </div>
             </div>
 
             <h2 class="h6 text-muted text-uppercase mb-3">Backup expectations</h2>
             <div class="row g-3 mb-4">
                 <div class="col-md-4">
-                    <label class="form-label">Expected backup interval (hours)</label>
-                    <InputNumber class="form-control" @bind-Value="_model.ExpectedBackupIntervalHours" />
-                    <div class="form-text">Flagged as overdue if no successful backup within this window.</div>
+                    <label class="form-label" for="ed-interval">Expected backup interval (hours)</label>
+                    <InputNumber id="ed-interval" class="form-control" @bind-Value="_model.ExpectedBackupIntervalHours" aria-describedby="ed-interval-help" />
+                    <div class="form-text" id="ed-interval-help">Flagged as overdue if no successful backup within this window.</div>
                 </div>
                 <div class="col-md-4">
-                    <label class="form-label">Retention policy (days)</label>
-                    <InputNumber class="form-control" @bind-Value="_model.RetentionPolicyDays" />
-                    <div class="form-text">Informational — how long backups should be kept.</div>
+                    <label class="form-label" for="ed-retention">Retention policy (days)</label>
+                    <InputNumber id="ed-retention" class="form-control" @bind-Value="_model.RetentionPolicyDays" aria-describedby="ed-retention-help" />
+                    <div class="form-text" id="ed-retention-help">For reference only: how long backups should be kept.</div>
                 </div>
                 <div class="col-md-4">
-                    <label class="form-label">Backup file location</label>
-                    <InputText class="form-control" @bind-Value="_model.BackupFileLocation" placeholder="\\server\backups\instance" />
-                    <div class="form-text">UNC path scanned for backup files. Leave blank to disable.</div>
+                    <label class="form-label" for="ed-backup-location">Backup file location</label>
+                    <InputText id="ed-backup-location" class="form-control" @bind-Value="_model.BackupFileLocation" placeholder="\\server\backups\instance" aria-describedby="ed-backup-location-help" />
+                    <div class="form-text" id="ed-backup-location-help">UNC path scanned for backup files. Leave blank to disable.</div>
                 </div>
             </div>
             <div class="row g-3 mb-4">
                 <div class="col-md-4">
-                    <label class="form-label">Restore-test interval override (days)</label>
-                    <InputNumber class="form-control" @bind-Value="_model.RestoreTestIntervalDaysOverride" />
-                    <div class="form-text">Leave blank to use the org-wide default (RestoreTest:IntervalDays). How often this instance's backups should be proven restorable.</div>
+                    <label class="form-label" for="ed-restore-interval">Restore-test interval override (days)</label>
+                    <InputNumber id="ed-restore-interval" class="form-control" @bind-Value="_model.RestoreTestIntervalDaysOverride" aria-describedby="ed-restore-interval-help" />
+                    <div class="form-text" id="ed-restore-interval-help">How often this instance's backups should be proven restorable. Leave blank to use the organization default.</div>
                 </div>
             </div>
 
@@ -237,20 +241,20 @@ else
             {
                 <div class="row g-3 mb-4">
                     <div class="col-md-8">
-                        <label class="form-label">Backup file name pattern(s)</label>
-                        <InputText class="form-control" @bind-Value="_model.BackupFileNamePatterns" placeholder="*.bak;*.trn" />
-                        <div class="form-text">Semicolon-separated glob patterns deciding which files on the shared drive count as evidence. Leave blank to match every file. Zero-length and still-being-written files are always excluded.</div>
+                        <label class="form-label" for="ed-patterns">Backup file name pattern(s)</label>
+                        <InputText id="ed-patterns" class="form-control" @bind-Value="_model.BackupFileNamePatterns" placeholder="*.bak;*.trn" aria-describedby="ed-patterns-help" />
+                        <div class="form-text" id="ed-patterns-help">Semicolon-separated glob patterns deciding which files on the shared drive count as evidence. Leave blank to match every file. Zero-length and still-being-written files are always excluded.</div>
                     </div>
                     <div class="col-md-4 d-flex align-items-end">
                         <button type="button" class="btn btn-outline-secondary" @onclick="PreviewScan" disabled="@_previewing">
-                            <i class="bi bi-eye"></i> @(_previewing ? "Checking…" : "Preview scan")
+                            <i class="bi bi-eye" aria-hidden="true"></i> @(_previewing ? "Checking…" : "Preview scan")
                         </button>
                     </div>
                 </div>
 
                 @if (_previewError is not null)
                 {
-                    <div class="alert alert-danger mb-4">@_previewError</div>
+                    <div class="alert alert-danger mb-4" role="alert">@_previewError</div>
                 }
                 else if (_preview is not null)
                 {
@@ -258,12 +262,12 @@ else
                         <h3 class="h6 text-muted text-uppercase mb-3">Scan preview</h3>
                         @if (_preview.Count == 0)
                         {
-                            <div class="empty-state py-3"><i class="bi bi-inbox"></i>No files found at this location.</div>
+                            <div class="empty-state py-3"><i class="bi bi-inbox" aria-hidden="true"></i> No files found at this location.</div>
                         }
                         else
                         {
-                            <table class="table table-sm mb-0 dbt-table">
-                                <thead><tr><th>File</th><th>Size</th><th>Last modified</th><th>Result</th></tr></thead>
+                            <table class="table table-sm mb-0 dbt-table" aria-label="Files found by the scan preview">
+                                <thead><tr><th scope="col">File</th><th scope="col">Size</th><th scope="col">Last modified</th><th scope="col">Result</th></tr></thead>
                                 <tbody>
                                     @foreach (var f in _preview)
                                     {
@@ -283,7 +287,7 @@ else
                                                 else
                                                 {
                                                     <span class="badge-health dot NeverBackedUp">Excluded</span>
-                                                    <span class="text-muted small"> — @f.Reason</span>
+                                                    <span class="text-muted small">: @f.Reason</span>
                                                 }
                                             </td>
                                         </tr>
@@ -298,22 +302,22 @@ else
             <h2 class="h6 text-muted text-uppercase mb-3">Reference</h2>
             <div class="row g-3 mb-4">
                 <div class="col-md-5">
-                    <label class="form-label">Tags</label>
-                    <InputText class="form-control" @bind-Value="_model.Tags" placeholder="comma, separated, tags" />
+                    <label class="form-label" for="ed-tags">Tags</label>
+                    <InputText id="ed-tags" class="form-control" @bind-Value="_model.Tags" placeholder="comma, separated, tags" />
                 </div>
                 <div class="col-md-7">
-                    <label class="form-label">Runbook / monitoring link</label>
-                    <InputText class="form-control" @bind-Value="_model.RunbookUrl" placeholder="https://…" />
+                    <label class="form-label" for="ed-runbook">Runbook / monitoring link</label>
+                    <InputText id="ed-runbook" class="form-control" @bind-Value="_model.RunbookUrl" placeholder="https://…" />
                     <ValidationMessage For="() => _model.RunbookUrl" />
                 </div>
                 <div class="col-12">
-                    <label class="form-label">Notes</label>
-                    <InputTextArea class="form-control" rows="2" @bind-Value="_model.Notes" />
+                    <label class="form-label" for="ed-notes">Notes</label>
+                    <InputTextArea id="ed-notes" class="form-control" rows="2" @bind-Value="_model.Notes" />
                 </div>
             </div>
 
             <div class="d-flex gap-2">
-                <button type="submit" class="btn btn-primary" disabled="@_saving">@(_saving ? "Saving…" : "Save")</button>
+                <button type="submit" class="btn btn-primary" disabled="@_saving">@(_saving ? "Saving…" : (Id is null ? "Save instance" : "Save changes"))</button>
                 <a class="btn btn-outline-secondary" href="@CancelUrl">Cancel</a>
             </div>
         </EditForm>
@@ -333,6 +337,7 @@ else
     private bool _dirty;
     private bool _concurrencyConflict;
     private string? _previewError;
+    private string? _saveError;
     private IReadOnlyList<FilePreview>? _preview;
     private IReadOnlyList<FieldError> _fieldErrors = [];
     private byte[] _loadedRowVersion = [];
@@ -384,8 +389,8 @@ else
         _messageStore = new ValidationMessageStore(_editContext);
         _editContext.OnFieldChanged += (_, _) => _dirty = true;
 
-        // In-app navigation (sidebar/cancel link) with unsaved changes (U13) — a real browser
-        // confirm() dialog, since Blazor has no built-in equivalent for intercepted navigation.
+        // In-app navigation with unsaved changes uses a real browser confirm() dialog, since
+        // Blazor has no built-in prompt for intercepted navigation.
         _navigationLock = Nav.RegisterLocationChangingHandler(async context =>
         {
             if (!_dirty || _saving)
@@ -434,11 +439,12 @@ else
 
         _saving = true;
         _concurrencyConflict = false;
+        _saveError = null;
         var now = DateTime.UtcNow;
         _model.UpdatedAtUtc = now;
 
-        // U21: the checkbox only ever sets/clears the confirmation stamp — it never auto-confirms
-        // just because a save happened, and unchecking it explicitly clears a stale confirmation.
+        // The checkbox only sets or clears the confirmation stamp: saving never auto-confirms,
+        // and unchecking explicitly clears a stale confirmation.
         if (_confirmOwnership)
         {
             _model.OwnershipConfirmedAtUtc = now;
@@ -460,9 +466,9 @@ else
             }
             else
             {
-                // Diff against the untouched row still in the database — not the in-memory _model,
-                // which already carries the edited values the form just bound — so the change log
-                // records actual before/after, not after/after.
+                // Diff against the untouched row still in the database, not the in-memory _model
+                // (which already carries the edited values), so the change log records real
+                // before/after values.
                 var before = await Db.DatabaseInstances.AsNoTracking().FirstOrDefaultAsync(i => i.Id == Id.Value);
                 if (before is not null)
                 {
@@ -476,10 +482,8 @@ else
 
                 if (overwrite)
                 {
-                    // "Save anyway" deliberately re-reads the row's *current* RowVersion right
-                    // before writing, so the concurrency token matches what's actually in the
-                    // database now and this write isn't itself rejected as stale — this is the
-                    // explicit, user-confirmed overwrite the conflict banner offered, not a silent one.
+                    // "Save anyway" re-reads the row's current RowVersion right before writing so
+                    // this explicit, user-confirmed overwrite isn't itself rejected as stale.
                     var currentRowVersion = await Db.DatabaseInstances
                         .Where(i => i.Id == Id.Value)
                         .Select(i => i.RowVersion)
@@ -488,10 +492,9 @@ else
                 }
                 else
                 {
-                    // Carries the RowVersion loaded when this form opened as the concurrency token's
-                    // original value (U13) — if another session saved first, SQL Server's rowversion
-                    // no longer matches and EF throws DbUpdateConcurrencyException below instead of
-                    // silently overwriting their change.
+                    // The RowVersion loaded when the form opened is the concurrency token's original
+                    // value: if another session saved first, EF throws DbUpdateConcurrencyException
+                    // below instead of silently overwriting their change.
                     _model.RowVersion = _loadedRowVersion;
                 }
                 Db.DatabaseInstances.Update(_model);
@@ -503,6 +506,13 @@ else
         {
             Db.ChangeTracker.Clear();
             _concurrencyConflict = true;
+            _saving = false;
+            return;
+        }
+        catch (DbUpdateException)
+        {
+            Db.ChangeTracker.Clear();
+            _saveError = "The instance couldn't be saved. Your edits are still in the form; check the values and try again.";
             _saving = false;
             return;
         }

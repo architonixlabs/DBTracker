@@ -9,20 +9,27 @@
 
 <div class="app-topbar">
     <div>
-        <div class="eyebrow">Instance record</div>
         <h1>Apply a backup policy to @_instanceIds.Count instance(s)</h1>
-        <div class="subtitle">Copies the policy's cadence/retention/restore-test values onto each selected instance — review the impact before applying. Instances can still be edited individually afterward.</div>
+        <div class="subtitle">Copies the policy's backup cadence, retention and restore-test interval onto each selected instance. Review the impact before applying; you can still edit each instance afterward.</div>
     </div>
     <a class="btn btn-outline-secondary" href="/instances">Cancel</a>
 </div>
 
-@if (_instanceIds.Count == 0)
+@if (_loadFailed)
 {
-    <div class="empty-state"><i class="bi bi-inbox"></i> No instances selected. <a href="/instances">Go back and select some</a>.</div>
+    <div class="empty-state" role="alert"><i class="bi bi-exclamation-triangle" aria-hidden="true"></i> Couldn't load backup policies. The database may be unreachable. <a href="/instances">Back to instances</a></div>
+}
+else if (!_loaded)
+{
+    <div class="spinner-ring" role="status"><span class="visually-hidden">Loading backup policies…</span></div>
+}
+else if (_instanceIds.Count == 0)
+{
+    <div class="empty-state"><i class="bi bi-inbox" aria-hidden="true"></i> No instances selected. <a href="/instances">Select instances on the inventory list</a>.</div>
 }
 else if (_policies.Count == 0)
 {
-    <div class="empty-state"><i class="bi bi-shield-exclamation"></i> No reusable policies exist yet. <a href="/ownership?tab=policies">Create one</a> first.</div>
+    <div class="empty-state"><i class="bi bi-shield-exclamation" aria-hidden="true"></i> No reusable policies exist yet. <a href="/ownership?tab=policies">Create a policy</a> first.</div>
 }
 else
 {
@@ -32,11 +39,11 @@ else
         <select id="policy-select" class="form-select" value="@_selectedPolicyId" @onchange="OnPolicyChanged">
             @foreach (var p in _policies)
             {
-                <option value="@p.Id">@p.Name (v@p.Version — every @p.ExpectedBackupIntervalHours h, retain @(p.RetentionPolicyDays?.ToString() ?? "org default") d, restore-test every @(p.RestoreTestIntervalDays?.ToString() ?? "org default") d)</option>
+                <option value="@p.Id">@p.Name (v@p.Version: every @p.ExpectedBackupIntervalHours h, retain @(p.RetentionPolicyDays?.ToString() ?? "org default") d, restore-test every @(p.RestoreTestIntervalDays?.ToString() ?? "org default") d)</option>
             }
         </select>
-        <button class="btn btn-outline-secondary mt-3" @onclick="RefreshPreview" disabled="@(_selectedPolicyId == 0)">
-            <i class="bi bi-eye"></i> Preview impact
+        <button type="button" class="btn btn-outline-secondary mt-3" @onclick="RefreshPreview" disabled="@(_selectedPolicyId == 0)">
+            <i class="bi bi-eye" aria-hidden="true"></i> Preview impact
         </button>
     </div>
 
@@ -44,10 +51,10 @@ else
     {
         var changing = _preview.Where(r => !r.AlreadyUpToDate).ToList();
         <div class="dbt-card" style="max-width:900px;">
-            <h2 class="h6 text-muted text-uppercase mb-3">Impact preview — @changing.Count of @_instanceIds.Count instance(s) would change</h2>
+            <h2 class="h6 text-muted text-uppercase mb-3">Impact preview: @changing.Count of @_instanceIds.Count instance(s) would change</h2>
             @if (changing.Count == 0)
             {
-                <div class="empty-state py-3"><i class="bi bi-check-circle"></i>Every selected instance already matches this policy's current version.</div>
+                <div class="empty-state py-3"><i class="bi bi-check-circle" aria-hidden="true"></i> Every selected instance already matches this policy's current version.</div>
             }
             else
             {
@@ -63,15 +70,15 @@ else
                                     <tr>
                                         <td class="small">@row.InstanceName</td>
                                         <td class="small">@change.Field</td>
-                                        <td class="small text-muted">@(string.IsNullOrEmpty(change.Before) ? "—" : change.Before)</td>
-                                        <td class="small">@(string.IsNullOrEmpty(change.After) ? "—" : change.After)</td>
+                                        <td class="small text-muted">@(string.IsNullOrEmpty(change.Before) ? "(empty)" : change.Before)</td>
+                                        <td class="small">@(string.IsNullOrEmpty(change.After) ? "(empty)" : change.After)</td>
                                     </tr>
                                 }
                             }
                         </tbody>
                     </table>
                 </div>
-                <button class="btn btn-primary" @onclick="Apply" disabled="@_applying">@(_applying ? "Applying…" : $"Apply to {changing.Count} instance(s)")</button>
+                <button type="button" class="btn btn-primary" @onclick="Apply" disabled="@_applying">@(_applying ? "Applying…" : $"Apply to {changing.Count} instance(s)")</button>
             }
         </div>
     }
@@ -85,6 +92,7 @@ else
     private int _selectedPolicyId;
     private IReadOnlyList<PolicyApplyRowPreview>? _preview;
     private bool _applying;
+    private bool _loaded, _loadFailed;
     private string? _userId, _userName;
 
     protected override async Task OnInitializedAsync()
@@ -96,11 +104,20 @@ else
             .Distinct()
             .ToList();
 
-        _policies = await Policies.ListAsync();
+        try
+        {
+            _policies = await Policies.ListAsync();
+        }
+        catch (Exception)
+        {
+            _loadFailed = true;
+            return;
+        }
         if (_policies.Count > 0)
         {
             _selectedPolicyId = _policies[0].Id;
         }
+        _loaded = true;
 
         var state = await AuthProvider.GetAuthenticationStateAsync();
         _userId = state.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? "";

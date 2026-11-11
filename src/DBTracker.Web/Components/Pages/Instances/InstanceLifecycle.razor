@@ -18,14 +18,21 @@
 
 <PageTitle>@(_instance?.Name ?? "Instance") lifecycle · DBTracker</PageTitle>
 
-@if (!_loaded)
+@if (_loadFailed)
 {
-    <div class="spinner-ring"></div>
+    <div class="dbt-card" style="max-width:600px;">
+        <div class="empty-state py-4" role="alert"><i class="bi bi-exclamation-triangle" aria-hidden="true"></i> Couldn't load lifecycle data. The database may be unreachable.</div>
+        <button type="button" class="btn btn-outline-secondary" @onclick="Retry">Try again</button>
+    </div>
+}
+else if (!_loaded)
+{
+    <div class="spinner-ring" role="status"><span class="visually-hidden">Loading lifecycle data…</span></div>
 }
 else if (_instance is null)
 {
     <div class="dbt-card" style="max-width:600px;">
-        <div class="empty-state py-4"><i class="bi bi-question-diamond"></i> Instance #@Id doesn't exist.</div>
+        <div class="empty-state py-4"><i class="bi bi-question-diamond" aria-hidden="true"></i> Instance #@Id doesn't exist.</div>
         <a class="btn btn-outline-secondary" href="/instances">Back to instances</a>
     </div>
 }
@@ -33,11 +40,10 @@ else
 {
     <div class="app-topbar">
         <div>
-            <div class="eyebrow">Database identity, release and support lifecycle</div>
             <h1>@_instance.Name</h1>
             <div class="subtitle">
-                @_instance.Engine · <a href="/instances/@Id">Back to instance detail</a> ·
-                Release availability, lifecycle risk, security exposure and backup health are tracked as separate facts here — a newer release alone does not make migration required.
+                Version identity and support lifecycle · @_instance.Engine · <a href="/instances/@Id">Back to instance detail</a><br />
+                Release availability, lifecycle risk, security exposure and backup health are tracked separately. A newer release alone doesn't make a migration required.
             </div>
         </div>
     </div>
@@ -45,11 +51,11 @@ else
     <div class="row g-3">
         <div class="col-lg-6">
             <div class="dbt-card h-100">
-                <h2 class="h6 text-muted text-uppercase mb-3">Installed-version identity (D01)</h2>
+                <h2 class="h6 text-muted text-uppercase mb-3">Installed-version identity</h2>
 
                 @if (_identity is null)
                 {
-                    <div class="empty-state py-3"><i class="bi bi-patch-question"></i> No structured identity recorded yet.</div>
+                    <div class="empty-state py-3"><i class="bi bi-patch-question" aria-hidden="true"></i> No structured identity recorded yet.</div>
                 }
                 else
                 {
@@ -57,7 +63,7 @@ else
                         <span class="badge-health dot @ResolutionCssClass(_identity.ResolutionStatus)">@_identity.ResolutionStatus</span>
                         @if (_identity.IsAttested)
                         {
-                            <span class="small text-muted"><i class="bi bi-patch-check-fill"></i> Attested by @_identity.AttestedBy on @_identity.AttestedAtUtc?.ToLocalTime().ToString("MMM d, yyyy")</span>
+                            <span class="small text-muted"><i class="bi bi-patch-check-fill" aria-hidden="true"></i> Attested by @_identity.AttestedBy on @_identity.AttestedAtUtc?.ToLocalTime().ToString("MMM d, yyyy")</span>
                         }
                         else
                         {
@@ -67,7 +73,7 @@ else
                     <p class="small mb-1">Raw text: <code>@_identity.RawVersionText</code></p>
                     @if (_identity.ResolutionStatus != VersionResolutionStatus.Resolved)
                     {
-                        <p class="small mb-2" style="color:var(--dbt-overdue);">@_identity.UnresolvedReason — unresolved/unrecognized data is never treated as compliant.</p>
+                        <p class="small mb-2" style="color:var(--dbt-overdue);">@_identity.UnresolvedReason<br />Unresolved or unrecognized versions are never treated as compliant.</p>
                     }
                     else
                     {
@@ -77,21 +83,21 @@ else
                         </p>
                     }
                     <dl class="row small mb-2">
-                        <dt class="col-5">Distribution</dt><dd class="col-7">@EmDash(_identity.Distribution)</dd>
-                        <dt class="col-5">Patch train</dt><dd class="col-7">@EmDash(_identity.PatchTrain)</dd>
-                        <dt class="col-5">Hosting engine version</dt><dd class="col-7">@EmDash(_identity.HostingEngineVersion)</dd>
-                        <dt class="col-5">DB compatibility level</dt><dd class="col-7">@EmDash(_identity.DatabaseCompatibilityLevel)</dd>
-                        <dt class="col-5">Hosting provider</dt><dd class="col-7">@EmDash(_identity.HostingProvider)</dd>
+                        <dt class="col-5">Distribution</dt><dd class="col-7">@OrNotRecorded(_identity.Distribution)</dd>
+                        <dt class="col-5">Patch train</dt><dd class="col-7">@OrNotRecorded(_identity.PatchTrain)</dd>
+                        <dt class="col-5">Hosting engine version</dt><dd class="col-7">@OrNotRecorded(_identity.HostingEngineVersion)</dd>
+                        <dt class="col-5">DB compatibility level</dt><dd class="col-7">@OrNotRecorded(_identity.DatabaseCompatibilityLevel)</dd>
+                        <dt class="col-5">Hosting provider</dt><dd class="col-7">@OrNotRecorded(_identity.HostingProvider)</dd>
                         <dt class="col-5">Observed</dt><dd class="col-7">@_identity.ObservedAtUtc.ToLocalTime().ToString("MMM d, yyyy h:mm tt") (@_identity.ObservationSource)</dd>
                     </dl>
 
                     @if (_clusterNodes.Count > 0)
                     {
-                        <p class="small text-muted mb-1">Cluster-node versions (distinct from the Region/Cluster/ReplicaSet topology facets):</p>
+                        <p class="small text-muted mb-1">Cluster-node versions, recorded separately from the Region, Cluster and ReplicaSet fields:</p>
                         <ul class="small mb-2">
                             @foreach (var n in _clusterNodes)
                             {
-                                <li>@n.NodeName — @n.RawVersionText (@n.ResolutionStatus)</li>
+                                <li>@n.NodeName: @n.RawVersionText (@n.ResolutionStatus)</li>
                             }
                         </ul>
                     }
@@ -100,30 +106,32 @@ else
                 <AuthorizeView Roles="@Roles.CanEditPolicy">
                     <hr />
                     <div class="mb-2">
-                        <label class="form-label small" for="raw-version">Raw version text (manual entry/import)</label>
+                        <label class="form-label small" for="raw-version">Raw version text, as reported or imported</label>
                         <div class="d-flex gap-2">
-                            <input id="raw-version" class="form-control form-control-sm" @bind="_rawVersionInput" @bind:event="oninput" placeholder="e.g. 16.2, 2019 CU18, 10.6.16-MariaDB" />
-                            <button class="btn btn-outline-secondary btn-sm" @onclick="SaveRawVersion" disabled="@string.IsNullOrWhiteSpace(_rawVersionInput)">Resolve &amp; save</button>
+                            <input id="raw-version" class="form-control form-control-sm" @bind="_rawVersionInput" @bind:event="oninput" placeholder="e.g. 16.2, 2019 CU18, 10.6.16-MariaDB" aria-describedby="raw-version-help" />
+                            <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="SaveRawVersion" disabled="@string.IsNullOrWhiteSpace(_rawVersionInput)">Resolve &amp; save</button>
                         </div>
-                        <div class="form-text">Try an unrecognizable string to see the Unresolved state — it's a correct outcome, not an error.</div>
+                        <div class="form-text" id="raw-version-help">If the text can't be matched to a known release, it's saved as Unresolved. That's a correct result, not an error.</div>
                     </div>
                     <div class="row g-2 mb-2">
-                        <div class="col-6"><input class="form-control form-control-sm" placeholder="Edition" @bind="_edition" @bind:event="oninput" /></div>
-                        <div class="col-6"><input class="form-control form-control-sm" placeholder="Distribution" @bind="_distribution" @bind:event="oninput" /></div>
-                        <div class="col-6"><input class="form-control form-control-sm" placeholder="Patch train" @bind="_patchTrain" @bind:event="oninput" /></div>
-                        <div class="col-6"><input class="form-control form-control-sm" placeholder="Hosting provider" @bind="_hostingProvider" @bind:event="oninput" /></div>
-                        <div class="col-6"><input class="form-control form-control-sm" placeholder="Hosting engine version" @bind="_hostingEngineVersion" @bind:event="oninput" /></div>
-                        <div class="col-6"><input class="form-control form-control-sm" placeholder="DB compatibility level" @bind="_compatLevel" @bind:event="oninput" /></div>
+                        <div class="col-6"><label class="form-label small mb-1" for="id-edition">Edition</label><input id="id-edition" class="form-control form-control-sm" placeholder="Edition" @bind="_edition" @bind:event="oninput" /></div>
+                        <div class="col-6"><label class="form-label small mb-1" for="id-distribution">Distribution</label><input id="id-distribution" class="form-control form-control-sm" placeholder="Distribution" @bind="_distribution" @bind:event="oninput" /></div>
+                        <div class="col-6"><label class="form-label small mb-1" for="id-patch-train">Patch train</label><input id="id-patch-train" class="form-control form-control-sm" placeholder="Patch train" @bind="_patchTrain" @bind:event="oninput" /></div>
+                        <div class="col-6"><label class="form-label small mb-1" for="id-provider">Hosting provider</label><input id="id-provider" class="form-control form-control-sm" placeholder="Hosting provider" @bind="_hostingProvider" @bind:event="oninput" /></div>
+                        <div class="col-6"><label class="form-label small mb-1" for="id-host-engine">Hosting engine version</label><input id="id-host-engine" class="form-control form-control-sm" placeholder="Hosting engine version" @bind="_hostingEngineVersion" @bind:event="oninput" /></div>
+                        <div class="col-6"><label class="form-label small mb-1" for="id-compat">DB compatibility level</label><input id="id-compat" class="form-control form-control-sm" placeholder="DB compatibility level" @bind="_compatLevel" @bind:event="oninput" /></div>
                     </div>
                     <div class="d-flex gap-2 mb-2">
-                        <button class="btn btn-outline-secondary btn-sm" @onclick="SaveMetadata" disabled="@(_identity is null)">Save metadata</button>
-                        <button class="btn btn-outline-secondary btn-sm" @onclick="Attest" disabled="@(_identity is null)"><i class="bi bi-patch-check"></i> Attest current identity</button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="SaveMetadata" disabled="@(_identity is null)">Save metadata</button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="Attest" disabled="@(_identity is null)"><i class="bi bi-patch-check" aria-hidden="true"></i> Attest current identity</button>
                     </div>
 
                     <div class="d-flex gap-2">
-                        <input class="form-control form-control-sm" placeholder="Node name" @bind="_newNodeName" @bind:event="oninput" style="max-width:160px;" />
-                        <input class="form-control form-control-sm" placeholder="Node version text" @bind="_newNodeVersion" @bind:event="oninput" />
-                        <button class="btn btn-outline-secondary btn-sm" @onclick="AddClusterNode" disabled="@(string.IsNullOrWhiteSpace(_newNodeName) || string.IsNullOrWhiteSpace(_newNodeVersion))">Add node</button>
+                        <label class="visually-hidden" for="node-name">Node name</label>
+                        <input id="node-name" class="form-control form-control-sm" placeholder="Node name" @bind="_newNodeName" @bind:event="oninput" style="max-width:160px;" />
+                        <label class="visually-hidden" for="node-version">Node version text</label>
+                        <input id="node-version" class="form-control form-control-sm" placeholder="Node version text" @bind="_newNodeVersion" @bind:event="oninput" />
+                        <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="AddClusterNode" disabled="@(string.IsNullOrWhiteSpace(_newNodeName) || string.IsNullOrWhiteSpace(_newNodeVersion))">Add node</button>
                     </div>
                 </AuthorizeView>
             </div>
@@ -131,15 +139,15 @@ else
 
         <div class="col-lg-6">
             <div class="dbt-card h-100">
-                <h2 class="h6 text-muted text-uppercase mb-3">Support runway (D03)</h2>
+                <h2 class="h6 text-muted text-uppercase mb-3">Support runway</h2>
 
                 @if (_runway is null)
                 {
-                    <div class="empty-state py-3"><i class="bi bi-hourglass"></i> Not yet evaluated.</div>
+                    <div class="empty-state py-3"><i class="bi bi-hourglass" aria-hidden="true"></i> Not yet evaluated.</div>
                 }
                 else if (_runway.IsUnknown)
                 {
-                    <div class="small" style="color:var(--dbt-overdue);"><i class="bi bi-patch-question"></i> Unknown / needs review — @_runway.UnknownReason</div>
+                    <div class="small" style="color:var(--dbt-overdue);"><i class="bi bi-patch-question" aria-hidden="true"></i> Unknown, needs review: @_runway.UnknownReason</div>
                 }
                 else
                 {
@@ -161,28 +169,30 @@ else
 
                 @if (_latestDecision is not null)
                 {
-                    <p class="small text-muted mb-2">Last decision: <strong>@_latestDecision.ActionType</strong> — @_latestDecision.ActionReference (by @_latestDecision.DecidedBy, @_latestDecision.DecidedAtUtc.ToLocalTime().ToString("MMM d, yyyy"))</p>
+                    <p class="small text-muted mb-2">Last decision: <strong>@_latestDecision.ActionType</strong>, @_latestDecision.ActionReference (by @_latestDecision.DecidedBy, @_latestDecision.DecidedAtUtc.ToLocalTime().ToString("MMM d, yyyy"))</p>
                 }
 
                 <AuthorizeView Roles="@Roles.CanEditPolicy">
                     <hr />
                     <div class="row g-2 mb-2">
                         <div class="col-6">
-                            <select class="form-select form-select-sm" @bind="_decisionActionType">
+                            <label class="form-label small mb-1" for="decision-action">Decision</label>
+                            <select id="decision-action" class="form-select form-select-sm" @bind="_decisionActionType">
                                 @foreach (var t in Enum.GetValues<SupportActionType>())
                                 {
                                     <option value="@t">@t</option>
                                 }
                             </select>
                         </div>
-                        <div class="col-6"><input class="form-control form-control-sm" placeholder="Reference (ticket/plan link)" @bind="_decisionReference" @bind:event="oninput" /></div>
+                        <div class="col-6"><label class="form-label small mb-1" for="decision-reference">Reference (required)</label><input id="decision-reference" class="form-control form-control-sm" placeholder="Reference (ticket/plan link)" @bind="_decisionReference" @bind:event="oninput" /></div>
                     </div>
                     <div class="d-flex gap-2">
-                        <input class="form-control form-control-sm" placeholder="Notes" @bind="_decisionNotes" @bind:event="oninput" />
-                        <button class="btn btn-outline-secondary btn-sm" @onclick="RecordDecision" disabled="@string.IsNullOrWhiteSpace(_decisionReference)">Record decision</button>
+                        <label class="visually-hidden" for="decision-notes">Decision notes</label>
+                        <input id="decision-notes" class="form-control form-control-sm" placeholder="Notes" @bind="_decisionNotes" @bind:event="oninput" />
+                        <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="RecordDecision" disabled="@string.IsNullOrWhiteSpace(_decisionReference)">Record decision</button>
                     </div>
                     <div class="mt-2">
-                        <button class="btn btn-link btn-sm p-0" @onclick="EvaluateRunwayNow">Evaluate support-runway notices now (admin/DBA action, mirrors the background sweep)</button>
+                        <button type="button" class="btn btn-link btn-sm p-0" @onclick="EvaluateRunwayNow">Evaluate support-runway notices now (admin/DBA action, mirrors the background sweep)</button>
                     </div>
                 </AuthorizeView>
             </div>
@@ -190,11 +200,11 @@ else
 
         <div class="col-lg-6">
             <div class="dbt-card h-100">
-                <h2 class="h6 text-muted text-uppercase mb-3">Release availability &amp; patch baseline (D04)</h2>
+                <h2 class="h6 text-muted text-uppercase mb-3">Release availability &amp; patch baseline</h2>
 
                 @if (_patchBaseline is null)
                 {
-                    <div class="empty-state py-3"><i class="bi bi-box-seam"></i> Record a resolved version identity first.</div>
+                    <div class="empty-state py-3"><i class="bi bi-box-seam" aria-hidden="true"></i> Record a resolved version identity first.</div>
                 }
                 else
                 {
@@ -209,7 +219,7 @@ else
                             @(_patchBaseline.ApprovedTarget is { } p3 ? p3.ReleaseLabel : "None approved")
                             @if (_patchBaseline.IsMajorUpgradeFromApproved)
                             {
-                                <span class="small text-muted"> — major-version migration, not a same-branch patch</span>
+                                <span class="small text-muted"> (a major-version migration, not a same-branch patch)</span>
                             }
                         </dd>
                     </dl>
@@ -217,22 +227,22 @@ else
                     {
                         <p class="small text-muted mt-2 mb-0">@_patchBaseline.Notes</p>
                     }
-                    <p class="small text-muted mt-2 mb-0">Preview releases are excluded by default. An approved target is never auto-selected from the newest GA — only an explicitly reviewed baseline sets it.</p>
+                    <p class="small text-muted mt-2 mb-0">Preview releases are excluded by default. The approved target is never picked automatically from the newest GA; only a reviewed baseline sets it.</p>
                 }
             </div>
         </div>
 
         <div class="col-lg-6">
             <div class="dbt-card h-100">
-                <h2 class="h6 text-muted text-uppercase mb-3">Advisory applicability (D05)</h2>
+                <h2 class="h6 text-muted text-uppercase mb-3">Advisory applicability</h2>
 
                 <AuthorizeView Roles="@Roles.CanEditPolicy">
-                    <button class="btn btn-outline-secondary btn-sm mb-2" @onclick="EvaluateAdvisories">Evaluate advisories for this instance</button>
+                    <button type="button" class="btn btn-outline-secondary btn-sm mb-2" @onclick="EvaluateAdvisories">Evaluate advisories for this instance</button>
                 </AuthorizeView>
 
                 @if (_assessments.Count == 0)
                 {
-                    <div class="empty-state py-3"><i class="bi bi-shield-check"></i> No advisories evaluated against this instance.</div>
+                    <div class="empty-state py-3"><i class="bi bi-shield-check" aria-hidden="true"></i> No advisories evaluated against this instance.</div>
                 }
                 else
                 {
@@ -240,20 +250,20 @@ else
                     {
                         <div class="mb-2 pb-2" style="border-bottom:1px solid var(--dbt-line);">
                             <div class="d-flex justify-content-between">
-                                <strong class="small">@a.AdvisoryRecord?.VendorAdvisoryId — @a.AdvisoryRecord?.Title</strong>
+                                <strong class="small">@a.AdvisoryRecord?.VendorAdvisoryId: @a.AdvisoryRecord?.Title</strong>
                                 <span class="badge-health dot @AdvisoryCssClass(a.Classification)">@a.Classification</span>
                             </div>
                             <p class="small text-muted mb-1">@a.ClassificationReasoning</p>
                             @if (a.IsReviewed)
                             {
-                                <p class="small mb-0">Reviewed by @a.ReviewedBy — verification: @a.VerificationStatus@(string.IsNullOrEmpty(a.Owner) ? "" : $", owner {a.Owner}")</p>
+                                <p class="small mb-0">Reviewed by @a.ReviewedBy, verification: @a.VerificationStatus@(string.IsNullOrEmpty(a.Owner) ? "" : $", owner {a.Owner}")</p>
                             }
                             else
                             {
                                 <AuthorizeView Roles="@Roles.CanEditPolicy">
                                     <div class="d-flex gap-1 mt-1">
-                                        <button class="btn btn-outline-secondary btn-sm" @onclick="() => ReviewAssessment(a.Id, AdvisoryClassification.Confirmed)">Confirm</button>
-                                        <button class="btn btn-outline-secondary btn-sm" @onclick="() => ReviewAssessment(a.Id, AdvisoryClassification.NotApplicable)">Mark not applicable</button>
+                                        <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="() => ReviewAssessment(a.Id, AdvisoryClassification.Confirmed)">Confirm</button>
+                                        <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="() => ReviewAssessment(a.Id, AdvisoryClassification.NotApplicable)">Mark not applicable</button>
                                     </div>
                                 </AuthorizeView>
                             }
@@ -265,28 +275,28 @@ else
 
         <div class="col-12">
             <div class="dbt-card">
-                <h2 class="h6 text-muted text-uppercase mb-3">Version attestation &amp; observed-metadata drift (D06)</h2>
+                <h2 class="h6 text-muted text-uppercase mb-3">Version attestation &amp; observed-metadata drift</h2>
                 <p class="small text-muted">
-                    Manual attestation (above) and documented metadata import are the shipped paths. An optional, explicitly-configured,
-                    read-only, least-privilege, bounded-schedule collector is a labelled future extension point only — no real
-                    network/credentialed collector runs from this page.
+                    Versions are confirmed by manual attestation (above) or by entering what was observed or imported. DBTracker doesn't
+                    connect to the database to collect versions itself.
                 </p>
 
                 <AuthorizeView Roles="@Roles.CanEditPolicy">
                     <div class="d-flex gap-2 mb-3">
-                        <input class="form-control form-control-sm" placeholder="Observed/imported raw version text" @bind="_observationInput" @bind:event="oninput" />
-                        <button class="btn btn-outline-secondary btn-sm" @onclick="RecordObservation" disabled="@string.IsNullOrWhiteSpace(_observationInput)">Record observation</button>
+                        <label class="visually-hidden" for="observation-input">Observed or imported raw version text</label>
+                        <input id="observation-input" class="form-control form-control-sm" placeholder="Observed/imported raw version text" @bind="_observationInput" @bind:event="oninput" />
+                        <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="RecordObservation" disabled="@string.IsNullOrWhiteSpace(_observationInput)">Record observation</button>
                     </div>
                 </AuthorizeView>
 
                 @if (_observations.Count == 0)
                 {
-                    <div class="empty-state py-3"><i class="bi bi-clipboard-data"></i> No observations recorded yet.</div>
+                    <div class="empty-state py-3"><i class="bi bi-clipboard-data" aria-hidden="true"></i> No observations recorded yet.</div>
                 }
                 else
                 {
-                    <table class="table table-sm mb-0 dbt-table">
-                        <thead><tr><th>When</th><th>Source</th><th>Raw text</th><th>Outcome</th><th>Drift</th></tr></thead>
+                    <table class="table table-sm mb-0 dbt-table" aria-label="Version observations">
+                        <thead><tr><th scope="col">When</th><th scope="col">Source</th><th scope="col">Raw text</th><th scope="col">Outcome</th><th scope="col">Drift</th></tr></thead>
                         <tbody>
                             @foreach (var o in _observations)
                             {
@@ -317,7 +327,7 @@ else
     private PatchBaselineResult? _patchBaseline;
     private List<AdvisoryInstanceAssessment> _assessments = new();
     private List<VersionObservation> _observations = new();
-    private bool _loaded;
+    private bool _loaded, _loadFailed;
     private string? _userName;
 
     private string _rawVersionInput = "";
@@ -331,8 +341,21 @@ else
     {
         var state = await AuthProvider.GetAuthenticationStateAsync();
         _userName = state.User.Identity?.Name ?? "unknown";
-        await Load();
-        _loaded = true;
+        await Retry();
+    }
+
+    private async Task Retry()
+    {
+        _loadFailed = false;
+        try
+        {
+            await Load();
+            _loaded = true;
+        }
+        catch (Exception)
+        {
+            _loadFailed = true;
+        }
     }
 
     private async Task Load()
@@ -433,12 +456,12 @@ else
     private async Task RecordObservation()
     {
         var observation = await Observations.RecordObservationAsync(Id, _observationInput, VersionObservationSource.ManualEntry, _userName ?? "unknown");
-        Toasts.Success(observation.DriftStatus == DriftStatus.Drift ? "Observation recorded — drift detected against the declared identity." : "Observation recorded.");
+        Toasts.Success(observation.DriftStatus == DriftStatus.Drift ? "Observation recorded. It differs from the declared version identity." : "Observation recorded.");
         _observationInput = "";
         await Load();
     }
 
-    private static string EmDash(string? value) => string.IsNullOrWhiteSpace(value) ? "—" : value;
+    private static string OrNotRecorded(string? value) => string.IsNullOrWhiteSpace(value) ? "Not recorded" : value;
 
     private static string ResolutionCssClass(VersionResolutionStatus status) => status switch
     {

@@ -15,16 +15,27 @@
 
 <PageTitle>@(_overview?.Instance.Name ?? "Instance") · DBTracker</PageTitle>
 
-@if (!_loaded)
+@if (_loadFailed)
 {
-    <div class="spinner-ring"></div>
+    <div class="dbt-card" style="max-width: 600px;">
+        <div class="empty-state py-4" role="alert">
+            <i class="bi bi-exclamation-triangle" aria-hidden="true"></i>
+            Couldn't load this instance. The database may be unreachable.
+        </div>
+        <button type="button" class="btn btn-outline-secondary" @onclick="Retry">Try again</button>
+        <a class="btn btn-outline-secondary" href="/instances">Back to instances</a>
+    </div>
+}
+else if (!_loaded)
+{
+    <div class="spinner-ring" role="status"><span class="visually-hidden">Loading instance…</span></div>
 }
 else if (_overview is null)
 {
     <div class="dbt-card" style="max-width: 600px;">
         <div class="empty-state py-4">
-            <i class="bi bi-question-diamond"></i>
-            Instance #@Id doesn't exist — it may have been deleted or archived, or the link is wrong.
+            <i class="bi bi-question-diamond" aria-hidden="true"></i>
+            Instance #@Id doesn't exist. It may have been deleted or archived, or the link is wrong.
         </div>
         <a class="btn btn-outline-secondary" href="/instances">Back to instances</a>
         <a class="btn btn-outline-secondary" href="/instances/archived">Check archived instances</a>
@@ -36,64 +47,65 @@ else
 
     @if (instance.IsArchived)
     {
-        <div class="alert alert-warning">
-            <i class="bi bi-archive"></i> This instance is <strong>archived</strong>
-            (@instance.ArchivedAtUtc?.ToLocalTime().ToString("MMM d, yyyy h:mm tt") by @instance.ArchivedBy) — reason: @instance.ArchiveReason.
-            It's excluded from background scans/alerts/reports. <a href="/instances/archived">Browse archived instances</a> to unarchive it.
+        <div class="alert alert-warning" role="status">
+            <i class="bi bi-archive" aria-hidden="true"></i> This instance is <strong>archived</strong>
+            (@instance.ArchivedAtUtc?.ToLocalTime().ToString("MMM d, yyyy h:mm tt") by @instance.ArchivedBy). Reason: @instance.ArchiveReason.
+            It's excluded from background scans, alerts and reports. <a href="/instances/archived">Browse archived instances</a> to unarchive it.
         </div>
     }
 
     <div class="app-topbar">
         <div>
-            <div class="eyebrow">Instance detail</div>
             <h1>
                 @instance.Name <HealthBadge Health="_overview.Health" />
                 @if (instance.MaintenanceUntilUtc is { } maintUtc && maintUtc > DateTime.UtcNow)
                 {
                     <span class="badge-health dot Overdue" title="Overdue/Failed alerts are suppressed until this window ends">
-                        <i class="bi bi-cone-striped"></i> Maintenance until @maintUtc.ToLocalTime().ToString("MMM d, h:mm tt")
+                        <i class="bi bi-cone-striped" aria-hidden="true"></i> Maintenance until @maintUtc.ToLocalTime().ToString("MMM d, h:mm tt")
                     </span>
                 }
             </h1>
             <div class="subtitle">@instance.Engine @instance.Version · @instance.Environment · <span class="role-pill @instance.Role">@instance.Role</span></div>
         </div>
-        <div class="d-flex gap-2">
-            <a class="btn btn-outline-secondary" href="/instances/@Id/lifecycle" title="Installed-version identity, support runway, patch baseline and advisories (D01-D06)">
-                <i class="bi bi-signpost-split"></i> Lifecycle
-            </a>
-            <a class="btn btn-outline-secondary" href="/instances/@Id/migration" title="Technical dependencies, source-to-target path assessment and upgrade-readiness checklist (D07-D09)">
-                <i class="bi bi-diagram-2"></i> Migration
-            </a>
-            <a class="btn btn-outline-secondary" href="/instances/@Id/recovery" title="Recovery objectives, backup-chain coverage and backup-copy availability/retention evidence (D16-D17)">
-                <i class="bi bi-shield-check"></i> Recovery
-            </a>
-            <a class="btn btn-outline-secondary" href="/instances/@Id/assurance" title="Integrity/HA/maintenance-job evidence and capacity/performance planning evidence (D18-D19)">
-                <i class="bi bi-clipboard2-pulse"></i> Assurance
-            </a>
-            <a class="btn btn-outline-secondary" href="/instances/@Id/certificates" title="Certificate and recovery-key dependency reminders (D20)">
-                <i class="bi bi-key"></i> Certificates
-            </a>
-            <a class="btn btn-outline-secondary" href="/instances/@Id/entitlement" title="Support-contract entitlement and reviewed edition-cost readiness (D21)">
-                <i class="bi bi-file-earmark-text"></i> Entitlement
-            </a>
-            <a class="btn btn-outline-secondary" href="/instances/@Id/retirement" title="Decommission/source-retirement checklist, gated before the existing archive flow (D22)">
-                <i class="bi bi-door-closed"></i> Retirement
-            </a>
-            <button class="btn btn-outline-secondary" @onclick="TestConnection" disabled="@(_testingConnection || !CanCheckConnectivity(instance))" title="@(CanCheckConnectivity(instance) ? "" : "No host/IP or override configured")">
-                <i class="bi bi-ethernet"></i> @(_testingConnection ? "Testing…" : "Test connection")
+        <div class="d-flex gap-2 flex-wrap">
+            <nav class="d-flex gap-2 flex-wrap" aria-label="Instance sections">
+                <a class="btn btn-outline-secondary" href="/instances/@Id/lifecycle" title="Installed version, support runway, patch baseline and advisories">
+                    <i class="bi bi-signpost-split" aria-hidden="true"></i> Lifecycle
+                </a>
+                <a class="btn btn-outline-secondary" href="/instances/@Id/migration" title="Dependencies, migration path assessment and upgrade-readiness checklist">
+                    <i class="bi bi-diagram-2" aria-hidden="true"></i> Migration
+                </a>
+                <a class="btn btn-outline-secondary" href="/instances/@Id/recovery" title="Recovery objectives, backup-chain coverage and backup copies">
+                    <i class="bi bi-shield-check" aria-hidden="true"></i> Recovery
+                </a>
+                <a class="btn btn-outline-secondary" href="/instances/@Id/assurance" title="Integrity, HA, maintenance-job and capacity evidence">
+                    <i class="bi bi-clipboard2-pulse" aria-hidden="true"></i> Assurance
+                </a>
+                <a class="btn btn-outline-secondary" href="/instances/@Id/certificates" title="Certificate and recovery-key reminders">
+                    <i class="bi bi-key" aria-hidden="true"></i> Certificates
+                </a>
+                <a class="btn btn-outline-secondary" href="/instances/@Id/entitlement" title="Support contracts and edition cost estimates">
+                    <i class="bi bi-file-earmark-text" aria-hidden="true"></i> Entitlement
+                </a>
+                <a class="btn btn-outline-secondary" href="/instances/@Id/retirement" title="Decommission checklist that gates archiving">
+                    <i class="bi bi-door-closed" aria-hidden="true"></i> Retirement
+                </a>
+            </nav>
+            <button type="button" class="btn btn-outline-secondary" @onclick="TestConnection" disabled="@(_testingConnection || !CanCheckConnectivity(instance))" title="@(CanCheckConnectivity(instance) ? "" : "No host/IP or override configured")">
+                <i class="bi bi-ethernet" aria-hidden="true"></i> @(_testingConnection ? "Testing…" : "Test connection")
             </button>
             <AuthorizeView Roles="@Roles.CanEditPolicy">
-                <div class="d-flex gap-2">
+                <div class="d-flex gap-2 flex-wrap">
                     @if (!string.IsNullOrWhiteSpace(instance.BackupFileLocation))
                     {
-                        <button class="btn btn-outline-secondary" @onclick="ScanNow" disabled="@_scanning">
-                            <i class="bi bi-arrow-repeat"></i> @(_scanning ? "Scanning…" : "Scan now")
+                        <button type="button" class="btn btn-outline-secondary" @onclick="ScanNow" disabled="@_scanning">
+                            <i class="bi bi-arrow-repeat" aria-hidden="true"></i> @(_scanning ? "Scanning…" : "Scan now")
                         </button>
                     }
-                    <a class="btn btn-outline-secondary" href="/instances/@Id/edit"><i class="bi bi-pencil"></i> Edit</a>
+                    <a class="btn btn-outline-secondary" href="/instances/@Id/edit"><i class="bi bi-pencil" aria-hidden="true"></i> Edit</a>
                     @if (!instance.IsArchived && !_showArchiveConfirm)
                     {
-                        <button class="btn btn-outline-danger" @onclick="OpenArchiveConfirm"><i class="bi bi-archive"></i> Archive</button>
+                        <button type="button" class="btn btn-outline-danger" @onclick="OpenArchiveConfirm"><i class="bi bi-archive" aria-hidden="true"></i> Archive</button>
                     }
                 </div>
             </AuthorizeView>
@@ -102,21 +114,21 @@ else
 
     @if (_connectivityResult is not null)
     {
-        <div class="small mb-4" style="margin-top:-20px;">
+        <div class="small mb-4" style="margin-top:-20px;" role="status">
             <div style="color:@(_connectivityResult.Success ? "var(--dbt-ontrack)" : "var(--dbt-failed)")">
                 @(_connectivityResult.Success
-                    ? $"Reachable — connected to {_connectivityEndpointDescription} in {_connectivityResult.Elapsed.TotalMilliseconds:N0} ms."
-                    : $"Not reachable — {_connectivityEndpointDescription} — {_connectivityResult.Error}")
+                    ? $"Reachable: connected to {_connectivityEndpointDescription} in {_connectivityResult.Elapsed.TotalMilliseconds:N0} ms."
+                    : $"Not reachable: {_connectivityEndpointDescription} ({_connectivityResult.Error})")
             </div>
             <div class="text-muted">
                 Checked @_connectivityResult.CheckedAtUtc.ToLocalTime().ToString("MMM d, h:mm:ss tt") · timeout @_connectivityResult.Timeout.TotalSeconds s ·
-                a TCP connection succeeding is not proof of database login, backup success, or recoverability.
+                a successful TCP connection is not proof of database login, backup success or recoverability.
             </div>
         </div>
     }
     else if (_connectivityDisabledReason is not null)
     {
-        <p class="small text-muted mb-4" style="margin-top:-20px;">Connectivity check unavailable — @_connectivityDisabledReason</p>
+        <p class="small text-muted mb-4" style="margin-top:-20px;">Connectivity check unavailable: @_connectivityDisabledReason</p>
     }
 
     @if (_showArchiveConfirm && _archivePreview is not null)
@@ -130,12 +142,12 @@ else
                 }
             </ul>
             <div class="mb-2">
-                <label class="form-label small">Reason (required)</label>
-                <input class="form-control form-control-sm" @bind="_archiveReason" @bind:event="oninput" placeholder="Decommissioned, replaced by…, duplicate entry, …" />
+                <label class="form-label small" for="archive-reason">Reason (required)</label>
+                <input id="archive-reason" class="form-control form-control-sm" @bind="_archiveReason" @bind:event="oninput" placeholder="Decommissioned, replaced by…, duplicate entry, …" />
             </div>
             <div class="d-flex gap-2">
-                <button class="btn btn-danger btn-sm" @onclick="ConfirmArchive" disabled="@string.IsNullOrWhiteSpace(_archiveReason)">Archive this instance</button>
-                <button class="btn btn-outline-secondary btn-sm" @onclick="() => _showArchiveConfirm = false">Cancel</button>
+                <button type="button" class="btn btn-danger btn-sm" @onclick="ConfirmArchive" disabled="@string.IsNullOrWhiteSpace(_archiveReason)">Archive this instance</button>
+                <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="() => _showArchiveConfirm = false">Cancel</button>
             </div>
         </div>
     }
@@ -151,7 +163,7 @@ else
                     <dt class="col-sm-3">Latest attempt</dt>
                     <dd class="col-sm-9">
                         @(_explanation.LastAttemptUtc is { } la
-                            ? $"{la.ToLocalTime():MMM d, yyyy h:mm tt} — {_explanation.LastAttemptStatus}"
+                            ? $"{la.ToLocalTime():MMM d, yyyy h:mm tt}: {_explanation.LastAttemptStatus}"
                             : "No backup evidence recorded yet")
                     </dd>
 
@@ -171,7 +183,7 @@ else
                     <dd class="col-sm-9">
                         @if (_explanation.IsSuppressedByMaintenance)
                         {
-                            <span><i class="bi bi-cone-striped"></i> Suppressed by active maintenance window — the health badge above stays truthful regardless.</span>
+                            <span><i class="bi bi-cone-striped" aria-hidden="true"></i> Suppressed by an active maintenance window. The health badge above still shows the real status.</span>
                         }
                         else
                         {
@@ -200,7 +212,7 @@ else
             <div class="dbt-card h-100">
                 <div class="d-flex justify-content-between align-items-start mb-3">
                     <h2 class="h6 text-muted text-uppercase mb-0">Ownership &amp; contact</h2>
-                    <span class="badge-health dot @OwnershipClass(_ownershipStatus)" title="Personalization only — never a grant or restriction of access beyond the viewer's role">@_ownershipStatus</span>
+                    <span class="badge-health dot @OwnershipClass(_ownershipStatus)" title="For personal views only. It never grants or restricts access beyond the viewer's role.">@_ownershipStatus</span>
                 </div>
                 <dl class="row mb-0 small">
                     <dt class="col-5">Application</dt><dd class="col-7">@instance.Application</dd>
@@ -229,7 +241,7 @@ else
                     }
                     @if (!string.IsNullOrWhiteSpace(instance.RunbookUrl))
                     {
-                        <dt class="col-5">Runbook</dt><dd class="col-7"><a href="@instance.RunbookUrl" target="_blank" rel="noopener">@instance.RunbookUrl</a></dd>
+                        <dt class="col-5">Runbook</dt><dd class="col-7"><a href="@instance.RunbookUrl" target="_blank" rel="noopener">@instance.RunbookUrl<span class="visually-hidden"> (opens in a new tab)</span></a></dd>
                     }
                     @if (instance.AppliedPolicyId is not null)
                     {
@@ -245,16 +257,16 @@ else
                     @if (!_showCorrectionForm)
                     {
                         <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="() => _showCorrectionForm = true">
-                            <i class="bi bi-flag"></i> Request contact correction
+                            <i class="bi bi-flag" aria-hidden="true"></i> Request contact correction
                         </button>
                     }
                     else
                     {
                         <h3 class="h6 text-muted text-uppercase mb-2">Request a contact correction</h3>
-                        <p class="small text-muted mb-2">Anyone can flag wrong contact info — an authorized reviewer applies only the fields you fill in below; this never edits the instance directly.</p>
+                        <p class="small text-muted mb-2">Anyone can flag wrong contact details. A reviewer with edit rights applies only the fields you fill in; your request never edits the instance directly.</p>
                         <div class="row g-2 mb-2">
-                            <div class="col-6"><input class="form-control form-control-sm" placeholder="Proposed contact name" @bind="_proposedContactName" @bind:event="oninput" /></div>
-                            <div class="col-6"><input class="form-control form-control-sm" placeholder="Proposed contact email" @bind="_proposedContactEmail" @bind:event="oninput" /></div>
+                            <div class="col-6"><label class="visually-hidden" for="proposed-contact-name">Proposed contact name</label><input id="proposed-contact-name" class="form-control form-control-sm" placeholder="Proposed contact name" @bind="_proposedContactName" @bind:event="oninput" /></div>
+                            <div class="col-6"><label class="visually-hidden" for="proposed-contact-email">Proposed contact email</label><input id="proposed-contact-email" class="form-control form-control-sm" placeholder="Proposed contact email" @bind="_proposedContactEmail" @bind:event="oninput" /></div>
                         </div>
                         <div class="mb-2">
                             <label class="form-label small" for="correction-note">Why is this wrong? (required)</label>
@@ -280,8 +292,8 @@ else
                                     @if (!string.IsNullOrWhiteSpace(req.ProposedContactName)) { <div>Proposed name: @req.ProposedContactName</div> }
                                     @if (!string.IsNullOrWhiteSpace(req.ProposedContactEmail)) { <div>Proposed email: @req.ProposedContactEmail</div> }
                                     <div class="d-flex gap-2 mt-1">
-                                        <button class="btn btn-outline-secondary btn-sm" @onclick="() => ApproveCorrection(req.Id)">Approve</button>
-                                        <button class="btn btn-link btn-sm text-danger" @onclick="() => RejectCorrection(req.Id)">Reject</button>
+                                        <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="() => ApproveCorrection(req.Id)">Approve</button>
+                                        <button type="button" class="btn btn-link btn-sm text-danger" @onclick="() => RejectCorrection(req.Id)">Reject</button>
                                     </div>
                                 </div>
                             }
@@ -346,29 +358,29 @@ else
                 <h2 class="h6 text-muted text-uppercase mb-3">Maintenance window</h2>
                 @if (instance.MaintenanceUntilUtc is { } activeUntil && activeUntil > DateTime.UtcNow)
                 {
-                    <p class="mb-2"><span class="badge-health dot Overdue">Under maintenance</span> until @activeUntil.ToLocalTime().ToString("MMM d, yyyy h:mm tt") — Overdue/Failed email and webhook alerts are suppressed.</p>
+                    <p class="mb-2"><span class="badge-health dot Overdue">Under maintenance</span> until @activeUntil.ToLocalTime().ToString("MMM d, yyyy h:mm tt"). Overdue/Failed email and webhook alerts are suppressed.</p>
                     @if (!string.IsNullOrWhiteSpace(instance.MaintenanceReason))
                     {
                         <p class="text-muted small mb-2">@instance.MaintenanceReason</p>
                     }
                     <AuthorizeView Roles="@Roles.CanEditPolicy">
-                        <button class="btn btn-outline-secondary btn-sm" @onclick="EndMaintenance">End maintenance now</button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="EndMaintenance">End maintenance now</button>
                     </AuthorizeView>
                 }
                 else
                 {
                     <AuthorizeView Roles="@Roles.CanEditPolicy">
                         <Authorized>
-                            <div class="d-flex gap-2 align-items-end flex-wrap mb-2">
+                            <div class="d-flex gap-2 align-items-end flex-wrap mb-2" role="group" aria-label="Start a maintenance window">
                                 <div class="field" style="min-width:240px">
-                                    <label class="form-label small">Reason</label>
-                                    <input class="form-control form-control-sm" @bind="_maintenanceReason" placeholder="Planned patching, migration, …" />
+                                    <label class="form-label small" for="maintenance-reason">Reason</label>
+                                    <input id="maintenance-reason" class="form-control form-control-sm" @bind="_maintenanceReason" placeholder="Planned patching, migration, …" />
                                 </div>
-                                <button class="btn btn-outline-secondary btn-sm" @onclick="() => StartMaintenance(1)">1 h</button>
-                                <button class="btn btn-outline-secondary btn-sm" @onclick="() => StartMaintenance(4)">4 h</button>
-                                <button class="btn btn-outline-secondary btn-sm" @onclick="() => StartMaintenance(24)">24 h</button>
+                                <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="() => StartMaintenance(1)">1 h</button>
+                                <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="() => StartMaintenance(4)">4 h</button>
+                                <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="() => StartMaintenance(24)">24 h</button>
                             </div>
-                            <div class="form-text">Suppresses Overdue/Failed alerts for the chosen window — the health badge above stays truthful.</div>
+                            <div class="form-text">Suppresses Overdue/Failed alerts for the chosen window. The health badge above still shows the real status.</div>
                         </Authorized>
                         <NotAuthorized>
                             <p class="text-muted small mb-0">No maintenance window active.</p>
@@ -394,7 +406,7 @@ else
                     </p>
                     @if (_openIncident.AcknowledgedAtUtc is { } ackAt)
                     {
-                        <p class="mb-2"><span class="badge-health dot OnTrack">Acknowledged</span> by @_openIncident.AcknowledgedBy on @ackAt.ToLocalTime().ToString("MMM d, h:mm tt") — escalation stopped. <span class="text-muted">Acknowledgement is a response record only; it never changes the health badge above.</span></p>
+                        <p class="mb-2"><span class="badge-health dot OnTrack">Acknowledged</span> by @_openIncident.AcknowledgedBy on @ackAt.ToLocalTime().ToString("MMM d, h:mm tt"). Escalation stopped. <span class="text-muted">Acknowledgement is a response record only; it never changes the health badge above.</span></p>
                         @if (!string.IsNullOrWhiteSpace(_openIncident.Note))
                         {
                             <p class="small mb-1"><strong>Note:</strong> @_openIncident.Note</p>
@@ -406,7 +418,7 @@ else
                     }
                     else
                     {
-                        <p class="mb-2"><span class="badge-health dot Overdue">Unacknowledged</span> — will keep escalating until someone acknowledges it.</p>
+                        <p class="mb-2"><span class="badge-health dot Overdue">Unacknowledged</span>. It keeps escalating until someone acknowledges it.</p>
                     }
                     @if (!string.IsNullOrWhiteSpace(_openIncident.AssigneeName))
                     {
@@ -415,15 +427,15 @@ else
                     <AuthorizeView Roles="@Roles.CanEditPolicy">
                         <Authorized>
                             <div class="d-flex gap-2 align-items-end flex-wrap mb-2">
-                                <div class="field" style="min-width:160px"><label class="form-label small">Assignee</label><input class="form-control form-control-sm" @bind="_assigneeName" /></div>
-                                <button class="btn btn-outline-secondary btn-sm" @onclick="AssignIncident">Assign</button>
+                                <div class="field" style="min-width:160px"><label class="form-label small" for="incident-assignee">Assignee</label><input id="incident-assignee" class="form-control form-control-sm" @bind="_assigneeName" /></div>
+                                <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="AssignIncident">Assign</button>
                             </div>
                             @if (_openIncident.AcknowledgedAtUtc is null)
                             {
                                 <div class="d-flex gap-2 align-items-end flex-wrap">
-                                    <div class="field" style="min-width:200px"><label class="form-label small">Note / runbook</label><input class="form-control form-control-sm" @bind="_ackNote" /></div>
-                                    <div class="field" style="min-width:140px"><label class="form-label small">Ticket ref</label><input class="form-control form-control-sm" @bind="_ackTicket" /></div>
-                                    <button class="btn btn-outline-secondary btn-sm" @onclick="AcknowledgeIncident">Acknowledge</button>
+                                    <div class="field" style="min-width:200px"><label class="form-label small" for="incident-note">Note / runbook</label><input id="incident-note" class="form-control form-control-sm" @bind="_ackNote" /></div>
+                                    <div class="field" style="min-width:140px"><label class="form-label small" for="incident-ticket">Ticket ref</label><input id="incident-ticket" class="form-control form-control-sm" @bind="_ackTicket" /></div>
+                                    <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="AcknowledgeIncident">Acknowledge</button>
                                 </div>
                             }
                         </Authorized>
@@ -441,13 +453,13 @@ else
                         <h2 class="h6 text-muted text-uppercase mb-3">Log a backup result</h2>
                         <EditForm Model="_newRecord" OnValidSubmit="LogBackup">
                             <div class="mb-2">
-                                <label class="form-label small">Occurred at (local time)</label>
-                                <input type="datetime-local" class="form-control form-control-sm" @bind="_newRecordOccurredLocal" />
-                                <div class="form-text">Defaults to now — backdate after logging an incident late. Future times are rejected.</div>
+                                <label class="form-label small" for="backup-occurred">Occurred at (local time)</label>
+                                <input id="backup-occurred" type="datetime-local" class="form-control form-control-sm" @bind="_newRecordOccurredLocal" aria-describedby="backup-occurred-help" />
+                                <div class="form-text" id="backup-occurred-help">Defaults to now. Set an earlier time when logging a backup after the fact; future times are rejected.</div>
                             </div>
                             <div class="mb-2">
-                                <label class="form-label small">Type</label>
-                                <InputSelect class="form-select form-select-sm" @bind-Value="_newRecord.Type">
+                                <label class="form-label small" for="backup-type">Type</label>
+                                <InputSelect id="backup-type" class="form-select form-select-sm" @bind-Value="_newRecord.Type">
                                     @foreach (var t in Enum.GetValues<BackupType>())
                                     {
                                         <option value="@t">@t</option>
@@ -455,8 +467,8 @@ else
                                 </InputSelect>
                             </div>
                             <div class="mb-2">
-                                <label class="form-label small">Status</label>
-                                <InputSelect class="form-select form-select-sm" @bind-Value="_newRecord.Status">
+                                <label class="form-label small" for="backup-status">Status</label>
+                                <InputSelect id="backup-status" class="form-select form-select-sm" @bind-Value="_newRecord.Status">
                                     @foreach (var s in Enum.GetValues<BackupStatus>())
                                     {
                                         <option value="@s">@s</option>
@@ -465,42 +477,43 @@ else
                             </div>
                             <div class="row g-2 mb-2">
                                 <div class="col-6">
-                                    <label class="form-label small">Size (MB)</label>
-                                    <InputNumber class="form-control form-control-sm" @bind-Value="_newRecord.SizeMb" />
+                                    <label class="form-label small" for="backup-size">Size (MB)</label>
+                                    <InputNumber id="backup-size" class="form-control form-control-sm" @bind-Value="_newRecord.SizeMb" />
                                 </div>
                                 <div class="col-6">
-                                    <label class="form-label small">Duration (min)</label>
-                                    <InputNumber class="form-control form-control-sm" @bind-Value="_newRecord.DurationMinutes" />
+                                    <label class="form-label small" for="backup-duration">Duration (min)</label>
+                                    <InputNumber id="backup-duration" class="form-control form-control-sm" @bind-Value="_newRecord.DurationMinutes" />
                                 </div>
                             </div>
                             <div class="mb-3">
-                                <label class="form-label small">Notes</label>
-                                <InputTextArea class="form-control form-control-sm" rows="2" @bind-Value="_newRecord.Notes" />
+                                <label class="form-label small" for="backup-notes">Notes</label>
+                                <InputTextArea id="backup-notes" class="form-control form-control-sm" rows="2" @bind-Value="_newRecord.Notes" />
                             </div>
                             @if (!string.IsNullOrEmpty(_backupFormError))
                             {
-                                <div class="text-danger small mb-2">@_backupFormError</div>
+                                <div class="text-danger small mb-2" role="alert">@_backupFormError</div>
                             }
                             <button type="submit" class="btn btn-primary btn-sm">Log backup</button>
                         </EditForm>
 
                         <div class="mt-4" style="border-top:1px solid var(--dbt-line);padding-top:16px;">
                             <h2 class="h6 text-muted text-uppercase mb-2">Correct a backup entry</h2>
-                            <p class="text-muted small mb-2">The original entry is preserved — a correction is recorded alongside it, not overwritten.</p>
+                            <p class="text-muted small mb-2">The original entry is kept. The correction is recorded alongside it, never written over it.</p>
                             <div class="mb-2">
-                                <select class="form-select form-select-sm" @bind="_correctingBackupId" @bind:after="OnBackupCorrectionTargetChanged">
+                                <label class="visually-hidden" for="backup-correct-target">Backup entry to correct</label>
+                                <select id="backup-correct-target" class="form-select form-select-sm" @bind="_correctingBackupId" @bind:after="OnBackupCorrectionTargetChanged">
                                     <option value="0">Select an entry…</option>
                                     @foreach (var r in instance.BackupRecords.OrderByDescending(r => r.TimestampUtc))
                                     {
-                                        <option value="@r.Id">@r.TimestampUtc.ToLocalTime().ToString("MMM d, h:mm tt") — @r.Status</option>
+                                        <option value="@r.Id">@r.TimestampUtc.ToLocalTime().ToString("MMM d, h:mm tt"): @r.Status</option>
                                     }
                                 </select>
                             </div>
                             @if (_correctingBackupId != 0)
                             {
                                 <div class="mb-2">
-                                    <label class="form-label small">New status</label>
-                                    <InputSelect class="form-select form-select-sm" @bind-Value="_correctedBackupStatus">
+                                    <label class="form-label small" for="backup-correct-status">New status</label>
+                                    <InputSelect id="backup-correct-status" class="form-select form-select-sm" @bind-Value="_correctedBackupStatus">
                                         @foreach (var s in Enum.GetValues<BackupStatus>())
                                         {
                                             <option value="@s">@s</option>
@@ -508,12 +521,12 @@ else
                                     </InputSelect>
                                 </div>
                                 <div class="mb-2">
-                                    <label class="form-label small">New notes</label>
-                                    <InputTextArea class="form-control form-control-sm" rows="2" @bind-Value="_correctedBackupNotes" />
+                                    <label class="form-label small" for="backup-correct-notes">New notes</label>
+                                    <InputTextArea id="backup-correct-notes" class="form-control form-control-sm" rows="2" @bind-Value="_correctedBackupNotes" />
                                 </div>
                                 <div class="mb-2">
-                                    <label class="form-label small">Reason (required)</label>
-                                    <input class="form-control form-control-sm" @bind="_correctionReason" @bind:event="oninput" />
+                                    <label class="form-label small" for="backup-correct-reason">Reason (required)</label>
+                                    <input id="backup-correct-reason" class="form-control form-control-sm" @bind="_correctionReason" @bind:event="oninput" />
                                 </div>
                                 <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="SubmitBackupCorrection" disabled="@string.IsNullOrWhiteSpace(_correctionReason)">Save correction</button>
                             }
@@ -528,7 +541,8 @@ else
                     <h2 class="h6 text-muted text-uppercase mb-0">Backup history</h2>
                     @if (instance.BackupRecords.Count > 0)
                     {
-                        <select class="form-select form-select-sm" style="max-width:150px;" @bind="_backupStatusFilter" @bind:after="() => _backupPage = 1">
+                        <label class="visually-hidden" for="backup-history-filter">Filter backup history by status</label>
+                        <select id="backup-history-filter" class="form-select form-select-sm" style="max-width:150px;" @bind="_backupStatusFilter" @bind:after="() => _backupPage = 1">
                             <option value="">All statuses</option>
                             @foreach (var s in Enum.GetValues<BackupStatus>())
                             {
@@ -540,15 +554,19 @@ else
                 @if (!instance.BackupRecords.Any())
                 {
                     <div class="empty-state py-3">
-                        <i class="bi bi-clock-history"></i>
+                        <i class="bi bi-clock-history" aria-hidden="true"></i>
                         No backup history recorded yet.
+                        <AuthorizeView Roles="@Roles.CanEditPolicy">
+                            <span>Log a backup result@(string.IsNullOrWhiteSpace(instance.BackupFileLocation) ? "" : " or run Scan now") to start one.</span>
+                        </AuthorizeView>
                     </div>
                 }
                 else
                 {
+                    <div class="table-responsive" role="region" aria-label="Backup history" tabindex="0">
                     <table class="table table-sm mb-0 dbt-table">
                         <thead>
-                            <tr><th>When</th><th>Entered</th><th>By</th><th>Type</th><th>Status</th><th>Size</th><th>Duration</th><th>Evidence</th><th>File</th><th>Notes</th></tr>
+                            <tr><th scope="col">When</th><th scope="col">Entered</th><th scope="col">By</th><th scope="col">Type</th><th scope="col">Status</th><th scope="col">Size</th><th scope="col">Duration</th><th scope="col">Evidence</th><th scope="col">File</th><th scope="col">Notes</th></tr>
                         </thead>
                         <tbody>
                             @foreach (var r in BackupHistoryPage())
@@ -560,7 +578,7 @@ else
                                 <tr>
                                     <td class="small">@r.TimestampUtc.ToLocalTime().ToString("MMM d, h:mm tt")</td>
                                     <td class="small text-muted">@r.CreatedAtUtc.ToLocalTime().ToString("MMM d, h:mm tt")</td>
-                                    <td class="small text-muted">@(string.IsNullOrWhiteSpace(r.RecordedByUserName) ? "—" : r.RecordedByUserName)</td>
+                                    <td class="small text-muted">@(string.IsNullOrWhiteSpace(r.RecordedByUserName) ? "Not recorded" : r.RecordedByUserName)</td>
                                     <td class="small">@r.Type</td>
                                     <td>
                                         <span class="badge-health dot @StatusClass(effectiveStatus)">@effectiveStatus</span>
@@ -569,8 +587,8 @@ else
                                             <span class="text-muted small" title="This entry has one or more append-only corrections.">(corrected)</span>
                                         }
                                     </td>
-                                    <td class="small">@(r.SizeMb is null ? "—" : $"{r.SizeMb:N0} MB")</td>
-                                    <td class="small">@(r.DurationMinutes is null ? "—" : $"{r.DurationMinutes:N0} min")</td>
+                                    <td class="small">@(r.SizeMb is null ? "Not recorded" : $"{r.SizeMb:N0} MB")</td>
+                                    <td class="small">@(r.DurationMinutes is null ? "Not recorded" : $"{r.DurationMinutes:N0} min")</td>
                                     <td class="small">
                                         @if (evidence is { } level)
                                         {
@@ -578,15 +596,16 @@ else
                                         }
                                         else
                                         {
-                                            <span class="text-muted">—</span>
+                                            <span class="text-muted">None</span>
                                         }
                                     </td>
-                                    <td class="small text-muted">@(string.IsNullOrWhiteSpace(r.SourceFile) ? "—" : r.SourceFile)</td>
+                                    <td class="small text-muted">@(string.IsNullOrWhiteSpace(r.SourceFile) ? "None" : r.SourceFile)</td>
                                     <td class="small text-muted">@effectiveNotes</td>
                                 </tr>
                             }
                         </tbody>
                     </table>
+                    </div>
                     @if (!BackupHistoryFiltered().Any())
                     {
                         <div class="text-muted small py-2">No backup records match this filter.</div>
@@ -596,8 +615,8 @@ else
                         <div class="d-flex justify-content-between align-items-center pt-2">
                             <span class="small text-muted">Page @_backupPage of @BackupHistoryTotalPages()</span>
                             <div class="d-flex gap-1">
-                                <button class="btn btn-outline-secondary btn-sm" disabled="@(_backupPage <= 1)" @onclick="() => _backupPage--">Prev</button>
-                                <button class="btn btn-outline-secondary btn-sm" disabled="@(_backupPage >= BackupHistoryTotalPages())" @onclick="() => _backupPage++">Next</button>
+                                <button type="button" class="btn btn-outline-secondary btn-sm" aria-label="Previous page of backup history" disabled="@(_backupPage <= 1)" @onclick="() => _backupPage--">Prev</button>
+                                <button type="button" class="btn btn-outline-secondary btn-sm" aria-label="Next page of backup history" disabled="@(_backupPage >= BackupHistoryTotalPages())" @onclick="() => _backupPage++">Next</button>
                             </div>
                         </div>
                     }
@@ -614,18 +633,18 @@ else
                         <h2 class="h6 text-muted text-uppercase mb-3">Log a restore</h2>
                         <EditForm Model="_newRestore" OnValidSubmit="LogRestore">
                             <div class="mb-2">
-                                <label class="form-label small">Occurred at (local time)</label>
-                                <input type="datetime-local" class="form-control form-control-sm" @bind="_newRestoreOccurredLocal" />
-                                <div class="form-text">Defaults to now — backdate after an incident. Future times are rejected.</div>
+                                <label class="form-label small" for="restore-occurred">Occurred at (local time)</label>
+                                <input id="restore-occurred" type="datetime-local" class="form-control form-control-sm" @bind="_newRestoreOccurredLocal" aria-describedby="restore-occurred-help" />
+                                <div class="form-text" id="restore-occurred-help">Defaults to now. Set an earlier time when logging a restore after an incident; future times are rejected.</div>
                             </div>
                             <div class="mb-2">
-                                <label class="form-label small">Performed by</label>
-                                <InputText class="form-control form-control-sm" @bind-Value="_newRestore.PerformedBy" />
+                                <label class="form-label small" for="restore-performed-by">Performed by</label>
+                                <InputText id="restore-performed-by" class="form-control form-control-sm" @bind-Value="_newRestore.PerformedBy" />
                             </div>
                             <div class="row g-2 mb-2">
                                 <div class="col-6">
-                                    <label class="form-label small">Reason</label>
-                                    <InputSelect class="form-select form-select-sm" @bind-Value="_newRestore.Reason">
+                                    <label class="form-label small" for="restore-reason">Reason</label>
+                                    <InputSelect id="restore-reason" class="form-select form-select-sm" @bind-Value="_newRestore.Reason">
                                         @foreach (var r in Enum.GetValues<RestoreReason>())
                                         {
                                             <option value="@r">@r</option>
@@ -633,8 +652,8 @@ else
                                     </InputSelect>
                                 </div>
                                 <div class="col-6">
-                                    <label class="form-label small">Outcome</label>
-                                    <InputSelect class="form-select form-select-sm" @bind-Value="_newRestore.Outcome">
+                                    <label class="form-label small" for="restore-outcome">Outcome</label>
+                                    <InputSelect id="restore-outcome" class="form-select form-select-sm" @bind-Value="_newRestore.Outcome">
                                         @foreach (var o in Enum.GetValues<RestoreOutcome>())
                                         {
                                             <option value="@o">@o</option>
@@ -643,54 +662,55 @@ else
                                 </div>
                             </div>
                             <div class="mb-2">
-                                <label class="form-label small">Backup evidence this proves (optional)</label>
-                                <InputSelect class="form-select form-select-sm" @bind-Value="_newRestoreLinkedBackupId">
+                                <label class="form-label small" for="restore-linked-backup">Backup evidence this proves (optional)</label>
+                                <InputSelect id="restore-linked-backup" class="form-select form-select-sm" @bind-Value="_newRestoreLinkedBackupId" aria-describedby="restore-linked-help">
                                     <option value="0">Unknown / not linked</option>
                                     @foreach (var r in instance.BackupRecords.OrderByDescending(r => r.TimestampUtc))
                                     {
-                                        <option value="@r.Id">@r.TimestampUtc.ToLocalTime().ToString("MMM d, h:mm tt") — @r.Status</option>
+                                        <option value="@r.Id">@r.TimestampUtc.ToLocalTime().ToString("MMM d, h:mm tt"): @r.Status</option>
                                     }
                                 </InputSelect>
-                                <div class="form-text">Left as "unknown" rather than guessed — never implies every backup was tested.</div>
+                                <div class="form-text" id="restore-linked-help">Leave as Unknown if you're not sure. DBTracker never assumes every backup was tested.</div>
                             </div>
                             <div class="row g-2 mb-2">
                                 <div class="col-6">
-                                    <label class="form-label small">Duration (min)</label>
-                                    <InputNumber class="form-control form-control-sm" @bind-Value="_newRestore.DurationMinutes" />
+                                    <label class="form-label small" for="restore-duration">Duration (min)</label>
+                                    <InputNumber id="restore-duration" class="form-control form-control-sm" @bind-Value="_newRestore.DurationMinutes" />
                                 </div>
                                 <div class="col-6">
-                                    <label class="form-label small">Target recovery time (min)</label>
-                                    <InputNumber class="form-control form-control-sm" @bind-Value="_newRestore.TargetRecoveryTimeMinutes" />
+                                    <label class="form-label small" for="restore-target-rto">Target recovery time (min)</label>
+                                    <InputNumber id="restore-target-rto" class="form-control form-control-sm" @bind-Value="_newRestore.TargetRecoveryTimeMinutes" />
                                 </div>
                             </div>
                             <div class="mb-3">
-                                <label class="form-label small">Notes</label>
-                                <InputTextArea class="form-control form-control-sm" rows="2" @bind-Value="_newRestore.Notes" />
+                                <label class="form-label small" for="restore-notes">Notes</label>
+                                <InputTextArea id="restore-notes" class="form-control form-control-sm" rows="2" @bind-Value="_newRestore.Notes" />
                             </div>
                             @if (!string.IsNullOrEmpty(_restoreFormError))
                             {
-                                <div class="text-danger small mb-2">@_restoreFormError</div>
+                                <div class="text-danger small mb-2" role="alert">@_restoreFormError</div>
                             }
                             <button type="submit" class="btn btn-primary btn-sm">Log restore</button>
                         </EditForm>
 
                         <div class="mt-4" style="border-top:1px solid var(--dbt-line);padding-top:16px;">
                             <h2 class="h6 text-muted text-uppercase mb-2">Correct a restore entry</h2>
-                            <p class="text-muted small mb-2">The original entry is preserved — a correction is recorded alongside it, not overwritten.</p>
+                            <p class="text-muted small mb-2">The original entry is kept. The correction is recorded alongside it, never written over it.</p>
                             <div class="mb-2">
-                                <select class="form-select form-select-sm" @bind="_correctingRestoreId" @bind:after="OnRestoreCorrectionTargetChanged">
+                                <label class="visually-hidden" for="restore-correct-target">Restore entry to correct</label>
+                                <select id="restore-correct-target" class="form-select form-select-sm" @bind="_correctingRestoreId" @bind:after="OnRestoreCorrectionTargetChanged">
                                     <option value="0">Select an entry…</option>
                                     @foreach (var r in instance.RestoreEvents.OrderByDescending(r => r.TimestampUtc))
                                     {
-                                        <option value="@r.Id">@r.TimestampUtc.ToLocalTime().ToString("MMM d, h:mm tt") — @r.Outcome</option>
+                                        <option value="@r.Id">@r.TimestampUtc.ToLocalTime().ToString("MMM d, h:mm tt"): @r.Outcome</option>
                                     }
                                 </select>
                             </div>
                             @if (_correctingRestoreId != 0)
                             {
                                 <div class="mb-2">
-                                    <label class="form-label small">New outcome</label>
-                                    <InputSelect class="form-select form-select-sm" @bind-Value="_correctedRestoreOutcome">
+                                    <label class="form-label small" for="restore-correct-outcome">New outcome</label>
+                                    <InputSelect id="restore-correct-outcome" class="form-select form-select-sm" @bind-Value="_correctedRestoreOutcome">
                                         @foreach (var o in Enum.GetValues<RestoreOutcome>())
                                         {
                                             <option value="@o">@o</option>
@@ -698,12 +718,12 @@ else
                                     </InputSelect>
                                 </div>
                                 <div class="mb-2">
-                                    <label class="form-label small">New notes</label>
-                                    <InputTextArea class="form-control form-control-sm" rows="2" @bind-Value="_correctedRestoreNotes" />
+                                    <label class="form-label small" for="restore-correct-notes">New notes</label>
+                                    <InputTextArea id="restore-correct-notes" class="form-control form-control-sm" rows="2" @bind-Value="_correctedRestoreNotes" />
                                 </div>
                                 <div class="mb-2">
-                                    <label class="form-label small">Reason (required)</label>
-                                    <input class="form-control form-control-sm" @bind="_correctionReasonRestore" @bind:event="oninput" />
+                                    <label class="form-label small" for="restore-correct-reason">Reason (required)</label>
+                                    <input id="restore-correct-reason" class="form-control form-control-sm" @bind="_correctionReasonRestore" @bind:event="oninput" />
                                 </div>
                                 <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="SubmitRestoreCorrection" disabled="@string.IsNullOrWhiteSpace(_correctionReasonRestore)">Save correction</button>
                             }
@@ -718,7 +738,8 @@ else
                     <h2 class="h6 text-muted text-uppercase mb-0">Restore history</h2>
                     @if (instance.RestoreEvents.Count > 0)
                     {
-                        <select class="form-select form-select-sm" style="max-width:150px;" @bind="_restoreOutcomeFilter" @bind:after="() => _restorePage = 1">
+                        <label class="visually-hidden" for="restore-history-filter">Filter restore history by outcome</label>
+                        <select id="restore-history-filter" class="form-select form-select-sm" style="max-width:150px;" @bind="_restoreOutcomeFilter" @bind:after="() => _restorePage = 1">
                             <option value="">All outcomes</option>
                             @foreach (var o in Enum.GetValues<RestoreOutcome>())
                             {
@@ -730,15 +751,16 @@ else
                 @if (!instance.RestoreEvents.Any())
                 {
                     <div class="empty-state py-3">
-                        <i class="bi bi-arrow-counterclockwise"></i>
-                        No restore ever logged — this backup has never been proven recoverable.
+                        <i class="bi bi-arrow-counterclockwise" aria-hidden="true"></i>
+                        No restore ever logged, so these backups have never been proven recoverable.
                     </div>
                 }
                 else
                 {
+                    <div class="table-responsive" role="region" aria-label="Restore history" tabindex="0">
                     <table class="table table-sm mb-0 dbt-table">
                         <thead>
-                            <tr><th>When</th><th>By</th><th>Entered by</th><th>Reason</th><th>Outcome</th><th>Linked evidence</th><th>Notes</th></tr>
+                            <tr><th scope="col">When</th><th scope="col">By</th><th scope="col">Entered by</th><th scope="col">Reason</th><th scope="col">Outcome</th><th scope="col">Linked evidence</th><th scope="col">Notes</th></tr>
                         </thead>
                         <tbody>
                             @foreach (var r in RestoreHistoryPage())
@@ -750,7 +772,7 @@ else
                                 <tr>
                                     <td class="small">@r.TimestampUtc.ToLocalTime().ToString("MMM d, h:mm tt")</td>
                                     <td class="small">@r.PerformedBy</td>
-                                    <td class="small text-muted">@(string.IsNullOrWhiteSpace(r.RecordedByUserName) ? "—" : r.RecordedByUserName)</td>
+                                    <td class="small text-muted">@(string.IsNullOrWhiteSpace(r.RecordedByUserName) ? "Not recorded" : r.RecordedByUserName)</td>
                                     <td class="small">@r.Reason</td>
                                     <td>
                                         <span class="badge-health dot @(effectiveOutcome == RestoreOutcome.Success ? "OnTrack" : "Failed")">@effectiveOutcome</span>
@@ -765,6 +787,7 @@ else
                             }
                         </tbody>
                     </table>
+                    </div>
                     @if (!RestoreHistoryFiltered().Any())
                     {
                         <div class="text-muted small py-2">No restore events match this filter.</div>
@@ -774,8 +797,8 @@ else
                         <div class="d-flex justify-content-between align-items-center pt-2">
                             <span class="small text-muted">Page @_restorePage of @RestoreHistoryTotalPages()</span>
                             <div class="d-flex gap-1">
-                                <button class="btn btn-outline-secondary btn-sm" disabled="@(_restorePage <= 1)" @onclick="() => _restorePage--">Prev</button>
-                                <button class="btn btn-outline-secondary btn-sm" disabled="@(_restorePage >= RestoreHistoryTotalPages())" @onclick="() => _restorePage++">Next</button>
+                                <button type="button" class="btn btn-outline-secondary btn-sm" aria-label="Previous page of restore history" disabled="@(_restorePage <= 1)" @onclick="() => _restorePage--">Prev</button>
+                                <button type="button" class="btn btn-outline-secondary btn-sm" aria-label="Next page of restore history" disabled="@(_restorePage >= RestoreHistoryTotalPages())" @onclick="() => _restorePage++">Next</button>
                             </div>
                         </div>
                     }
@@ -791,21 +814,23 @@ else
                     <h2 class="h6 text-muted text-uppercase mb-0">Change history</h2>
                     @if (_changeLog.Count > 0)
                     {
-                        <input class="form-control form-control-sm" style="max-width:180px;" placeholder="Filter by field…" @bind="_changeLogFieldFilter" @bind:event="oninput" @bind:after="() => _changeLogPage = 1" />
+                        <label class="visually-hidden" for="change-log-filter">Filter change history by field</label>
+                        <input id="change-log-filter" type="search" class="form-control form-control-sm" style="max-width:180px;" placeholder="Filter by field…" @bind="_changeLogFieldFilter" @bind:event="oninput" @bind:after="() => _changeLogPage = 1" />
                     }
                 </div>
                 @if (_changeLog.Count == 0)
                 {
                     <div class="empty-state py-3">
-                        <i class="bi bi-journal-text"></i>
-                        No changes recorded yet.
+                        <i class="bi bi-journal-text" aria-hidden="true"></i>
+                        No changes recorded yet. Edits made through the instance form appear here.
                     </div>
                 }
                 else
                 {
+                    <div class="table-responsive" role="region" aria-label="Change history" tabindex="0">
                     <table class="table table-sm mb-0 dbt-table">
                         <thead>
-                            <tr><th>When</th><th>By</th><th>Field</th><th>From</th><th>To</th></tr>
+                            <tr><th scope="col">When</th><th scope="col">By</th><th scope="col">Field</th><th scope="col">From</th><th scope="col">To</th></tr>
                         </thead>
                         <tbody>
                             @foreach (var c in ChangeLogPage())
@@ -814,12 +839,13 @@ else
                                     <td class="small">@c.ChangedAtUtc.ToLocalTime().ToString("MMM d, h:mm tt")</td>
                                     <td class="small">@c.ChangedBy</td>
                                     <td class="small">@c.FieldName</td>
-                                    <td class="small text-muted">@(string.IsNullOrEmpty(c.OldValue) ? "—" : c.OldValue)</td>
-                                    <td class="small">@(string.IsNullOrEmpty(c.NewValue) ? "—" : c.NewValue)</td>
+                                    <td class="small text-muted">@(string.IsNullOrEmpty(c.OldValue) ? "(empty)" : c.OldValue)</td>
+                                    <td class="small">@(string.IsNullOrEmpty(c.NewValue) ? "(empty)" : c.NewValue)</td>
                                 </tr>
                             }
                         </tbody>
                     </table>
+                    </div>
                     @if (!ChangeLogFiltered().Any())
                     {
                         <div class="text-muted small py-2">No changes match this filter.</div>
@@ -829,8 +855,8 @@ else
                         <div class="d-flex justify-content-between align-items-center pt-2">
                             <span class="small text-muted">Page @_changeLogPage of @ChangeLogTotalPages()</span>
                             <div class="d-flex gap-1">
-                                <button class="btn btn-outline-secondary btn-sm" disabled="@(_changeLogPage <= 1)" @onclick="() => _changeLogPage--">Prev</button>
-                                <button class="btn btn-outline-secondary btn-sm" disabled="@(_changeLogPage >= ChangeLogTotalPages())" @onclick="() => _changeLogPage++">Next</button>
+                                <button type="button" class="btn btn-outline-secondary btn-sm" aria-label="Previous page of change history" disabled="@(_changeLogPage <= 1)" @onclick="() => _changeLogPage--">Prev</button>
+                                <button type="button" class="btn btn-outline-secondary btn-sm" aria-label="Next page of change history" disabled="@(_changeLogPage >= ChangeLogTotalPages())" @onclick="() => _changeLogPage++">Next</button>
                             </div>
                         </div>
                     }
@@ -883,7 +909,7 @@ else
     private IReadOnlyList<ArchiveImpactLine>? _archivePreview;
     private string _archiveReason = "";
 
-    // U21 — ownership status, contact-correction requests.
+    // Ownership status and contact-correction requests.
     private OwnershipStatus _ownershipStatus;
     private bool _showCorrectionForm;
     private string _proposedContactName = "";
@@ -891,10 +917,8 @@ else
     private string _correctionNote = "";
     private List<ContactCorrectionRequest> _pendingCorrections = new();
 
-    // History tables are paged/filtered client-side over the already-loaded per-instance
-    // collection (U06) — a single instance's own history is bounded in a way the cross-instance
-    // dashboard/list queries weren't, so the bigger "stop loading full histories" win there
-    // (InstanceListRow) was the priority; this still gives real paging + filtering in the UI.
+    // History tables page and filter client-side over the already-loaded per-instance collection:
+    // one instance's own history is bounded, unlike the cross-instance list queries.
     private const int HistoryPageSize = 10;
     private int _backupPage = 1, _restorePage = 1, _changeLogPage = 1;
     private string _backupStatusFilter = "";
@@ -906,8 +930,23 @@ else
         var state = await AuthProvider.GetAuthenticationStateAsync();
         _userDisplayName = state.User.Identity?.Name ?? "";
         _userId = state.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? "";
-        await Load();
-        _loaded = true;
+        await Retry();
+    }
+
+    private bool _loadFailed;
+
+    private async Task Retry()
+    {
+        _loadFailed = false;
+        try
+        {
+            await Load();
+            _loaded = true;
+        }
+        catch (Exception)
+        {
+            _loadFailed = true;
+        }
     }
 
     private async Task Load()
@@ -1010,7 +1049,7 @@ else
     {
         if (_openIncident is null) return;
         await Incidents.AcknowledgeAsync(_openIncident.Id, _userDisplayName ?? "", _ackNote, _ackTicket);
-        Toasts.Success("Incident acknowledged — escalation stopped.");
+        Toasts.Success("Incident acknowledged. Escalation stopped.");
         await Load();
     }
 
@@ -1125,7 +1164,7 @@ else
         Db.ChangeTracker.Clear();
         await Audit.RecordUserActionAsync(_userId ?? "", _userDisplayName ?? "unknown", "BackupRecordCorrected", "BackupRecord", _correctingBackupId.ToString(), _overview!.Instance.Name,
             reason: _correctionReason, beforeJson: $"{{\"Status\":\"{currentStatus}\"}}", afterJson: $"{{\"Status\":\"{_correctedBackupStatus}\"}}");
-        Toasts.Success("Correction recorded — the original entry is preserved.");
+        Toasts.Success("Correction recorded. The original entry is kept.");
         await Load();
     }
 
@@ -1154,7 +1193,7 @@ else
         Db.ChangeTracker.Clear();
         await Audit.RecordUserActionAsync(_userId ?? "", _userDisplayName ?? "unknown", "RestoreEventCorrected", "RestoreEvent", _correctingRestoreId.ToString(), _overview!.Instance.Name,
             reason: _correctionReasonRestore, beforeJson: $"{{\"Outcome\":\"{currentOutcome}\"}}", afterJson: $"{{\"Outcome\":\"{_correctedRestoreOutcome}\"}}");
-        Toasts.Success("Correction recorded — the original entry is preserved.");
+        Toasts.Success("Correction recorded. The original entry is kept.");
         await Load();
     }
 
@@ -1168,9 +1207,9 @@ else
         {
             Toasts.Success(result.FilesDiscovered switch
             {
-                0 => "Scan complete — no new files found.",
-                1 => "Scan complete — 1 new backup file found.",
-                _ => $"Scan complete — {result.FilesDiscovered} new backup files found."
+                0 => "Scan complete: no new files found.",
+                1 => "Scan complete: 1 new backup file found.",
+                _ => $"Scan complete: {result.FilesDiscovered} new backup files found."
             });
         }
         else if (result.Outcome == ScanOutcome.Error)
@@ -1215,8 +1254,8 @@ else
             entity.UpdatedAtUtc = DateTime.UtcNow;
             await Db.SaveChangesAsync();
             await Audit.RecordUserActionAsync(_userId ?? "", _userDisplayName ?? "unknown", "MaintenanceWindowStarted", "DatabaseInstance", Id.ToString(), entity.Name,
-                reason: $"{hours}h — {_maintenanceReason}");
-            Toasts.Success($"Maintenance window started for {hours}h — Overdue/Failed alerts suppressed.");
+                reason: $"{hours}h: {_maintenanceReason}");
+            Toasts.Success($"Maintenance window started for {hours}h. Overdue/Failed alerts are suppressed.");
         }
         Db.ChangeTracker.Clear();
         _maintenanceReason = "";
@@ -1272,7 +1311,7 @@ else
         }
         else
         {
-            Toasts.Error($"Could not reach {_connectivityEndpointDescription} — {_connectivityResult.Error}");
+            Toasts.Error($"Could not reach {_connectivityEndpointDescription}: {_connectivityResult.Error}");
         }
     }
 
@@ -1296,8 +1335,8 @@ else
 
     private static string EvidenceTooltip(EvidenceLevel level) => level switch
     {
-        EvidenceLevel.Discovered => "A file was found on the shared drive — presence only, not confirmed by anyone.",
-        EvidenceLevel.ReportedSuccess => "Manually logged as successful — a report, not file proof.",
+        EvidenceLevel.Discovered => "A file was found on the shared drive. That shows it exists, not that anyone confirmed it.",
+        EvidenceLevel.ReportedSuccess => "Logged by hand as successful. A report, not file proof.",
         EvidenceLevel.RestoreTested => "A restore has since succeeded from this instance, proving the chain recoverable.",
         _ => ""
     };
@@ -1352,11 +1391,11 @@ else
 
         if (ok)
         {
-            Toasts.Success("Correction request submitted — an authorized reviewer will look at it.");
+            Toasts.Success("Correction request submitted. A reviewer with edit rights will look at it.");
         }
         else
         {
-            Toasts.Error("Couldn't submit — add a reason and at least one proposed field.");
+            Toasts.Error("Couldn't submit. Add a reason and at least one proposed field.");
         }
 
         await Load();
