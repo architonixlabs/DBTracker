@@ -50,7 +50,7 @@ public class AccountLifecycleService(
             var remainingAdmins = await CountActiveAdminsAsync(excludingUserId: userId);
             if (remainingAdmins == 0)
             {
-                return new RoleChangeResult(false, "Can't change this user's role — they're the last active Admin.");
+                return new RoleChangeResult(false, "Can't change this user's role: they're the last active Admin.");
             }
         }
 
@@ -85,7 +85,7 @@ public class AccountLifecycleService(
                 var remainingAdmins = await CountActiveAdminsAsync(excludingUserId: userId);
                 if (remainingAdmins == 0)
                 {
-                    return new DeactivateResult(false, "Can't deactivate this user — they're the last active Admin.");
+                    return new DeactivateResult(false, "Can't deactivate this user: they're the last active Admin.");
                 }
             }
         }

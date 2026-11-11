@@ -13,7 +13,7 @@ public class SmtpEmailSender(IOptions<SmtpOptions> options, ILogger<SmtpEmailSen
         var o = options.Value;
         if (string.IsNullOrWhiteSpace(o.Host) || string.IsNullOrWhiteSpace(o.FromAddress))
         {
-            logger.LogWarning("SMTP email provider selected but not fully configured — skipping send to {To}.", toAddress);
+            logger.LogWarning("SMTP email provider selected but not fully configured, skipping send to {To}.", toAddress);
             return EmailSendResult.Disabled;
         }
 

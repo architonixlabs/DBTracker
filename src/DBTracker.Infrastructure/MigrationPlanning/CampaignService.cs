@@ -125,7 +125,7 @@ public class CampaignService(IDbContextFactory<DBTrackerDbContext> factory, Audi
 
         var campaign = await db.MigrationCampaigns.FirstAsync(c => c.Id == campaignId);
         await audit.RecordUserActionAsync("", actorName, "MigrationCampaignAlternativeChosen", "MigrationCampaign", campaignId.ToString(), campaign.Name,
-            reason: $"Chosen: {chosen.Type} — {chosen.Description}");
+            reason: $"Chosen: {chosen.Type}. {chosen.Description}");
         return true;
     }
 
@@ -150,7 +150,7 @@ public class CampaignService(IDbContextFactory<DBTrackerDbContext> factory, Audi
             var gate = await completionGate.EvaluateAsync(campaignId);
             if (!gate.CanComplete)
             {
-                return (false, "Cannot complete — " + string.Join("; ", gate.BlockingReasons));
+                return (false, "Cannot complete: " + string.Join("; ", gate.BlockingReasons));
             }
         }
 

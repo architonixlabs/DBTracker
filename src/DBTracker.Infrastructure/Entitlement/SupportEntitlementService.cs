@@ -89,7 +89,7 @@ public class SupportEntitlementService(IDbContextFactory<DBTrackerDbContext> fac
 
         var instance = await db.DatabaseInstances.FirstAsync(i => i.Id == estimate.DatabaseInstanceId);
         await audit.RecordUserActionAsync("", actorName, "EditionCostEstimateRecorded", "DatabaseInstance", estimate.DatabaseInstanceId.ToString(), instance.Name,
-            reason: $"{estimate.EstimateType}: {estimate.EstimatedAmount:N2} {estimate.Currency} — {estimate.TargetEditionOrPath}");
+            reason: $"{estimate.EstimateType}: {estimate.EstimatedAmount:N2} {estimate.Currency} ({estimate.TargetEditionOrPath})");
         return estimate;
     }
 }

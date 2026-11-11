@@ -8,7 +8,7 @@ public class NullWebhookSender(ILogger<NullWebhookSender> logger) : IWebhookSend
 {
     public Task SendAsync(WebhookAlertPayload payload, CancellationToken ct = default)
     {
-        logger.LogInformation("Webhook URL not configured — would have sent: {Text}", payload.Text);
+        logger.LogInformation("Webhook URL not configured. Would have sent: {Text}", payload.Text);
         return Task.CompletedTask;
     }
 }

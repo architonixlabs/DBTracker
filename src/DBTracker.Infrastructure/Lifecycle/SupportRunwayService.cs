@@ -111,7 +111,7 @@ public class SupportRunwayService(
                 ? $"{Math.Abs(d)} day(s) overdue"
                 : $"{runway.DaysToNextMilestone} day(s) remaining";
 
-            var message = $"{instance.Name}: {runway.NextMilestoneLabel} — {daysDescription} ({runway.Phase}).";
+            var message = $"{instance.Name}: {runway.NextMilestoneLabel}, {daysDescription} ({runway.Phase}).";
             await notifications.CreateAsync(instance, message, runway.Phase == SupportPhase.EndOfLife ? NotificationSeverity.Critical : NotificationSeverity.Warning);
 
             var recipientEmails = new HashSet<string>(StringComparer.OrdinalIgnoreCase);

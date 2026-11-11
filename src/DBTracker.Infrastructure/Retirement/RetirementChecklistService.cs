@@ -186,7 +186,7 @@ public class RetirementChecklistService(
 
         if (!view.CanRetire)
         {
-            return (false, "Blocked — " + string.Join("; ", view.Evaluation.BlockingReasons));
+            return (false, "Blocked: " + string.Join("; ", view.Evaluation.BlockingReasons));
         }
 
         var archived = await archiveService.ArchiveAsync(view.Instance.Id, reason, actorId, actorName);
