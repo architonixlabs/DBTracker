@@ -1,5 +1,5 @@
 @page "/instances/archived"
-@attribute [Authorize(Roles = Roles.CanEditPolicy)]
+@attribute [Authorize]
 @inject InstanceArchiveService ArchiveService
 @inject AuthenticationStateProvider AuthProvider
 @inject ToastService Toasts
@@ -47,7 +47,11 @@ else
                         <td class="small text-muted">@(row.ArchivedAtUtc?.ToLocalTime().ToString("MMM d, yyyy h:mm tt") ?? "—")</td>
                         <td class="small text-muted">@row.ArchivedBy</td>
                         <td class="small">@row.ArchiveReason</td>
-                        <td><button class="btn btn-outline-secondary btn-sm" @onclick="() => Unarchive(row.Id)">Unarchive</button></td>
+                        <td>
+                            <AuthorizeView Roles="@Roles.CanEditPolicy">
+                                <button class="btn btn-outline-secondary btn-sm" @onclick="() => Unarchive(row.Id)">Unarchive</button>
+                            </AuthorizeView>
+                        </td>
                     </tr>
                 }
             </tbody>

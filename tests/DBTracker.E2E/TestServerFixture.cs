@@ -130,6 +130,19 @@ public class TestServerFixture : IAsyncDisposable
         }
         Playwright?.Dispose();
 
+        // Always dump the server's captured stdout/stderr, not just on a startup timeout — a
+        // mid-run crash (e.g. an unhandled exception that brings the Kestrel process down) shows
+        // up to Playwright only as ERR_CONNECTION_REFUSED on every subsequent test, with no clue
+        // why. This file is overwritten every run, so it always reflects the most recent one.
+        try
+        {
+            await File.WriteAllTextAsync(Path.Combine(AppContext.BaseDirectory, "e2e-server-output.log"), CapturedOutput);
+        }
+        catch
+        {
+            // best-effort diagnostic only
+        }
+
         if (_process is { HasExited: false })
         {
             try

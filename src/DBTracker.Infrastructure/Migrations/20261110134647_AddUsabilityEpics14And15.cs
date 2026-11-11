@@ -11,12 +11,6 @@ namespace DBTracker.Infrastructure.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.AddColumn<double>(
-                name: "DurationMinutes",
-                table: "RestoreEvents",
-                type: "float",
-                nullable: true);
-
             migrationBuilder.AddColumn<int>(
                 name: "LinkedBackupRecordId",
                 table: "RestoreEvents",
@@ -33,6 +27,18 @@ namespace DBTracker.Infrastructure.Migrations
 
             migrationBuilder.AddColumn<double>(
                 name: "TargetRecoveryTimeMinutes",
+                table: "RestoreEvents",
+                type: "float",
+                nullable: true);
+
+            // U12 also added an optional restore duration alongside target-recovery-time, but the
+            // original migration only emitted the column above — any insert into RestoreEvents
+            // referenced this column (it's part of the compiled model/snapshot) and failed with
+            // "Invalid column name 'DurationMinutes'" on every fresh database. Fixed here rather
+            // than as a trailing migration since no deployed database depends on this historical
+            // script yet (dev-only, EnsureDeleted+Migrate on every test run).
+            migrationBuilder.AddColumn<double>(
+                name: "DurationMinutes",
                 table: "RestoreEvents",
                 type: "float",
                 nullable: true);
@@ -321,10 +327,6 @@ namespace DBTracker.Infrastructure.Migrations
                 table: "RestoreEvents");
 
             migrationBuilder.DropColumn(
-                name: "DurationMinutes",
-                table: "RestoreEvents");
-
-            migrationBuilder.DropColumn(
                 name: "LinkedBackupRecordId",
                 table: "RestoreEvents");
 
@@ -334,6 +336,10 @@ namespace DBTracker.Infrastructure.Migrations
 
             migrationBuilder.DropColumn(
                 name: "TargetRecoveryTimeMinutes",
+                table: "RestoreEvents");
+
+            migrationBuilder.DropColumn(
+                name: "DurationMinutes",
                 table: "RestoreEvents");
 
             migrationBuilder.DropColumn(

@@ -33,6 +33,8 @@ else
 {
     <div class="row g-3">
         <div class="col-lg-5">
+            <AuthorizeView Roles="@Roles.CanEditPolicy">
+            <Authorized>
             <div class="dbt-card">
                 <h2 class="h6 text-muted text-uppercase mb-3">Record an exception</h2>
                 <div class="row g-2 mb-2">
@@ -74,6 +76,14 @@ else
                 <div class="mb-2"><input class="form-control form-control-sm" placeholder="Evidence URL/reference" @bind="_evidenceUrl" @bind:event="oninput" /></div>
                 <button class="btn btn-primary btn-sm" @onclick="CreateException" disabled="@(string.IsNullOrWhiteSpace(_targetType) || _targetId == 0 || string.IsNullOrWhiteSpace(_reason) || _expiresAt == default)" data-testid="create-exception-button">Record exception</button>
             </div>
+            </Authorized>
+            <NotAuthorized>
+            <div class="dbt-card">
+                <h2 class="h6 text-muted text-uppercase mb-3">Record an exception</h2>
+                <div class="text-muted small">Recording a risk-acceptance exception is restricted to Admin/DBA — view-only here.</div>
+            </div>
+            </NotAuthorized>
+            </AuthorizeView>
         </div>
 
         <div class="col-lg-7">
@@ -102,11 +112,15 @@ else
                                     }
                                     else if (effective == ReadinessExceptionEffectiveStatus.Active)
                                     {
-                                        <button class="btn btn-link btn-sm p-0" @onclick="() => Revoke(e.Id)" data-testid="revoke-exception-button">Revoke</button>
+                                        <AuthorizeView Roles="@Roles.CanEditPolicy" Context="revokeAuth">
+                                            <Authorized><button class="btn btn-link btn-sm p-0" @onclick="() => Revoke(e.Id)" data-testid="revoke-exception-button">Revoke</button></Authorized>
+                                        </AuthorizeView>
                                     }
                                     else if (effective is ReadinessExceptionEffectiveStatus.Expired or ReadinessExceptionEffectiveStatus.Rejected or ReadinessExceptionEffectiveStatus.Revoked)
                                     {
-                                        <button class="btn btn-link btn-sm p-0" @onclick="() => Renew(e)" data-testid="renew-exception-button">Renew</button>
+                                        <AuthorizeView Roles="@Roles.CanEditPolicy" Context="renewAuth">
+                                            <Authorized><button class="btn btn-link btn-sm p-0" @onclick="() => Renew(e)" data-testid="renew-exception-button">Renew</button></Authorized>
+                                        </AuthorizeView>
                                     }
                                 </td>
                             </tr>

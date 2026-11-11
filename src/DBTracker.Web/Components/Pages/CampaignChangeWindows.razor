@@ -1,5 +1,5 @@
 @page "/campaigns/{Id:int}/change-windows"
-@attribute [Authorize]
+@attribute [Authorize(Roles = Roles.CanEditPolicy)]
 @using DBTracker.Core.Entities
 @using DBTracker.Core.Enums
 @using DBTracker.Core.Services

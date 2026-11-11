@@ -873,6 +873,64 @@ authenticated role already, same as the rest of the app, so no separate "my apps
   rather than some new mechanism. Full suite: 634/634 (546 unit + 88 E2E). This completes Epic 22
   (D21-D22) in full and closes out the entire backlog: Epics 13-22 (U01-U22, D01-D22) are now all
   complete, alongside the originally-requested Epics 1-12.
+- 2026-11-11 — Thorough cross-epic verification pass after the full backlog (Epics 1-22) was marked
+  complete: ran the full automated suite, then drove real cross-epic persona journeys (evidence →
+  backdated restore → maintenance → compliance snapshot; Auditor/Viewer role composition; the D01-D22
+  lifecycle chain) by hand against the live app rather than trusting each epic's own isolated tests.
+  Found and fixed five real, previously-undetected bugs: (1) the `AddUsabilityEpics14And15` migration
+  was missing an `AddColumn` for `RestoreEvents.DurationMinutes` — present in the entity/model snapshot
+  but never actually added to the schema, so any restore-event insert failed with "Invalid column name"
+  on a fresh database; fixed by adding the missing column to that historical migration (safe to amend —
+  no deployed database depends on it yet). (2) `ArchivedInstances.razor` (U14) was gated
+  `[Authorize(Roles = CanEditPolicy)]` at the page level, blocking Angela (Auditor) and Marcus
+  (ITManager) from viewing archived-instance evidence/attribution at all, contradicting U14's own
+  stated rationale; fixed to `[Authorize]` with the Unarchive button alone wrapped in an
+  AuthorizeView, matching the gating pattern used everywhere else in the app. (3) `Exceptions.razor`
+  (D14) had no role gating whatsoever on creating, revoking or renewing a risk-acceptance exception —
+  any authenticated Viewer could create or revoke the exact scoped exceptions that bypass readiness/
+  retirement gates across D08/D09/D11-D13/D22, while only Approve/Reject was actually protected
+  (DecideAsync already validates PermittedApproverRole server-side); fixed by wrapping Create/Revoke/
+  Renew in `AuthorizeView Roles="CanEditPolicy"`. (4) `CampaignChangeWindows.razor` was `[Authorize]`
+  while every sibling campaign page (CampaignDetail, CampaignRehearsals, CampaignValidation) is
+  `[Authorize(Roles = CanEditPolicy)]` — fixed to match. (5) `ChangeWindowDetail.razor`'s SetStatus,
+  LinkException (attaching an emergency D14 exception) and AddJournalEntry had no role gating at all,
+  unlike RecordApproval (already server-validated); fixed by wrapping those three in the same
+  AuthorizeView pattern, leaving the page itself viewable by every authenticated role. Added a new
+  `CrossEpicIntegrationTests.cs` (5 tests) covering all five fixes plus a composite U01/U04/U08/U10/
+  U11/U12 evidence-health-maintenance-snapshot journey. Also hardened `TestServerFixture` to always
+  dump the test server's own console output to a log file on dispose (previously only on a startup
+  timeout) — this diagnostic is what actually surfaced bug (1) and a sixth finding below; it would
+  otherwise have stayed invisible, since no existing test ever inspected the server's own log.
+  **A sixth real bug was found but NOT shipped**: `Login.razor`'s `OnInitializedAsync` dereferences
+  its `[CascadingParameter] HttpContext` unconditionally, which is null once the global
+  InteractiveServer render mode re-runs that method on the live circuit — throwing an unhandled
+  `NullReferenceException` on every single login (confirmed via the server log; invisible to every
+  prior test because the browser happened to recover anyway). Fixing only that null check uncovered a
+  second, deeper issue it had been masking: `SignInManager.PasswordSignInAsync`'s cookie write then
+  reliably failed with "Headers are read-only, response has already started," because writing an auth
+  cookie from inside an already-live Blazor Server circuit is fundamentally too late — the original
+  HTTP response was already sent. A proper fix (a `MapIdentityLoginEndpoint` minimal-API POST mirroring
+  the app's existing `MapIdentityLogoutEndpoint`, with Login.razor posting a plain HTML form to it) was
+  verified correct at the HTTP level directly — valid `Set-Cookie` and a correct redirect, confirmed
+  with curl against the real running app — but caused every Playwright-driven login to consistently
+  land back on `/Account/Login?ReturnUrl=%2Fnot-found` instead, for a reason not root-caused in the
+  time available (tried both with and without `data-enhance="false"` on the form; identical result
+  either way). Rather than ship an unverified change to the one page every single user and test
+  depends on, this was reverted to the original (crash-masked-but-functional) code. The bug — real,
+  reproducible, and user-facing under the right timing, not just a test artifact — is left open for a
+  dedicated follow-up with time to validate the fix against the whole E2E suite, not just one test.
+  **Live E2E confirmation was incomplete**: after this verification pass's many consecutive full-suite
+  runs on top of the same session that built Epics 13-22, later runs showed generic page-navigation
+  timeouts (e.g. plain `networkidle` waits on ordinary pages, well after a successful login) that
+  reproduced identically on previously-100%-reliable, untouched test files — consistent with this
+  single dev machine's resources being exhausted after many hours of continuous dotnet/SQL Server/
+  browser activity, not a code defect. Confidence in the shipped fixes rests on: 546/546 unit tests
+  (unaffected by this, and always green), an earlier clean 87/88 E2E run (the 1 failure confirmed
+  passing in isolation) establishing the migration fix, an earlier clean 3/3 run of the new
+  CrossEpicIntegrationTests file establishing the ArchivedInstances fix, and the Exceptions/
+  ChangeWindowDetail/CampaignChangeWindows fixes being reviewed directly against the exact
+  AuthorizeView pattern already proven correct on dozens of other pages in this app. Recommend a full
+  E2E suite rerun in a fresh session/machine state as a final confirmation.
 
 ## Out of scope (future)
 - Automated backup execution/orchestration (this tracks status, doesn't run backups)

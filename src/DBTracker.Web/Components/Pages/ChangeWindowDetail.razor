@@ -78,6 +78,8 @@ else
 
                 <hr />
                 <p class="small mb-1">Status: <strong>@_window.Status</strong></p>
+                <AuthorizeView Roles="@Roles.CanEditPolicy" Context="statusAuth">
+                <Authorized>
                 <div class="d-flex gap-2 flex-wrap">
                     @foreach (var s in Enum.GetValues<ChangeWindowStatus>().Where(s => s != _window.Status))
                     {
@@ -91,6 +93,8 @@ else
                         <button class="btn btn-link btn-sm" @onclick="LinkException">Link</button>
                     </div>
                 </div>
+                </Authorized>
+                </AuthorizeView>
             </div>
         </div>
 
@@ -137,7 +141,11 @@ else
                     <div class="col-4"><input class="form-control form-control-sm" placeholder="Description" @bind="_entryDescription" @bind:event="oninput" /></div>
                 </div>
                 <div class="mb-2"><input class="form-control form-control-sm" placeholder="Traffic/write-state note" @bind="_entryTrafficNote" @bind:event="oninput" /></div>
+                <AuthorizeView Roles="@Roles.CanEditPolicy" Context="journalAuth">
+                <Authorized>
                 <button class="btn btn-primary btn-sm" @onclick="AddJournalEntry" disabled="@string.IsNullOrWhiteSpace(_entryDescription)" data-testid="add-journal-entry-button">Add journal entry</button>
+                </Authorized>
+                </AuthorizeView>
             </div>
         </div>
     </div>
