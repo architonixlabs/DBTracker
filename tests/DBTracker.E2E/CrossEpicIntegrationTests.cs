@@ -25,7 +25,7 @@ public class CrossEpicIntegrationTests
         }
         _page = await GlobalSetup.Server.Browser.NewPageAsync();
         await GotoAsync("/Account/Login");
-        await _page.FillAsync("input[autocomplete=username]", email);
+        await _page.FillAsync("input[autocomplete~=username]", email);
         await _page.FillAsync("input[autocomplete=current-password]", "ArxDemo#2026!");
         await _page.ClickAsync("button[type=submit]");
         await _page.WaitForURLAsync(url => !url.Contains("/Account/Login"), new PageWaitForURLOptions { Timeout = 15000 });

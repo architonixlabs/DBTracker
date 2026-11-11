@@ -34,7 +34,7 @@ public class DeviceLinkLoginTests
 
         // Phone: already signed in (simulating a trusted device), opens the scanned link and approves.
         await phone.GotoAsync(TestServerFixture.BaseUrl + "/Account/Login", new PageGotoOptions { WaitUntil = WaitUntilState.Load });
-        await phone.FillAsync("input[autocomplete=username]", "priya.nair@architonixlabs.com");
+        await phone.FillAsync("input[autocomplete~=username]", "priya.nair@architonixlabs.com");
         await phone.FillAsync("input[autocomplete=current-password]", "ArxDemo#2026!");
         await phone.ClickAsync("button[type=submit]");
         await phone.WaitForURLAsync(url => !url.Contains("/Account/Login"), new PageWaitForURLOptions { Timeout = 15000 });
@@ -73,7 +73,7 @@ public class DeviceLinkLoginTests
         var token = ExtractToken((await desktop.GetAttributeAsync("#qr-image", "src"))!);
 
         await phone.GotoAsync(TestServerFixture.BaseUrl + "/Account/Login", new PageGotoOptions { WaitUntil = WaitUntilState.Load });
-        await phone.FillAsync("input[autocomplete=username]", "marcus.chen@architonixlabs.com");
+        await phone.FillAsync("input[autocomplete~=username]", "marcus.chen@architonixlabs.com");
         await phone.FillAsync("input[autocomplete=current-password]", "ArxDemo#2026!");
         await phone.ClickAsync("button[type=submit]");
         await phone.WaitForURLAsync(url => !url.Contains("/Account/Login"), new PageWaitForURLOptions { Timeout = 15000 });

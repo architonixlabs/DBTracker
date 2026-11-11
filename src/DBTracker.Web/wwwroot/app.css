@@ -1369,6 +1369,37 @@ dl.row > dd {
 }
 
 /* ---------- Phone sign-in (QR) ---------- */
+/* G26: passkey sign-in sits between the password form and the QR option. */
+.passkey-login {
+    padding: 16px 0;
+    border-top: 1px solid var(--dbt-line);
+}
+
+.passkey-login .btn {
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+}
+
+/* Live regions stay rendered while empty (display:none would stop some screen readers announcing them); only the spacing collapses. */
+.passkey-status {
+    color: var(--dbt-text);
+}
+
+.passkey-login .passkey-status:empty {
+    margin-top: 0 !important;
+}
+
+.passkey-error {
+    color: var(--dbt-failed);
+}
+
+.passkey-error:not(:empty) {
+    margin-top: 0.5rem;
+}
+
 .qr-login {
     padding-top: 16px;
     border-top: 1px solid var(--dbt-line);

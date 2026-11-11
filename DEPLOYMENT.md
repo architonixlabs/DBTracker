@@ -313,6 +313,25 @@ still unconfigured, such as scanning, alerts or the report distribution list.
 If you loaded sample data, deactivate the demo accounts from the **Users** page, or reinstall without
 sample data, before real users rely on the site.
 
+**Passkeys.** Users can add passkeys on **Passkeys** (`/account/passkeys`, in the account links under
+their name) and then sign in with a fingerprint, face, screen lock or security key. Passwords keep
+working, and a deactivated account can't sign in with a passkey either.
+- **HTTPS is required.** Browsers only offer passkeys on `https://` pages, or on `http://localhost`
+  for local testing. Over plain HTTP from another machine the passkey options are hidden and users
+  sign in with their password.
+- **`Passkeys:ServerDomain`** is the WebAuthn relying party ID: the domain each passkey is tied to.
+  Leave it empty (the default) to use the host name in the browser's address bar. Set it, in
+  `appsettings.json` or as the environment variable `Passkeys__ServerDomain`, when users reach the site
+  under more than one host name, for example `dbtracker.contoso.com`. It must be the site's host name
+  or a parent domain of it, such as `contoso.com`, never a URL, port or IP address.
+- **Choose the domain before users add passkeys.** A passkey only works for the domain it was created
+  under. If the host name or `Passkeys:ServerDomain` changes later, every existing passkey stops
+  working and users must sign in with their password and add a new one.
+- **Behind a reverse proxy,** the app must see the public `https` scheme and host (IIS in-process
+  hosting does). If the proxy hides them, passkey checks fail because the browser's origin doesn't match.
+- Passkeys are stored in the `AspNetUserPasskeys` table, which is backed up with the database. They
+  hold public keys only and aren't included in any export.
+
 **Central log analytics.** Architonix apps send their web logs to the shared GoAccess server, which
 reads `/srv/weblogs/<app>/` on 192.168.1.8. Because DBTracker runs under IIS on Windows,
 `tools\Ship-IisLogs.ps1` copies the site's IIS W3C logs to `ram@192.168.1.8:/srv/weblogs/dbtracker/`

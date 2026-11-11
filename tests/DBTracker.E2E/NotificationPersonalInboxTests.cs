@@ -146,7 +146,7 @@ public class NotificationPersonalInboxTests
     private async Task LoginAsync(string email, string password = "ArxDemo#2026!")
     {
         await GotoAsync("/Account/Login");
-        await _page.FillAsync("input[autocomplete=username]", email);
+        await _page.FillAsync("input[autocomplete~=username]", email);
         await _page.FillAsync("input[autocomplete=current-password]", password);
 
         await _page.ClickAsync("button[type=submit]");
