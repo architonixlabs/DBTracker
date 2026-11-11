@@ -73,6 +73,12 @@ else
             <a class="btn btn-outline-secondary" href="/instances/@Id/certificates" title="Certificate and recovery-key dependency reminders (D20)">
                 <i class="bi bi-key"></i> Certificates
             </a>
+            <a class="btn btn-outline-secondary" href="/instances/@Id/entitlement" title="Support-contract entitlement and reviewed edition-cost readiness (D21)">
+                <i class="bi bi-file-earmark-text"></i> Entitlement
+            </a>
+            <a class="btn btn-outline-secondary" href="/instances/@Id/retirement" title="Decommission/source-retirement checklist, gated before the existing archive flow (D22)">
+                <i class="bi bi-door-closed"></i> Retirement
+            </a>
             <button class="btn btn-outline-secondary" @onclick="TestConnection" disabled="@(_testingConnection || !CanCheckConnectivity(instance))" title="@(CanCheckConnectivity(instance) ? "" : "No host/IP or override configured")">
                 <i class="bi bi-ethernet"></i> @(_testingConnection ? "Testing…" : "Test connection")
             </button>

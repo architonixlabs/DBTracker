@@ -613,12 +613,17 @@ namespace DBTracker.Infrastructure.Migrations
                         .HasMaxLength(1000)
                         .HasColumnType("nvarchar(1000)");
 
+                    b.Property<int?>("SourceCostEstimateId")
+                        .HasColumnType("int");
+
                     b.Property<int>("Type")
                         .HasColumnType("int");
 
                     b.HasKey("Id");
 
                     b.HasIndex("MigrationCampaignId");
+
+                    b.HasIndex("SourceCostEstimateId");
 
                     b.ToTable("CampaignAlternatives");
                 });
@@ -1673,6 +1678,74 @@ namespace DBTracker.Infrastructure.Migrations
                         .IsUnique();
 
                     b.ToTable("DeviceLinkTokens");
+                });
+
+            modelBuilder.Entity("DBTracker.Core.Entities.EditionCostEstimate", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Assumptions")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasMaxLength(320)
+                        .HasColumnType("nvarchar(320)");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("nvarchar(10)");
+
+                    b.Property<int>("DatabaseInstanceId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("EstimateDateUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("EstimateType")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("EstimatedAmount")
+                        .HasColumnType("decimal(14,2)");
+
+                    b.Property<string>("LicensingConstraintsNotes")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<DateTime?>("ReviewedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("ReviewedBy")
+                        .IsRequired()
+                        .HasMaxLength(320)
+                        .HasColumnType("nvarchar(320)");
+
+                    b.Property<int?>("SupportContractId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("TargetEditionOrPath")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("nvarchar(300)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DatabaseInstanceId");
+
+                    b.HasIndex("SupportContractId");
+
+                    b.ToTable("EditionCostEstimates");
                 });
 
             modelBuilder.Entity("DBTracker.Core.Entities.Incident", b =>
@@ -3205,6 +3278,95 @@ namespace DBTracker.Infrastructure.Migrations
                     b.ToTable("RestoreEventCorrections");
                 });
 
+            modelBuilder.Entity("DBTracker.Core.Entities.RetirementChecklist", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime?>("AppOwnerSignoffAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("AppOwnerSignoffBy")
+                        .IsRequired()
+                        .HasMaxLength(320)
+                        .HasColumnType("nvarchar(320)");
+
+                    b.Property<string>("CostContractReviewNotes")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<bool>("CostContractReviewed")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasMaxLength(320)
+                        .HasColumnType("nvarchar(320)");
+
+                    b.Property<int>("DatabaseInstanceId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("ExternalCleanupNotes")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<string>("FinalBackupEvidenceNotes")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<string>("LegalHoldReviewNotes")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<bool>("LegalHoldReviewed")
+                        .HasColumnType("bit");
+
+                    b.Property<int?>("MigrationCampaignId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("PlatformSignoffAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("PlatformSignoffBy")
+                        .IsRequired()
+                        .HasMaxLength(320)
+                        .HasColumnType("nvarchar(320)");
+
+                    b.Property<DateTime?>("RetiredAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("RetiredBy")
+                        .IsRequired()
+                        .HasMaxLength(320)
+                        .HasColumnType("nvarchar(320)");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("UpdatedBy")
+                        .IsRequired()
+                        .HasMaxLength(320)
+                        .HasColumnType("nvarchar(320)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DatabaseInstanceId");
+
+                    b.HasIndex("MigrationCampaignId");
+
+                    b.ToTable("RetirementChecklists");
+                });
+
             modelBuilder.Entity("DBTracker.Core.Entities.SavedView", b =>
                 {
                     b.Property<int>("Id")
@@ -3247,6 +3409,106 @@ namespace DBTracker.Infrastructure.Migrations
                         .IsUnique();
 
                     b.ToTable("SavedViews");
+                });
+
+            modelBuilder.Entity("DBTracker.Core.Entities.SupportContract", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime?>("CoverageEndUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("CoverageStartUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("CoverageType")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasMaxLength(320)
+                        .HasColumnType("nvarchar(320)");
+
+                    b.Property<string>("Notes")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<string>("OwnerName")
+                        .IsRequired()
+                        .HasMaxLength(320)
+                        .HasColumnType("nvarchar(320)");
+
+                    b.Property<int?>("OwnerTeamId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("RenewalEvidenceRecordedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("RenewalEvidenceReference")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("UpdatedBy")
+                        .IsRequired()
+                        .HasMaxLength(320)
+                        .HasColumnType("nvarchar(320)");
+
+                    b.Property<string>("Vendor")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CoverageEndUtc");
+
+                    b.HasIndex("OwnerTeamId");
+
+                    b.ToTable("SupportContracts");
+                });
+
+            modelBuilder.Entity("DBTracker.Core.Entities.SupportContractAssignment", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasMaxLength(320)
+                        .HasColumnType("nvarchar(320)");
+
+                    b.Property<int>("DatabaseInstanceId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("SupportContractId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DatabaseInstanceId");
+
+                    b.HasIndex("SupportContractId", "DatabaseInstanceId")
+                        .IsUnique();
+
+                    b.ToTable("SupportContractAssignments");
                 });
 
             modelBuilder.Entity("DBTracker.Core.Entities.SupportRunwayDecision", b =>
@@ -3877,7 +4139,14 @@ namespace DBTracker.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.HasOne("DBTracker.Core.Entities.EditionCostEstimate", "SourceCostEstimate")
+                        .WithMany()
+                        .HasForeignKey("SourceCostEstimateId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
                     b.Navigation("MigrationCampaign");
+
+                    b.Navigation("SourceCostEstimate");
                 });
 
             modelBuilder.Entity("DBTracker.Core.Entities.CampaignApproval", b =>
@@ -4096,6 +4365,24 @@ namespace DBTracker.Infrastructure.Migrations
                     b.Navigation("AppliedPolicy");
 
                     b.Navigation("OwnerTeam");
+                });
+
+            modelBuilder.Entity("DBTracker.Core.Entities.EditionCostEstimate", b =>
+                {
+                    b.HasOne("DBTracker.Core.Entities.DatabaseInstance", "DatabaseInstance")
+                        .WithMany()
+                        .HasForeignKey("DatabaseInstanceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("DBTracker.Core.Entities.SupportContract", "SupportContract")
+                        .WithMany()
+                        .HasForeignKey("SupportContractId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("DatabaseInstance");
+
+                    b.Navigation("SupportContract");
                 });
 
             modelBuilder.Entity("DBTracker.Core.Entities.Incident", b =>
@@ -4402,6 +4689,53 @@ namespace DBTracker.Infrastructure.Migrations
                     b.Navigation("RestoreEvent");
                 });
 
+            modelBuilder.Entity("DBTracker.Core.Entities.RetirementChecklist", b =>
+                {
+                    b.HasOne("DBTracker.Core.Entities.DatabaseInstance", "DatabaseInstance")
+                        .WithMany()
+                        .HasForeignKey("DatabaseInstanceId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+
+                    b.HasOne("DBTracker.Core.Entities.MigrationCampaign", "MigrationCampaign")
+                        .WithMany()
+                        .HasForeignKey("MigrationCampaignId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.Navigation("DatabaseInstance");
+
+                    b.Navigation("MigrationCampaign");
+                });
+
+            modelBuilder.Entity("DBTracker.Core.Entities.SupportContract", b =>
+                {
+                    b.HasOne("DBTracker.Core.Entities.Team", "OwnerTeam")
+                        .WithMany()
+                        .HasForeignKey("OwnerTeamId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("OwnerTeam");
+                });
+
+            modelBuilder.Entity("DBTracker.Core.Entities.SupportContractAssignment", b =>
+                {
+                    b.HasOne("DBTracker.Core.Entities.DatabaseInstance", "DatabaseInstance")
+                        .WithMany()
+                        .HasForeignKey("DatabaseInstanceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("DBTracker.Core.Entities.SupportContract", "SupportContract")
+                        .WithMany("Assignments")
+                        .HasForeignKey("SupportContractId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("DatabaseInstance");
+
+                    b.Navigation("SupportContract");
+                });
+
             modelBuilder.Entity("DBTracker.Core.Entities.SupportRunwayDecision", b =>
                 {
                     b.HasOne("DBTracker.Core.Entities.DatabaseInstance", "DatabaseInstance")
@@ -4596,6 +4930,11 @@ namespace DBTracker.Infrastructure.Migrations
             modelBuilder.Entity("DBTracker.Core.Entities.RestoreEvent", b =>
                 {
                     b.Navigation("Corrections");
+                });
+
+            modelBuilder.Entity("DBTracker.Core.Entities.SupportContract", b =>
+                {
+                    b.Navigation("Assignments");
                 });
 
             modelBuilder.Entity("DBTracker.Core.Entities.Team", b =>

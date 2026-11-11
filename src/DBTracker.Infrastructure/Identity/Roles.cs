@@ -22,4 +22,7 @@ public static class Roles
 
     /// <summary>Roles allowed to view the general audit trail (U19) — Angela's (Auditor) core need, plus Admin for account/administration events.</summary>
     public const string AuditViewPolicy = $"{Admin},{Auditor}";
+
+    /// <summary>Roles allowed to see/record commercial evidence (D21 support-contract cost figures and edition-cost estimates) — deliberately narrower than CanEditPolicy: a DBA can record a contract/coverage fact but the dollar figures are Admin/ITManager-only, never every Viewer.</summary>
+    public const string CommercialEvidencePolicy = $"{Admin},{ItManager}";
 }

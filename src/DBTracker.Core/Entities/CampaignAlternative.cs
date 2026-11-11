@@ -22,6 +22,10 @@ public class CampaignAlternative
     public string RiskNotes { get; set; } = string.Empty;
     public bool IsChosen { get; set; }
 
+    /// <summary>D21 feed — optional link to the reviewed EditionCostEstimate this alternative's EstimatedCost came from, kept for traceability. Never auto-syncs after the fact; EstimatedCost stays the authoritative, explicitly-entered figure on this row.</summary>
+    public int? SourceCostEstimateId { get; set; }
+    public EditionCostEstimate? SourceCostEstimate { get; set; }
+
     public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
     public string CreatedBy { get; set; } = string.Empty;
 }

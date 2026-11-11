@@ -1,0 +1,262 @@
+@page "/instances/{Id:int}/entitlement"
+@attribute [Authorize]
+@using DBTracker.Core.Entities
+@using DBTracker.Core.Enums
+@using DBTracker.Core.Services
+@using DBTracker.Infrastructure.Entitlement
+@using DBTracker.Infrastructure.Identity
+@using DBTracker.Infrastructure.Queries
+@using Microsoft.AspNetCore.Components.Authorization
+@inject InstanceOverviewService OverviewService
+@inject SupportEntitlementService Entitlement
+@inject AuthenticationStateProvider AuthProvider
+@inject DBTracker.Web.Services.ToastService Toasts
+
+<PageTitle>@(_instance?.Name ?? "Instance") entitlement · DBTracker</PageTitle>
+
+@if (!_loaded)
+{
+    <div class="spinner-ring"></div>
+}
+else if (_instance is null)
+{
+    <div class="dbt-card" style="max-width:600px;">
+        <div class="empty-state py-4"><i class="bi bi-question-diamond"></i> Instance #@Id doesn't exist.</div>
+        <a class="btn btn-outline-secondary" href="/instances">Back to instances</a>
+    </div>
+}
+else
+{
+    <div class="app-topbar">
+        <div>
+            <div class="eyebrow">Support entitlement and edition-cost readiness</div>
+            <h1>@_instance.Name</h1>
+            <div class="subtitle">
+                @_instance.Engine · <a href="/instances/@Id">Back to instance detail</a> ·
+                <a href="/instances/@Id/lifecycle">Product lifecycle / support phase (D02-D03)</a>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-3">
+        <div class="col-lg-6">
+            <div class="dbt-card h-100">
+                <h2 class="h6 text-muted text-uppercase mb-3">Entitlement status (D21)</h2>
+                <p class="small text-muted">
+                    Computed only from support contracts linked below — never from this instance's lifecycle/support-phase status (D02-D03) above.
+                    A product can be inside its vendor's Mainstream support window with <strong>no contract on file</strong>, or past that window with
+                    <strong>Active</strong> paid Extended coverage; the two facts are tracked and shown independently on purpose.
+                </p>
+                <div class="mb-3">
+                    <span class="badge-health dot @EntitlementCssClass(_entitlement!.Result.Status)" data-testid="entitlement-status">@_entitlement.Result.Status</span>
+                    <div class="small text-muted mt-1" data-testid="entitlement-detail">@_entitlement.Result.Detail</div>
+                </div>
+
+                @if (_entitlement.Contracts.Count > 0)
+                {
+                    <table class="table table-sm dbt-table mb-0" data-testid="support-contract-table">
+                        <thead><tr><th>Vendor</th><th>Coverage</th><th>Start</th><th>End</th><th>Owner</th><th>Renewal evidence</th></tr></thead>
+                        <tbody>
+                            @foreach (var c in _entitlement.Contracts)
+                            {
+                                <tr data-testid="support-contract-row">
+                                    <td class="small">@c.Vendor</td>
+                                    <td class="small">@c.CoverageType</td>
+                                    <td class="small">@(c.CoverageStartUtc?.ToString("yyyy-MM-dd") ?? "—")</td>
+                                    <td class="small">@(c.CoverageEndUtc?.ToString("yyyy-MM-dd") ?? "open-ended")</td>
+                                    <td class="small">@c.OwnerName</td>
+                                    <td class="small">@c.RenewalEvidenceReference</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                }
+                else
+                {
+                    <div class="empty-state py-2"><i class="bi bi-file-earmark-x"></i> No support contract linked yet.</div>
+                }
+
+                <AuthorizeView Roles="@Roles.CommercialEvidencePolicy">
+                    <hr />
+                    <h3 class="small text-muted text-uppercase mb-2">Link a support contract</h3>
+                    <div class="row g-2 mb-2">
+                        <div class="col-6"><input class="form-control form-control-sm" placeholder="Vendor" @bind="_vendor" @bind:event="oninput" /></div>
+                        <div class="col-6">
+                            <select class="form-select form-select-sm" @bind="_coverageType">
+                                @foreach (var t in Enum.GetValues<SupportCoverageType>())
+                                {
+                                    <option value="@t">@t</option>
+                                }
+                            </select>
+                        </div>
+                    </div>
+                    <div class="row g-2 mb-2">
+                        <div class="col-6">
+                            <label class="small text-muted">Coverage start</label>
+                            <input type="date" class="form-control form-control-sm" @bind="_coverageStart" />
+                        </div>
+                        <div class="col-6">
+                            <label class="small text-muted">Coverage end</label>
+                            <input type="date" class="form-control form-control-sm" @bind="_coverageEnd" />
+                        </div>
+                    </div>
+                    <div class="row g-2 mb-2">
+                        <div class="col-6"><input class="form-control form-control-sm" placeholder="Owner name" @bind="_ownerName" @bind:event="oninput" /></div>
+                        <div class="col-6"><input class="form-control form-control-sm" placeholder="Renewal evidence reference (ticket/PO id)" @bind="_renewalEvidence" @bind:event="oninput" /></div>
+                    </div>
+                    <button class="btn btn-primary btn-sm" @onclick="LinkContract" disabled="@string.IsNullOrWhiteSpace(_vendor)" data-testid="link-support-contract">Link contract</button>
+                </AuthorizeView>
+            </div>
+        </div>
+
+        <div class="col-lg-6">
+            <div class="dbt-card h-100">
+                <h2 class="h6 text-muted text-uppercase mb-3">Target-edition cost estimates (D21)</h2>
+                <p class="small text-muted">
+                    Reviewed target-edition licensing constraints and an estimated extended-support-or-migration cost — figures are commercial
+                    evidence, restricted to Admin/ITManager; every other role sees that an estimate exists without the dollar amount.
+                </p>
+
+                @if (_costEstimates.Count > 0)
+                {
+                    <table class="table table-sm dbt-table mb-0" data-testid="cost-estimate-table">
+                        <thead><tr><th>Type</th><th>Target edition/path</th><th>Amount</th><th>Date</th><th>Reviewer</th></tr></thead>
+                        <tbody>
+                            @foreach (var e in _costEstimates)
+                            {
+                                <tr data-testid="cost-estimate-row">
+                                    <td class="small">@e.EstimateType</td>
+                                    <td class="small">@e.TargetEditionOrPath</td>
+                                    <td class="small" data-testid="cost-estimate-amount">@CostEvidenceMasker.MaskAmount(e.EstimatedAmount, e.Currency, _canViewCommercial)</td>
+                                    <td class="small">@e.EstimateDateUtc.ToString("yyyy-MM-dd")</td>
+                                    <td class="small">@(string.IsNullOrWhiteSpace(e.ReviewedBy) ? "not yet reviewed" : e.ReviewedBy)</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                }
+                else
+                {
+                    <div class="empty-state py-2"><i class="bi bi-cash-stack"></i> No cost estimate recorded yet.</div>
+                }
+
+                <AuthorizeView Roles="@Roles.CommercialEvidencePolicy">
+                    <hr />
+                    <h3 class="small text-muted text-uppercase mb-2">Record a cost estimate</h3>
+                    <div class="row g-2 mb-2">
+                        <div class="col-6">
+                            <select class="form-select form-select-sm" @bind="_estimateType">
+                                @foreach (var t in Enum.GetValues<CostEstimateType>())
+                                {
+                                    <option value="@t">@t</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-6"><input class="form-control form-control-sm" placeholder="Target edition/path" @bind="_targetEdition" @bind:event="oninput" /></div>
+                    </div>
+                    <div class="mb-2"><textarea class="form-control form-control-sm" rows="2" placeholder="Licensing constraints" @bind="_licensingNotes"></textarea></div>
+                    <div class="row g-2 mb-2">
+                        <div class="col-4"><input type="number" step="0.01" class="form-control form-control-sm" placeholder="Amount" @bind="_amount" @bind:event="oninput" data-testid="cost-amount-input" /></div>
+                        <div class="col-4"><input class="form-control form-control-sm" placeholder="Currency" @bind="_currency" @bind:event="oninput" /></div>
+                        <div class="col-4"><input type="date" class="form-control form-control-sm" @bind="_estimateDate" /></div>
+                    </div>
+                    <div class="mb-2"><textarea class="form-control form-control-sm" rows="2" placeholder="Assumptions" @bind="_assumptions"></textarea></div>
+                    <div class="mb-2"><input class="form-control form-control-sm" placeholder="Reviewed by" @bind="_reviewedBy" @bind:event="oninput" /></div>
+                    <button class="btn btn-primary btn-sm" @onclick="AddCostEstimate" disabled="@(string.IsNullOrWhiteSpace(_targetEdition) || _amount <= 0)" data-testid="add-cost-estimate">Record estimate</button>
+                </AuthorizeView>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    private DatabaseInstance? _instance;
+    private bool _loaded;
+    private string? _userName;
+    private bool _canViewCommercial;
+
+    private EntitlementView? _entitlement;
+    private List<EditionCostEstimate> _costEstimates = new();
+
+    private string _vendor = "", _ownerName = "", _renewalEvidence = "";
+    private SupportCoverageType _coverageType = SupportCoverageType.Standard;
+    private DateTime? _coverageStart, _coverageEnd;
+
+    private CostEstimateType _estimateType = CostEstimateType.ExtendedSupport;
+    private string _targetEdition = "", _licensingNotes = "", _currency = "USD", _assumptions = "", _reviewedBy = "";
+    private decimal _amount;
+    private DateTime _estimateDate = DateTime.UtcNow.Date;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var state = await AuthProvider.GetAuthenticationStateAsync();
+        _userName = state.User.Identity?.Name ?? "unknown";
+        _canViewCommercial = state.User.IsInRole(Roles.Admin) || state.User.IsInRole(Roles.ItManager);
+        await Load();
+        _loaded = true;
+    }
+
+    private async Task Load()
+    {
+        var overview = await OverviewService.GetByIdAsync(Id);
+        _instance = overview?.Instance;
+        if (_instance is null)
+        {
+            return;
+        }
+
+        _entitlement = await Entitlement.GetEntitlementForInstanceAsync(Id);
+        _costEstimates = await Entitlement.ListCostEstimatesAsync(Id);
+    }
+
+    private async Task LinkContract()
+    {
+        await Entitlement.CreateContractAsync(new SupportContract
+        {
+            Vendor = _vendor,
+            CoverageType = _coverageType,
+            CoverageStartUtc = _coverageStart,
+            CoverageEndUtc = _coverageEnd,
+            OwnerName = _ownerName,
+            RenewalEvidenceReference = _renewalEvidence,
+            RenewalEvidenceRecordedAtUtc = string.IsNullOrWhiteSpace(_renewalEvidence) ? null : DateTime.UtcNow
+        }, [Id], _userName ?? "unknown");
+
+        Toasts.Success($"Support contract from {_vendor} linked.");
+        _vendor = _ownerName = _renewalEvidence = "";
+        _coverageStart = _coverageEnd = null;
+        await Load();
+    }
+
+    private async Task AddCostEstimate()
+    {
+        await Entitlement.AddCostEstimateAsync(new EditionCostEstimate
+        {
+            DatabaseInstanceId = Id,
+            EstimateType = _estimateType,
+            TargetEditionOrPath = _targetEdition,
+            LicensingConstraintsNotes = _licensingNotes,
+            EstimatedAmount = _amount,
+            Currency = string.IsNullOrWhiteSpace(_currency) ? "USD" : _currency,
+            EstimateDateUtc = DateTime.SpecifyKind(_estimateDate, DateTimeKind.Utc),
+            Assumptions = _assumptions,
+            ReviewedBy = _reviewedBy,
+            ReviewedAtUtc = string.IsNullOrWhiteSpace(_reviewedBy) ? null : DateTime.UtcNow
+        }, _userName ?? "unknown");
+
+        Toasts.Success("Cost estimate recorded.");
+        _targetEdition = _licensingNotes = _assumptions = _reviewedBy = "";
+        _amount = 0;
+        await Load();
+    }
+
+    private static string EntitlementCssClass(EntitlementStatus status) => status switch
+    {
+        EntitlementStatus.Active => "OnTrack",
+        EntitlementStatus.ExpiringSoon => "Overdue",
+        EntitlementStatus.Expired => "Failed",
+        _ => "Overdue"
+    };
+}

@@ -1,0 +1,186 @@
+using DBTracker.Core.Entities;
+using DBTracker.Core.Enums;
+
+namespace DBTracker.Core.Services;
+
+public record RetirementGateResult(string GateKey, string Label, RetirementGateStatus Status, string Detail);
+
+public record RetirementChecklistEvaluation(
+    IReadOnlyList<RetirementGateResult> Gates,
+    bool AllGatesSatisfied,
+    IReadOnlyList<string> BlockingReasons);
+
+/// <summary>
+/// D22 — pure gating logic for a decommission/retirement checklist. Every input here is evidence
+/// already owned by an earlier epic (D07 dependencies, D16 chain coverage, D17 copy availability, D20
+/// certificate access, D13 rollback-retention deadline, D21 cost/contract review) plus the small set
+/// of genuinely manual facts on RetirementChecklist itself (legal-hold review, sign-offs). Nothing
+/// here reaches into a database — the caller (RetirementChecklistService) gathers every input and
+/// this function only classifies it. A gate with nothing recorded is Unknown, not Passed; a gate that
+/// genuinely doesn't apply (e.g. no active change to close a rollback window on) is NotApplicable —
+/// both count as "not yet satisfied" for AllGatesSatisfied, exactly like Blocked, since a correct
+/// Unknown must still require a scoped D14 exception to proceed past, not be silently treated as fine.
+/// </summary>
+public static class RetirementChecklistGateEvaluator
+{
+    private static RetirementGateStatus Worse(RetirementGateStatus a, RetirementGateStatus b)
+    {
+        // Blocked is worst, then Unknown, then NotApplicable, then Passed is best.
+        int Rank(RetirementGateStatus s) => s switch
+        {
+            RetirementGateStatus.Blocked => 0,
+            RetirementGateStatus.Unknown => 1,
+            RetirementGateStatus.NotApplicable => 2,
+            RetirementGateStatus.Passed => 3,
+            _ => 1
+        };
+        return Rank(a) <= Rank(b) ? a : b;
+    }
+
+    public static RetirementChecklistEvaluation Evaluate(
+        RetirementChecklist checklist,
+        IReadOnlyCollection<InstanceDependency> dependencies,
+        ChainCoverageStatus? chainCoverageStatus,
+        bool hasAccessibleVerifiedCopy,
+        bool hasAnyCopyLocationsRecorded,
+        bool? certificateAccessVerified,
+        DateTime? rollbackRetentionDeadlineUtc,
+        DateTime nowUtc)
+    {
+        var gates = new List<RetirementGateResult>
+        {
+            ConsumersResolvedGate(dependencies),
+            JobsReplicasResolvedGate(dependencies),
+            FinalRecoverableEvidenceGate(chainCoverageStatus, hasAccessibleVerifiedCopy, hasAnyCopyLocationsRecorded, certificateAccessVerified),
+            RollbackWindowClosedGate(rollbackRetentionDeadlineUtc, nowUtc),
+            LegalHoldReviewedGate(checklist),
+            SignoffGate(checklist),
+            CostContractReviewGate(checklist)
+        };
+
+        var allSatisfied = gates.All(g => g.Status is RetirementGateStatus.Passed or RetirementGateStatus.NotApplicable);
+        var blocking = gates
+            .Where(g => g.Status is RetirementGateStatus.Blocked or RetirementGateStatus.Unknown)
+            .Select(g => $"{g.Label}: {g.Detail}")
+            .ToList();
+
+        return new RetirementChecklistEvaluation(gates, allSatisfied, blocking);
+    }
+
+    private static RetirementGateResult ConsumersResolvedGate(IReadOnlyCollection<InstanceDependency> dependencies)
+    {
+        var consumers = dependencies.Where(d => d.Direction == DependencyDirection.Downstream).ToList();
+        if (consumers.Count == 0)
+        {
+            return new RetirementGateResult("ConsumersResolved", "Downstream consumers moved/confirmed resolved", RetirementGateStatus.Unknown,
+                "No downstream-consumer dependencies recorded — confirm none exist before retiring.");
+        }
+
+        var unresolved = consumers.Where(d => !d.IsResolved).Select(d => d.Name).ToList();
+        return unresolved.Count == 0
+            ? new RetirementGateResult("ConsumersResolved", "Downstream consumers moved/confirmed resolved", RetirementGateStatus.Passed,
+                $"All {consumers.Count} recorded downstream consumer(s) resolved.")
+            : new RetirementGateResult("ConsumersResolved", "Downstream consumers moved/confirmed resolved", RetirementGateStatus.Blocked,
+                $"Unresolved downstream consumer(s): {string.Join(", ", unresolved)}.");
+    }
+
+    private static readonly DependencyKind[] JobReplicaKinds = [DependencyKind.Job, DependencyKind.Replica, DependencyKind.LinkedService, DependencyKind.BackupTooling];
+
+    private static RetirementGateResult JobsReplicasResolvedGate(IReadOnlyCollection<InstanceDependency> dependencies)
+    {
+        var jobsReplicas = dependencies.Where(d => JobReplicaKinds.Contains(d.Kind)).ToList();
+        if (jobsReplicas.Count == 0)
+        {
+            return new RetirementGateResult("JobsReplicasResolved", "Jobs/replicas removed or redirected", RetirementGateStatus.Unknown,
+                "No job/replica/linked-service/backup-tooling dependencies recorded — confirm none remain pointed at this instance.");
+        }
+
+        var unresolved = jobsReplicas.Where(d => !d.IsResolved).Select(d => $"{d.Kind}: {d.Name}").ToList();
+        return unresolved.Count == 0
+            ? new RetirementGateResult("JobsReplicasResolved", "Jobs/replicas removed or redirected", RetirementGateStatus.Passed,
+                $"All {jobsReplicas.Count} recorded job/replica dependency(ies) resolved.")
+            : new RetirementGateResult("JobsReplicasResolved", "Jobs/replicas removed or redirected", RetirementGateStatus.Blocked,
+                $"Still unresolved: {string.Join(", ", unresolved)}.");
+    }
+
+    private static RetirementGateResult FinalRecoverableEvidenceGate(
+        ChainCoverageStatus? chainCoverageStatus, bool hasAccessibleVerifiedCopy, bool hasAnyCopyLocationsRecorded, bool? certificateAccessVerified)
+    {
+        var status = chainCoverageStatus switch
+        {
+            null => RetirementGateStatus.Unknown,
+            ChainCoverageStatus.Unknown => RetirementGateStatus.Unknown,
+            ChainCoverageStatus.Incomplete => RetirementGateStatus.Blocked,
+            ChainCoverageStatus.Complete => RetirementGateStatus.Passed,
+            _ => RetirementGateStatus.Unknown
+        };
+        var details = new List<string> { $"Backup-chain coverage: {chainCoverageStatus?.ToString() ?? "Unknown (no requirements recorded)"}." };
+
+        if (hasAnyCopyLocationsRecorded)
+        {
+            status = Worse(status, hasAccessibleVerifiedCopy ? RetirementGateStatus.Passed : RetirementGateStatus.Blocked);
+            details.Add(hasAccessibleVerifiedCopy
+                ? "At least one backup-copy location is currently verified accessible."
+                : "No backup-copy location is currently verified accessible.");
+        }
+        else
+        {
+            status = Worse(status, RetirementGateStatus.Unknown);
+            details.Add("No backup-copy locations recorded.");
+        }
+
+        if (certificateAccessVerified is { } verified)
+        {
+            status = Worse(status, verified ? RetirementGateStatus.Passed : RetirementGateStatus.Blocked);
+            details.Add(verified
+                ? "Key/certificate backup-restore access is verified."
+                : "Key/certificate backup-restore access is not verified.");
+        }
+
+        return new RetirementGateResult("FinalRecoverableEvidence", "Final recoverable backup/key-access evidence retained", status, string.Join(" ", details));
+    }
+
+    private static RetirementGateResult RollbackWindowClosedGate(DateTime? rollbackRetentionDeadlineUtc, DateTime nowUtc)
+    {
+        if (rollbackRetentionDeadlineUtc is null)
+        {
+            return new RetirementGateResult("RollbackWindowClosed", "Change rollback window closed", RetirementGateStatus.NotApplicable,
+                "No rollback-retention deadline recorded for this instance — no active change to close out.");
+        }
+
+        return nowUtc >= rollbackRetentionDeadlineUtc
+            ? new RetirementGateResult("RollbackWindowClosed", "Change rollback window closed", RetirementGateStatus.Passed,
+                $"Rollback-retention deadline ({rollbackRetentionDeadlineUtc:u}) has passed.")
+            : new RetirementGateResult("RollbackWindowClosed", "Change rollback window closed", RetirementGateStatus.Blocked,
+                $"Rollback-retention deadline is {rollbackRetentionDeadlineUtc:u} — the window hasn't closed yet.");
+    }
+
+    private static RetirementGateResult LegalHoldReviewedGate(RetirementChecklist checklist) =>
+        checklist.LegalHoldReviewed
+            ? new RetirementGateResult("LegalHoldReviewed", "Retention/legal-hold obligations reviewed", RetirementGateStatus.Passed, "Reviewed.")
+            : new RetirementGateResult("LegalHoldReviewed", "Retention/legal-hold obligations reviewed", RetirementGateStatus.Unknown, "Not yet reviewed.");
+
+    private static RetirementGateResult SignoffGate(RetirementChecklist checklist)
+    {
+        var missing = new List<string>();
+        if (checklist.AppOwnerSignoffAtUtc is null)
+        {
+            missing.Add("application owner");
+        }
+        if (checklist.PlatformSignoffAtUtc is null)
+        {
+            missing.Add("platform");
+        }
+
+        return missing.Count == 0
+            ? new RetirementGateResult("Signoffs", "Application/platform sign-off", RetirementGateStatus.Passed,
+                $"Signed off by {checklist.AppOwnerSignoffBy} (app) and {checklist.PlatformSignoffBy} (platform).")
+            : new RetirementGateResult("Signoffs", "Application/platform sign-off", RetirementGateStatus.Unknown,
+                $"Missing sign-off: {string.Join(", ", missing)}.");
+    }
+
+    private static RetirementGateResult CostContractReviewGate(RetirementChecklist checklist) =>
+        checklist.CostContractReviewed
+            ? new RetirementGateResult("CostContractReview", "Cost/contract review (D21)", RetirementGateStatus.Passed, "Reviewed.")
+            : new RetirementGateResult("CostContractReview", "Cost/contract review (D21)", RetirementGateStatus.Unknown, "Not yet reviewed.");
+}

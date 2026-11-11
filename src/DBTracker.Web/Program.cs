@@ -107,6 +107,13 @@ builder.Services.AddScoped<DBTracker.Infrastructure.Recovery.CapacityPlanningSer
 builder.Services.AddScoped<DBTracker.Infrastructure.Recovery.CertificateDependencyService>();
 builder.Services.AddHostedService<DBTracker.Infrastructure.Recovery.CertificateExpiryCheckHostedService>();
 
+// Epic 22 (D21-D22): support entitlement/edition-cost readiness and the decommission/
+// source-retirement checklist. Record-keeping only — D22's CompleteRetirementAsync is the sole
+// path that retires an instance, and it does so purely by calling the pre-existing U14
+// InstanceArchiveService, never a second archive/delete mechanism of its own.
+builder.Services.AddScoped<DBTracker.Infrastructure.Entitlement.SupportEntitlementService>();
+builder.Services.AddScoped<DBTracker.Infrastructure.Retirement.RetirementChecklistService>();
+
 // Process-lifetime record of each background worker's last/next run (U15 setup/diagnostics page).
 builder.Services.AddSingleton<WorkerHeartbeatStore>();
 builder.Services.AddScoped<SetupDiagnosticsService>();

@@ -78,6 +78,13 @@ public class DBTrackerDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<WorkloadComparison> WorkloadComparisons => Set<WorkloadComparison>();
     public DbSet<CertificateDependency> CertificateDependencies => Set<CertificateDependency>();
 
+    // Epic 22 (D21-D22): support entitlement/edition-cost readiness and the decommission/
+    // source-retirement checklist that gates the existing U14 archive flow.
+    public DbSet<SupportContract> SupportContracts => Set<SupportContract>();
+    public DbSet<SupportContractAssignment> SupportContractAssignments => Set<SupportContractAssignment>();
+    public DbSet<EditionCostEstimate> EditionCostEstimates => Set<EditionCostEstimate>();
+    public DbSet<RetirementChecklist> RetirementChecklists => Set<RetirementChecklist>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -777,6 +784,13 @@ public class DBTrackerDbContext : IdentityDbContext<ApplicationUser>
                 .HasForeignKey(e => e.MigrationCampaignId)
                 .OnDelete(DeleteBehavior.Cascade);
 
+            // NoAction: optional D21 traceability link, not a feature that deletes estimates — kept
+            // conservative rather than reasoning about a cascade path through EditionCostEstimate.
+            entity.HasOne(e => e.SourceCostEstimate)
+                .WithMany()
+                .HasForeignKey(e => e.SourceCostEstimateId)
+                .OnDelete(DeleteBehavior.NoAction);
+
             entity.HasIndex(e => e.MigrationCampaignId);
         });
 
@@ -1194,6 +1208,92 @@ public class DBTrackerDbContext : IdentityDbContext<ApplicationUser>
 
             entity.HasIndex(e => new { e.DatabaseInstanceId, e.Kind });
             entity.HasIndex(e => e.ExpiresAtUtc);
+        });
+
+        modelBuilder.Entity<SupportContract>(entity =>
+        {
+            entity.Property(e => e.Vendor).HasMaxLength(200);
+            entity.Property(e => e.OwnerName).HasMaxLength(320);
+            entity.Property(e => e.RenewalEvidenceReference).HasMaxLength(500);
+            entity.Property(e => e.Notes).HasMaxLength(2000);
+            entity.Property(e => e.CreatedBy).HasMaxLength(320);
+            entity.Property(e => e.UpdatedBy).HasMaxLength(320);
+
+            entity.HasOne(e => e.OwnerTeam)
+                .WithMany()
+                .HasForeignKey(e => e.OwnerTeamId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasIndex(e => e.CoverageEndUtc);
+        });
+
+        modelBuilder.Entity<SupportContractAssignment>(entity =>
+        {
+            entity.Property(e => e.CreatedBy).HasMaxLength(320);
+
+            // Leaf join table — both parents are simple Cascade, same shape as CampaignInstanceLink.
+            entity.HasOne(e => e.SupportContract)
+                .WithMany(c => c.Assignments)
+                .HasForeignKey(e => e.SupportContractId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(e => e.DatabaseInstance)
+                .WithMany()
+                .HasForeignKey(e => e.DatabaseInstanceId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(e => new { e.SupportContractId, e.DatabaseInstanceId }).IsUnique();
+            entity.HasIndex(e => e.DatabaseInstanceId);
+        });
+
+        modelBuilder.Entity<EditionCostEstimate>(entity =>
+        {
+            entity.Property(e => e.TargetEditionOrPath).HasMaxLength(300);
+            entity.Property(e => e.LicensingConstraintsNotes).HasMaxLength(2000);
+            entity.Property(e => e.Currency).HasMaxLength(10);
+            entity.Property(e => e.EstimatedAmount).HasColumnType("decimal(14,2)");
+            entity.Property(e => e.Assumptions).HasMaxLength(2000);
+            entity.Property(e => e.ReviewedBy).HasMaxLength(320);
+            entity.Property(e => e.CreatedBy).HasMaxLength(320);
+
+            entity.HasOne(e => e.DatabaseInstance)
+                .WithMany()
+                .HasForeignKey(e => e.DatabaseInstanceId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(e => e.SupportContract)
+                .WithMany()
+                .HasForeignKey(e => e.SupportContractId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasIndex(e => e.DatabaseInstanceId);
+        });
+
+        modelBuilder.Entity<RetirementChecklist>(entity =>
+        {
+            entity.Property(e => e.LegalHoldReviewNotes).HasMaxLength(2000);
+            entity.Property(e => e.AppOwnerSignoffBy).HasMaxLength(320);
+            entity.Property(e => e.PlatformSignoffBy).HasMaxLength(320);
+            entity.Property(e => e.ExternalCleanupNotes).HasMaxLength(2000);
+            entity.Property(e => e.CostContractReviewNotes).HasMaxLength(2000);
+            entity.Property(e => e.FinalBackupEvidenceNotes).HasMaxLength(2000);
+            entity.Property(e => e.RetiredBy).HasMaxLength(320);
+            entity.Property(e => e.CreatedBy).HasMaxLength(320);
+            entity.Property(e => e.UpdatedBy).HasMaxLength(320);
+
+            entity.HasOne(e => e.MigrationCampaign)
+                .WithMany()
+                .HasForeignKey(e => e.MigrationCampaignId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // NoAction: same "second cascade path from DatabaseInstance via MigrationCampaign" shape
+            // as ChangeValidation/RehearsalRecord above.
+            entity.HasOne(e => e.DatabaseInstance)
+                .WithMany()
+                .HasForeignKey(e => e.DatabaseInstanceId)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            entity.HasIndex(e => e.DatabaseInstanceId);
         });
     }
 }

@@ -1,0 +1,240 @@
+@page "/instances/{Id:int}/retirement"
+@attribute [Authorize]
+@using DBTracker.Core.Entities
+@using DBTracker.Core.Enums
+@using DBTracker.Core.Services
+@using DBTracker.Infrastructure.Identity
+@using DBTracker.Infrastructure.Queries
+@using DBTracker.Infrastructure.Retirement
+@using Microsoft.AspNetCore.Components.Authorization
+@inject InstanceOverviewService OverviewService
+@inject RetirementChecklistService Checklists
+@inject AuthenticationStateProvider AuthProvider
+@inject DBTracker.Web.Services.ToastService Toasts
+@inject NavigationManager Nav
+
+<PageTitle>@(_instance?.Name ?? "Instance") retirement checklist · DBTracker</PageTitle>
+
+@if (!_loaded)
+{
+    <div class="spinner-ring"></div>
+}
+else if (_instance is null)
+{
+    <div class="dbt-card" style="max-width:600px;">
+        <div class="empty-state py-4"><i class="bi bi-question-diamond"></i> Instance #@Id doesn't exist.</div>
+        <a class="btn btn-outline-secondary" href="/instances">Back to instances</a>
+    </div>
+}
+else if (_instance.IsArchived)
+{
+    <div class="dbt-card" style="max-width:700px;">
+        <div class="empty-state py-4"><i class="bi bi-door-closed"></i> @_instance.Name is already archived/retired.</div>
+        <a class="btn btn-outline-secondary" href="/instances/@Id">Back to instance detail</a>
+    </div>
+}
+else if (_view is not null)
+{
+    <div class="app-topbar">
+        <div>
+            <div class="eyebrow">Decommission / source-retirement checklist (D22)</div>
+            <h1>@_instance.Name — checklist #@_view.Checklist.Id</h1>
+            <div class="subtitle">
+                <a href="/instances/@Id">Back to instance detail</a> ·
+                Archive only after every gate passes (or a scoped D14 exception targeting
+                <code>RetirementChecklist #@_view.Checklist.Id</code> is Active) — retiring here calls the existing U14 archive flow, never a second mechanism.
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-3">
+        <div class="col-lg-7">
+            <div class="dbt-card">
+                <h2 class="h6 text-muted text-uppercase mb-3">Gates</h2>
+                <table class="table table-sm dbt-table mb-0" data-testid="retirement-gate-table">
+                    <thead><tr><th>Gate</th><th>Status</th><th>Detail</th></tr></thead>
+                    <tbody>
+                        @foreach (var gate in _view.Evaluation.Gates)
+                        {
+                            <tr data-testid="retirement-gate-row">
+                                <td class="small">@gate.Label</td>
+                                <td class="small"><span class="badge-health dot @GateCssClass(gate.Status)" data-testid="retirement-gate-status">@gate.Status</span></td>
+                                <td class="small">@gate.Detail</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+
+                <div class="mt-3" data-testid="retirement-overall-status">
+                    @if (_view.Evaluation.AllGatesSatisfied)
+                    {
+                        <span class="badge-health dot OnTrack">All gates satisfied</span>
+                    }
+                    else if (_view.HasActiveException)
+                    {
+                        <span class="badge-health dot Overdue">Blocked, but a scoped exception is Active</span>
+                    }
+                    else
+                    {
+                        <span class="badge-health dot Failed">Blocked</span>
+                        <ul class="small text-muted mt-2 mb-0" data-testid="retirement-blocking-reasons">
+                            @foreach (var reason in _view.Evaluation.BlockingReasons)
+                            {
+                                <li>@reason</li>
+                            }
+                        </ul>
+                        <p class="small text-muted mt-2 mb-0">
+                            No currently-Active exception. A scoped bypass can be recorded at
+                            <a href="/exceptions">/exceptions</a> with target type <code>RetirementChecklist</code> and target id <code>@_view.Checklist.Id</code>.
+                        </p>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-5">
+            <AuthorizeView Roles="@Roles.CanEditPolicy">
+                <div class="dbt-card mb-3">
+                    <h2 class="h6 text-muted text-uppercase mb-3">Manual review fields</h2>
+
+                    <div class="form-check mb-2">
+                        <input class="form-check-input" type="checkbox" id="legal-hold-reviewed" @bind="_legalHoldReviewed" data-testid="legal-hold-reviewed-checkbox" />
+                        <label class="form-check-label small" for="legal-hold-reviewed">Retention/legal-hold obligations reviewed (D17)</label>
+                    </div>
+                    <textarea class="form-control form-control-sm mb-2" rows="2" placeholder="Legal-hold review notes" @bind="_legalHoldNotes"></textarea>
+
+                    <div class="form-check mb-2">
+                        <input class="form-check-input" type="checkbox" id="cost-contract-reviewed" @bind="_costContractReviewed" data-testid="cost-contract-reviewed-checkbox" />
+                        <label class="form-check-label small" for="cost-contract-reviewed">Cost/contract review completed (D21)</label>
+                    </div>
+                    <textarea class="form-control form-control-sm mb-2" rows="2" placeholder="Cost/contract review notes" @bind="_costContractNotes"></textarea>
+
+                    <textarea class="form-control form-control-sm mb-2" rows="2" placeholder="Final backup/key-access evidence notes" @bind="_finalBackupNotes"></textarea>
+                    <textarea class="form-control form-control-sm mb-2" rows="2" placeholder="Externally performed access/monitoring-cleanup note" @bind="_externalCleanupNotes"></textarea>
+
+                    <button class="btn btn-outline-secondary btn-sm" @onclick="SaveManualFields" data-testid="save-retirement-fields">Save review fields</button>
+
+                    <hr />
+                    <div class="row g-2 mb-2">
+                        <div class="col-6"><input class="form-control form-control-sm" placeholder="Application owner name" @bind="_appOwnerName" @bind:event="oninput" /></div>
+                        <button class="btn btn-link btn-sm p-0 col-6 text-start" @onclick="SignAppOwner" disabled="@string.IsNullOrWhiteSpace(_appOwnerName)" data-testid="sign-app-owner">
+                            Sign as application owner@(_view.Checklist.AppOwnerSignoffAtUtc is { } a ? $" (signed by {_view.Checklist.AppOwnerSignoffBy})" : "")
+                        </button>
+                    </div>
+                    <div class="row g-2">
+                        <div class="col-6"><input class="form-control form-control-sm" placeholder="Platform owner name" @bind="_platformOwnerName" @bind:event="oninput" /></div>
+                        <button class="btn btn-link btn-sm p-0 col-6 text-start" @onclick="SignPlatform" disabled="@string.IsNullOrWhiteSpace(_platformOwnerName)" data-testid="sign-platform">
+                            Sign as platform@(_view.Checklist.PlatformSignoffAtUtc is { } p ? $" (signed by {_view.Checklist.PlatformSignoffBy})" : "")
+                        </button>
+                    </div>
+                </div>
+
+                <div class="dbt-card">
+                    <h2 class="h6 text-muted text-uppercase mb-3">Complete retirement</h2>
+                    <p class="small text-muted">Calls the existing U14 archive flow (preserving its own preview/reason/history behavior) once every gate passes or an Active scoped exception exists.</p>
+                    <input class="form-control form-control-sm mb-2" placeholder="Retirement reason (required — becomes the archive reason)" @bind="_retirementReason" @bind:event="oninput" data-testid="retirement-reason-input" />
+                    <button class="btn btn-danger btn-sm" @onclick="CompleteRetirement"
+                            disabled="@(_completing || string.IsNullOrWhiteSpace(_retirementReason) || !_view.CanRetire)"
+                            data-testid="complete-retirement-button">
+                        @(_completing ? "Retiring…" : "Complete retirement (archive)")
+                    </button>
+                </div>
+            </AuthorizeView>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    private DatabaseInstance? _instance;
+    private bool _loaded;
+    private string? _userId, _userName;
+    private RetirementChecklistView? _view;
+    private bool _completing;
+
+    private bool _legalHoldReviewed, _costContractReviewed;
+    private string _legalHoldNotes = "", _costContractNotes = "", _finalBackupNotes = "", _externalCleanupNotes = "";
+    private string _appOwnerName = "", _platformOwnerName = "", _retirementReason = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        var state = await AuthProvider.GetAuthenticationStateAsync();
+        _userName = state.User.Identity?.Name ?? "unknown";
+        _userId = state.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? _userName;
+        await Load();
+        _loaded = true;
+    }
+
+    private async Task Load()
+    {
+        var overview = await OverviewService.GetByIdAsync(Id);
+        _instance = overview?.Instance;
+        if (_instance is null || _instance.IsArchived)
+        {
+            return;
+        }
+
+        var checklist = await Checklists.GetOrCreateForInstanceAsync(Id, null, _userName ?? "unknown");
+        _view = await Checklists.GetViewAsync(checklist.Id);
+        if (_view is not null)
+        {
+            _legalHoldReviewed = _view.Checklist.LegalHoldReviewed;
+            _legalHoldNotes = _view.Checklist.LegalHoldReviewNotes;
+            _costContractReviewed = _view.Checklist.CostContractReviewed;
+            _costContractNotes = _view.Checklist.CostContractReviewNotes;
+            _finalBackupNotes = _view.Checklist.FinalBackupEvidenceNotes;
+            _externalCleanupNotes = _view.Checklist.ExternalCleanupNotes;
+        }
+    }
+
+    private async Task SaveManualFields()
+    {
+        await Checklists.UpdateManualFieldsAsync(_view!.Checklist.Id, _legalHoldReviewed, _legalHoldNotes, _externalCleanupNotes,
+            _costContractReviewed, _costContractNotes, _finalBackupNotes, _userName ?? "unknown");
+        Toasts.Success("Review fields saved.");
+        await Load();
+    }
+
+    private async Task SignAppOwner()
+    {
+        await Checklists.RecordSignoffAsync(_view!.Checklist.Id, isApplicationOwner: true, _appOwnerName, _userName ?? "unknown");
+        Toasts.Success("Application-owner sign-off recorded.");
+        _appOwnerName = "";
+        await Load();
+    }
+
+    private async Task SignPlatform()
+    {
+        await Checklists.RecordSignoffAsync(_view!.Checklist.Id, isApplicationOwner: false, _platformOwnerName, _userName ?? "unknown");
+        Toasts.Success("Platform sign-off recorded.");
+        _platformOwnerName = "";
+        await Load();
+    }
+
+    private async Task CompleteRetirement()
+    {
+        _completing = true;
+        var (ok, reason) = await Checklists.CompleteRetirementAsync(_view!.Checklist.Id, _retirementReason, _userId ?? "unknown", _userName ?? "unknown");
+        _completing = false;
+
+        if (ok)
+        {
+            Toasts.Success($"{_instance!.Name} retired — archived via the existing U14 flow.");
+            Nav.NavigateTo($"/instances/{Id}");
+        }
+        else
+        {
+            Toasts.Error($"Not retired: {reason}");
+            await Load();
+        }
+    }
+
+    private static string GateCssClass(RetirementGateStatus status) => status switch
+    {
+        RetirementGateStatus.Passed => "OnTrack",
+        RetirementGateStatus.NotApplicable => "OnTrack",
+        RetirementGateStatus.Blocked => "Failed",
+        _ => "Overdue"
+    };
+}

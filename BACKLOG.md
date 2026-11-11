@@ -804,6 +804,75 @@ authenticated role already, same as the rest of the app, so no separate "my apps
   point, and a certificate-expiry reminder plus a CSV export proving a planted secret-looking value
   never survives past redaction. Full suite: 598/598 (513 unit + 85 E2E). This completes Epic 21
   (D16-D20) in full; Epic 22 (D21-D22) remains proposed and unimplemented.
+- 2026-11-10 — Built Epic 22 (D21-D22), the fifth and final epic of the DBA lifecycle roadmap — this
+  closes the entire backlog: every originally-requested epic, the full usability roadmap (U01-U22,
+  Epics 13-17) and the full DBA lifecycle roadmap (D01-D22, Epics 18-22) are now all complete. **D21**
+  — a new `SupportContract` (vendor, coverage type/dates, owner, renewal-evidence reference) links to
+  one or more instances via `SupportContractAssignment`; pure `EntitlementStatusClassifier` computes
+  NoContractOnFile/Active/ExpiringSoon/Expired from contracts and "now" only — it deliberately never
+  reads `VersionIdentity`/`ReleaseCatalogEntry`/`SupportRunwayDecision`, so a product's D02/D03
+  lifecycle/support-phase status and its D21 entitlement status are always two independent facts that
+  can legitimately disagree, shown side-by-side (with a direct link to the Lifecycle page) on a new
+  per-instance `/instances/{id}/entitlement` page rather than derived from each other. Reviewed
+  target-edition licensing constraints and an estimated extended-support-or-migration cost
+  (`EditionCostEstimate`: currency, date, stated assumptions, reviewer) are commercial evidence,
+  restricted to a new `Roles.CommercialEvidencePolicy` (Admin/ITManager — narrower than the usual
+  DBA-inclusive `CanEditPolicy`, since a DBA can record a contract fact but not the dollar figures);
+  pure `CostEstimateAggregator` sums reviewed estimates by type (withholding a total rather than
+  summing mismatched currencies) and `CostEvidenceMasker` masks the figures for every other role, at
+  the one page every viewer shares — same chokepoint pattern as D17's `BackupCopyLocationMasker`. A
+  `CampaignAlternative.SourceCostEstimateId` link lets a D10 alternative trace back to the reviewed
+  estimate it used, and a D21 estimate's id is citable directly in a D14 exception's existing
+  evidence fields — both reuse what D10/D14 already have rather than adding a parallel mechanism.
+  **D22** — a new `RetirementChecklist` per instance (optionally linked to a D10 campaign) is gated by
+  pure `RetirementChecklistGateEvaluator`, which classifies seven gates — downstream consumers and
+  jobs/replicas/linked-services/backup-tooling resolved (both reusing D07 `InstanceDependency`), final
+  recoverable backup/key-access evidence retained (reusing D16's `BackupChainCoverageCalculator`, D17's
+  `BackupCopyAvailabilityEvaluator`, and D20's `CertificateDependency.VerifiedBackupRestoreAccess`),
+  the change's rollback window closed (reusing D13's `RollbackRetentionDeadlineUtc`), retention/
+  legal-hold obligations reviewed (D17), application/platform sign-off, and cost/contract review
+  (D21) — as Blocked, Unknown or NotApplicable, with Unknown and NotApplicable both deliberately
+  *not* treated as passing: nothing here is ever silently promoted to green. Every gate satisfied, or
+  a scoped, currently-Active D14 `ReadinessException` targeting that exact checklist (`TargetType`
+  `"RetirementChecklist"`), is the only way `RetirementChecklistService.CompleteRetirementAsync` will
+  proceed — and when it does, it calls nothing but the pre-existing U14 `InstanceArchiveService.
+  ArchiveAsync`, preserving that service's own preview/reason/history behavior exactly, then stamps
+  `RetiredAtUtc`/`RetiredBy` on the checklist for lineage. There is no second archive/delete path, no
+  automated backup/data deletion anywhere in this epic, and no automatic legal/license compliance
+  certification in D21 — both record-keeping/evidence layers only, exactly as scoped. One new EF
+  migration (`AddSupportEntitlementAndRetirementEpic22`) for the four new tables plus
+  `CampaignAlternative.SourceCostEstimateId`; continuing the `NoAction`-on-shared-parent-table pattern
+  from Epics 18-21, `RetirementChecklist.DatabaseInstanceId` and `CampaignAlternative.
+  SourceCostEstimateId` both use `NoAction` (the former for the same "also reachable via
+  MigrationCampaign" shape as `ChangeValidation`/`RehearsalRecord`; the latter defensively, since
+  nothing in this app deletes a cost estimate). `dotnet ef migrations has-pending-model-changes`
+  reports clean, and the migration was verified by actually applying it to a live SQL Server database
+  (not just generating it) — no cascade-path error. Found and fixed two real application bugs while
+  building this: an EF Core query called `.Include(c => c.OwnerTeam)` *after* `.Select(a =>
+  a.SupportContract!)` projected the query away from its root entity, which broke the entitlement
+  page outright for every role (caught immediately by the first E2E test exercising that page, not
+  guessed) — fixed by moving the `Include`/`ThenInclude` before materializing and projecting
+  separately afterward. Second, the same recurring class of bug called out in the Epic 15-17 entries
+  above: the cost-estimate amount field used a plain `@bind` (change/blur-triggered) instead of
+  `@bind:event="oninput"`, so filling it and clicking "Record estimate" at realistic speed left the
+  button stuck disabled — fixed the same way those earlier instances were. Also hardened a genuine
+  (if minor) app bug, not just a test issue: `CostEvidenceMasker.MaskAmount` formatted figures with
+  `{amount:N2}` against the server process's ambient thread culture, so the exact same dollar amount
+  could render with different digit grouping depending on the host machine's locale — fixed to format
+  with `CultureInfo.InvariantCulture` explicitly, so a cost estimate reads identically regardless of
+  where the app happens to be running. 33 new unit tests (`EntitlementStatusClassifierTests`,
+  `CostEstimateAggregatorTests`, `RetirementChecklistGateEvaluatorTests`) and 3 new E2E tests
+  (`Epic22EntitlementAndRetirementTests`) covering a linked support contract whose Expired entitlement
+  status is shown and reasoned about entirely separately from the instance's lifecycle/support-phase
+  page, a cost estimate visible with its real figure to an ITManager but masked for a Viewer (who also
+  has no path to record one at all), and a retirement checklist blocked on an unresolved downstream
+  dependency, passing that one gate once resolved, still correctly blocked overall by the remaining
+  unreviewed/unsigned gates, then bypassed via a scoped D14 exception and completed — verified by
+  landing back on the instance detail page showing the pre-existing U14 "archived" banner and reason,
+  and by confirming the instance actually appears in U14's own pre-existing archived-instances browser
+  rather than some new mechanism. Full suite: 634/634 (546 unit + 88 E2E). This completes Epic 22
+  (D21-D22) in full and closes out the entire backlog: Epics 13-22 (U01-U22, D01-D22) are now all
+  complete, alongside the originally-requested Epics 1-12.
 
 ## Out of scope (future)
 - Automated backup execution/orchestration (this tracks status, doesn't run backups)
@@ -1251,7 +1320,7 @@ A newer release alone does not make migration required. No automatic upgrade exe
 
 ### Epic 22 - Support entitlement and safe retirement
 
-- [ ] **2026-11-10 | D21 | NEW | P2 | M - Support contracts and edition-cost readiness.**
+- [x] **2026-11-10 | D21 | NEW | P2 | M - Support contracts and edition-cost readiness.**
   Procurement/manager/DBA personas need verified coverage and target-edition implications.
   **Acceptance:** link support agreement references to products/deployments, coverage type, dates,
   owner and renewal evidence; flag missing/expired entitlement separately from product lifecycle.
@@ -1259,7 +1328,7 @@ A newer release alone does not make migration required. No automatic upgrade exe
   migration cost with currency/date/assumptions. Restrict commercial evidence appropriately; no
   automatic legal/license compliance certification. Depends on D01-D03; feeds D10 alternatives/D14.
 
-- [ ] **2026-11-10 | D22 | NEW | P2 | M - Decommission and source-retirement checklist.**
+- [x] **2026-11-10 | D22 | NEW | P2 | M - Decommission and source-retirement checklist.**
   DBA/app-owner/auditor personas need a safe end state after replacement or migration.
   **Acceptance:** validate consumers moved, jobs/replicas removed or redirected, final recoverable
   backup/key evidence retained, rollback window closed and retention/hold obligations reviewed.
