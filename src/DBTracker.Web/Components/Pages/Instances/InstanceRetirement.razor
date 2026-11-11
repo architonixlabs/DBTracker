@@ -56,7 +56,7 @@ else if (_view is not null)
     <div class="row g-3">
         <div class="col-lg-7">
             <div class="dbt-card">
-                <h2 class="h6 text-muted text-uppercase mb-3">Gates</h2>
+                <h2 class="h6 text-muted mb-3">Gates</h2>
                 <table class="table table-sm dbt-table mb-0" data-testid="retirement-gate-table" aria-label="Retirement gates">
                     <thead><tr><th scope="col">Gate</th><th scope="col">Status</th><th scope="col">Detail</th></tr></thead>
                     <tbody>
@@ -101,7 +101,7 @@ else if (_view is not null)
         <div class="col-lg-5">
             <AuthorizeView Roles="@Roles.CanEditPolicy">
                 <div class="dbt-card mb-3">
-                    <h2 class="h6 text-muted text-uppercase mb-3">Manual review fields</h2>
+                    <h2 class="h6 text-muted mb-3">Manual review fields</h2>
 
                     <div class="form-check mb-2">
                         <input class="form-check-input" type="checkbox" id="legal-hold-reviewed" @bind="_legalHoldReviewed" data-testid="legal-hold-reviewed-checkbox" />
@@ -140,7 +140,7 @@ else if (_view is not null)
                 </div>
 
                 <div class="dbt-card">
-                    <h2 class="h6 text-muted text-uppercase mb-3">Complete retirement</h2>
+                    <h2 class="h6 text-muted mb-3">Complete retirement</h2>
                     <p class="small text-muted">Archives the instance through the normal archive action, with its reason and history, once every gate passes or a scoped exception is Active.</p>
                     <label class="form-label small mb-1" for="retirement-reason">Retirement reason (required, saved as the archive reason)</label>
                     <input id="retirement-reason" class="form-control form-control-sm mb-2" placeholder="Retirement reason (required: becomes the archive reason)" @bind="_retirementReason" @bind:event="oninput" data-testid="retirement-reason-input" />

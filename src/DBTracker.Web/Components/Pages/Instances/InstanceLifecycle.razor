@@ -51,7 +51,7 @@ else
     <div class="row g-3">
         <div class="col-lg-6">
             <div class="dbt-card h-100">
-                <h2 class="h6 text-muted text-uppercase mb-3">Installed-version identity</h2>
+                <h2 class="h6 text-muted mb-3">Installed-version identity</h2>
 
                 @if (_identity is null)
                 {
@@ -139,7 +139,7 @@ else
 
         <div class="col-lg-6">
             <div class="dbt-card h-100">
-                <h2 class="h6 text-muted text-uppercase mb-3">Support runway</h2>
+                <h2 class="h6 text-muted mb-3">Support runway</h2>
 
                 @if (_runway is null)
                 {
@@ -200,7 +200,7 @@ else
 
         <div class="col-lg-6">
             <div class="dbt-card h-100">
-                <h2 class="h6 text-muted text-uppercase mb-3">Release availability &amp; patch baseline</h2>
+                <h2 class="h6 text-muted mb-3">Release availability &amp; patch baseline</h2>
 
                 @if (_patchBaseline is null)
                 {
@@ -234,7 +234,7 @@ else
 
         <div class="col-lg-6">
             <div class="dbt-card h-100">
-                <h2 class="h6 text-muted text-uppercase mb-3">Advisory applicability</h2>
+                <h2 class="h6 text-muted mb-3">Advisory applicability</h2>
 
                 <AuthorizeView Roles="@Roles.CanEditPolicy">
                     <button type="button" class="btn btn-outline-secondary btn-sm mb-2" @onclick="EvaluateAdvisories">Evaluate advisories for this instance</button>
@@ -275,7 +275,7 @@ else
 
         <div class="col-12">
             <div class="dbt-card">
-                <h2 class="h6 text-muted text-uppercase mb-3">Version attestation &amp; observed-metadata drift</h2>
+                <h2 class="h6 text-muted mb-3">Version attestation &amp; observed-metadata drift</h2>
                 <p class="small text-muted">
                     Versions are confirmed by manual attestation (above) or by entering what was observed or imported. DBTracker doesn't
                     connect to the database to collect versions itself.

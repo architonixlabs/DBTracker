@@ -104,7 +104,7 @@ public class EvidenceAndHealthExplanationTests
         await _page.ClickAsync("button[type=submit]:text('Log backup')");
         await _page.WaitForTimeoutAsync(800);
 
-        await Assertions.Expect(explanationCard.Locator("dt:text-is('Next due') ~ dd, dt:text-is('Next due') + dd").First).Not.ToContainTextAsync("—");
+        await Assertions.Expect(explanationCard.Locator("dt:text-is('Next due') ~ dd, dt:text-is('Next due') + dd").First).Not.ToContainTextAsync("No successful backup yet");
     }
 
     [Test]

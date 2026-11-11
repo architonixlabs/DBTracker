@@ -48,7 +48,7 @@ else
     <div class="row g-3">
         <div class="col-lg-6">
             <div class="dbt-card h-100">
-                <h2 class="h6 text-muted text-uppercase mb-3">Recovery objectives</h2>
+                <h2 class="h6 text-muted mb-3">Recovery objectives</h2>
                 <div class="row g-2 mb-2">
                     <div class="col-6">
                         <label class="form-label small text-muted mb-1" for="rpo-minutes">RPO target (minutes)</label>
@@ -93,7 +93,7 @@ else
 
         <div class="col-lg-6">
             <div class="dbt-card h-100">
-                <h2 class="h6 text-muted text-uppercase mb-3">Backup-chain coverage</h2>
+                <h2 class="h6 text-muted mb-3">Backup-chain coverage</h2>
 
                 <div class="mb-3" data-testid="chain-coverage-status">
                     <span class="badge-health dot @CoverageCssClass(_coverage!.Status)">@_coverage.Status</span>
@@ -170,7 +170,7 @@ else
 
         <div class="col-12">
             <div class="dbt-card">
-                <h2 class="h6 text-muted text-uppercase mb-3">Backup-copy availability and retention</h2>
+                <h2 class="h6 text-muted mb-3">Backup-copy availability and retention</h2>
                 <p class="small text-muted">Finding a copy once doesn't mean it is available now. Only a current, recent verification that the copy is accessible counts toward retention coverage.</p>
 
                 <div class="mb-3" data-testid="retention-coverage-status">

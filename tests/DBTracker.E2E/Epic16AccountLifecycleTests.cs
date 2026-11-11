@@ -96,7 +96,7 @@ public class Epic16AccountLifecycleTests
         await _page.FillAsync("#fp-email", "priya.nair@architonixlabs.com");
         await _page.ClickAsync("button[type=submit]");
         await _page.WaitForSelectorAsync("text=If an account exists", new PageWaitForSelectorOptions { Timeout = 10000 });
-        var existingAccountText = await _page.Locator(".term-body").InnerTextAsync();
+        var existingAccountText = await _page.Locator("[data-testid=forgot-password-panel]").InnerTextAsync();
 
         await GotoAsync("/Account/ForgotPassword");
         await _page.WaitForSelectorAsync("#fp-email");
@@ -104,7 +104,7 @@ public class Epic16AccountLifecycleTests
         await _page.FillAsync("#fp-email", "definitely-nobody-e2e@architonixlabs.com");
         await _page.ClickAsync("button[type=submit]");
         await _page.WaitForSelectorAsync("text=If an account exists", new PageWaitForSelectorOptions { Timeout = 10000 });
-        var nonExistentAccountText = await _page.Locator(".term-body").InnerTextAsync();
+        var nonExistentAccountText = await _page.Locator("[data-testid=forgot-password-panel]").InnerTextAsync();
 
         Assert.That(nonExistentAccountText, Does.Contain("If an account exists"));
         Assert.That(existingAccountText, Does.Contain("If an account exists"));

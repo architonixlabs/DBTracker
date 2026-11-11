@@ -59,7 +59,7 @@ else
     <div class="row g-3">
         <div class="col-12">
             <div class="dbt-card">
-                <h2 class="h6 text-muted text-uppercase mb-3">Technical dependencies</h2>
+                <h2 class="h6 text-muted mb-3">Technical dependencies</h2>
                 <p class="small text-muted">Deployments, nodes, hosted databases, drivers, extensions and plugins, jobs, linked services, replicas and HA groups, and backup tooling that this instance relies on, or that rely on it.</p>
 
                 @if (_dependencies.Count == 0)
@@ -157,7 +157,7 @@ else
 
         <div class="col-lg-6">
             <div class="dbt-card h-100">
-                <h2 class="h6 text-muted text-uppercase mb-3">Source-to-target path assessment</h2>
+                <h2 class="h6 text-muted mb-3">Source-to-target path assessment</h2>
                 <p class="small text-muted">Each path is classified Supported, Blocked or Unknown against a reviewed rule set. A path with no matching rule is always Unknown, never Supported.</p>
 
                 @if (_pathAssessments.Count > 0)
@@ -223,7 +223,7 @@ else
 
         <div class="col-lg-6">
             <div class="dbt-card h-100">
-                <h2 class="h6 text-muted text-uppercase mb-3">Upgrade-readiness checklist</h2>
+                <h2 class="h6 text-muted mb-3">Upgrade-readiness checklist</h2>
 
                 @if (_checklist is null)
                 {

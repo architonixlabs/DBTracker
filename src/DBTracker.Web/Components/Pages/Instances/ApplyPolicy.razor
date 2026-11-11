@@ -34,7 +34,7 @@ else if (_policies.Count == 0)
 else
 {
     <div class="dbt-card mb-4" style="max-width:600px;">
-        <h2 class="h6 text-muted text-uppercase mb-3">Choose a policy</h2>
+        <h2 class="h6 text-muted mb-3">Choose a policy</h2>
         <label class="form-label visually-hidden" for="policy-select">Backup policy</label>
         <select id="policy-select" class="form-select" value="@_selectedPolicyId" @onchange="OnPolicyChanged">
             @foreach (var p in _policies)
@@ -51,7 +51,7 @@ else
     {
         var changing = _preview.Where(r => !r.AlreadyUpToDate).ToList();
         <div class="dbt-card" style="max-width:900px;">
-            <h2 class="h6 text-muted text-uppercase mb-3">Impact preview: @changing.Count of @_instanceIds.Count instance(s) would change</h2>
+            <h2 class="h6 text-muted mb-3">Impact preview: @changing.Count of @_instanceIds.Count instance(s) would change</h2>
             @if (changing.Count == 0)
             {
                 <div class="empty-state py-3"><i class="bi bi-check-circle" aria-hidden="true"></i> Every selected instance already matches this policy's current version.</div>

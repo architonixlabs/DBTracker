@@ -20,7 +20,7 @@
 </div>
 
 <div class="dbt-card" style="max-width: 900px;">
-    <h2 class="h6 text-muted text-uppercase mb-3">File</h2>
+    <h2 class="h6 text-muted mb-3">File</h2>
     <p class="text-muted small mb-3" id="import-file-help">
         The first row must be a header. Only the <strong>Name</strong> and <strong>Engine</strong> columns are required.
         Rows are matched to the existing inventory by Name, ignoring case: a matching name updates that instance,
@@ -46,7 +46,7 @@
 @if (_preview is not null)
 {
     <div class="dbt-card mt-4">
-        <h2 class="h6 text-muted text-uppercase mb-3">Preview</h2>
+        <h2 class="h6 text-muted mb-3">Preview</h2>
 
         <p class="mb-3">
             <span style="color:var(--dbt-ontrack)">@_preview.CreateCount create</span>,

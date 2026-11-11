@@ -97,7 +97,7 @@ else
     </div>
 
     <div class="d-flex justify-content-between align-items-center mb-3">
-        <h2 class="h5 mb-0" style="font-family:var(--dbt-mono);font-weight:500;color:var(--dbt-sidebar-fg-active);">@(_filterHealth is null ? "All instances, most at risk first" : $"Instances: {FilterLabel(_filterHealth)}")</h2>
+        <h2 class="h5 mb-0" style="font-weight:600;color:var(--dbt-sidebar-fg-active);">@(_filterHealth is null ? "All instances, most at risk first" : $"Instances: {FilterLabel(_filterHealth)}")</h2>
         <a class="small" href="@($"/instances{(_filterHealth is null ? "" : $"?health={_filterHealth}")}")">Open in Instances (filtered, sortable, shareable) &rarr;</a>
     </div>
 

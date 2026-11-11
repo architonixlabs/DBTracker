@@ -49,18 +49,18 @@ public class Epic17TrendsTests
         await Assertions.Expect(missingEvidenceAlert).ToBeVisibleAsync();
 
         var comparisonTable = _page.Locator("[role=region][aria-label*='Trend comparison']");
-        await Assertions.Expect(comparisonTable).ToContainTextAsync("No snapshot — missing evidence");
+        await Assertions.Expect(comparisonTable).ToContainTextAsync("No snapshot: missing evidence");
 
         // Period B: the inventory denominator is a real number (every seeded instance), not blank/zero-by-default.
         var inventoryRow = comparisonTable.Locator("tr", new LocatorLocatorOptions { HasText = "Inventory (denominator)" });
         await Assertions.Expect(inventoryRow).ToBeVisibleAsync();
         var inventoryCells = await inventoryRow.Locator("td").AllTextContentsAsync();
-        Assert.That(inventoryCells.Last().Trim(), Is.Not.Empty.And.Not.EqualTo("—"));
+        Assert.That(inventoryCells.Last().Trim(), Is.Not.Empty.And.Not.EqualTo("No data"));
         Assert.That(int.Parse(inventoryCells.Last().Trim()), Is.GreaterThanOrEqualTo(10));
 
         // Drill-down: Period B's at-risk rows table lists the actual seeded Failed/Overdue
         // instances behind the "at-risk" number, not just the count.
-        await Assertions.Expect(_page.Locator("text=Period B — at-risk rows")).ToBeVisibleAsync();
+        await Assertions.Expect(_page.Locator("text=Period B: at-risk rows")).ToBeVisibleAsync();
         var periodBDrillDown = _page.Locator("[role=region][aria-label='Period B at-risk instances']");
         await Assertions.Expect(periodBDrillDown).ToBeVisibleAsync();
         await Assertions.Expect(periodBDrillDown).ToContainTextAsync("CONTOSO-HR-MYSQL");

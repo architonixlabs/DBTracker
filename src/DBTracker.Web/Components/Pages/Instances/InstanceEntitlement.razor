@@ -47,7 +47,7 @@ else
     <div class="row g-3">
         <div class="col-lg-6">
             <div class="dbt-card h-100">
-                <h2 class="h6 text-muted text-uppercase mb-3">Entitlement status</h2>
+                <h2 class="h6 text-muted mb-3">Entitlement status</h2>
                 <p class="small text-muted">
                     Based only on the support contracts linked below, not on the product's vendor support phase.
                     A product can be inside its vendor's Mainstream support window with <strong>no contract on file</strong>, or past that window with
@@ -84,7 +84,7 @@ else
 
                 <AuthorizeView Roles="@Roles.CommercialEvidencePolicy">
                     <hr />
-                    <h3 class="small text-muted text-uppercase mb-2">Link a support contract</h3>
+                    <h3 class="small text-muted mb-2">Link a support contract</h3>
                     <div class="row g-2 mb-2">
                         <div class="col-6"><label class="form-label small mb-1" for="contract-vendor">Vendor (required)</label><input id="contract-vendor" class="form-control form-control-sm" placeholder="Vendor" @bind="_vendor" @bind:event="oninput" /></div>
                         <div class="col-6">
@@ -118,7 +118,7 @@ else
 
         <div class="col-lg-6">
             <div class="dbt-card h-100">
-                <h2 class="h6 text-muted text-uppercase mb-3">Target-edition cost estimates</h2>
+                <h2 class="h6 text-muted mb-3">Target-edition cost estimates</h2>
                 <p class="small text-muted">
                     Reviewed licensing constraints for the target edition, with an estimated extended-support or migration cost.
                     Amounts are visible to Admin and IT Manager only; other roles see that an estimate exists, without the amount.
@@ -149,7 +149,7 @@ else
 
                 <AuthorizeView Roles="@Roles.CommercialEvidencePolicy">
                     <hr />
-                    <h3 class="small text-muted text-uppercase mb-2">Record a cost estimate</h3>
+                    <h3 class="small text-muted mb-2">Record a cost estimate</h3>
                     <div class="row g-2 mb-2">
                         <div class="col-6">
                             <label class="form-label small mb-1" for="estimate-type">Estimate type</label>

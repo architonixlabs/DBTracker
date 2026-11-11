@@ -71,7 +71,7 @@ else
         <EditForm EditContext="_editContext" OnSubmit="Save">
             <DataAnnotationsValidator />
 
-            <h2 class="h6 text-muted text-uppercase mb-3">Identity</h2>
+            <h2 class="h6 text-muted mb-3">Identity</h2>
             <div class="row g-3 mb-4">
                 <div class="col-md-6">
                     <label class="form-label" for="ed-name">Instance name</label>
@@ -93,7 +93,7 @@ else
                 </div>
             </div>
 
-            <h2 class="h6 text-muted text-uppercase mb-3">Ownership</h2>
+            <h2 class="h6 text-muted mb-3">Ownership</h2>
             <div class="row g-3 mb-4">
                 <div class="col-md-4">
                     <label class="form-label" for="ed-application">Application</label>
@@ -126,7 +126,7 @@ else
                 </div>
             </div>
 
-            <h2 class="h6 text-muted text-uppercase mb-3">Contact</h2>
+            <h2 class="h6 text-muted mb-3">Contact</h2>
             <div class="row g-3 mb-4">
                 <div class="col-md-4">
                     <label class="form-label" for="ed-contact-name">Contact name</label>
@@ -156,7 +156,7 @@ else
                 </div>
             </div>
 
-            <h2 class="h6 text-muted text-uppercase mb-3">Topology</h2>
+            <h2 class="h6 text-muted mb-3">Topology</h2>
             <div class="row g-3 mb-4">
                 <div class="col-md-3">
                     <label class="form-label" for="ed-role">Role</label>
@@ -198,7 +198,7 @@ else
                 </div>
             </div>
 
-            <h2 class="h6 text-muted text-uppercase mb-3">Connectivity check</h2>
+            <h2 class="h6 text-muted mb-3">Connectivity check</h2>
             <div class="row g-3 mb-4">
                 <div class="col-md-6">
                     <label class="form-label" for="ed-conn-host">Host/DNS override (optional)</label>
@@ -211,7 +211,7 @@ else
                 </div>
             </div>
 
-            <h2 class="h6 text-muted text-uppercase mb-3">Backup expectations</h2>
+            <h2 class="h6 text-muted mb-3">Backup expectations</h2>
             <div class="row g-3 mb-4">
                 <div class="col-md-4">
                     <label class="form-label" for="ed-interval">Expected backup interval (hours)</label>
@@ -259,7 +259,7 @@ else
                 else if (_preview is not null)
                 {
                     <div class="dbt-card mb-4">
-                        <h3 class="h6 text-muted text-uppercase mb-3">Scan preview</h3>
+                        <h3 class="h6 text-muted mb-3">Scan preview</h3>
                         @if (_preview.Count == 0)
                         {
                             <div class="empty-state py-3"><i class="bi bi-inbox" aria-hidden="true"></i> No files found at this location.</div>
@@ -299,7 +299,7 @@ else
                 }
             }
 
-            <h2 class="h6 text-muted text-uppercase mb-3">Reference</h2>
+            <h2 class="h6 text-muted mb-3">Reference</h2>
             <div class="row g-3 mb-4">
                 <div class="col-md-5">
                     <label class="form-label" for="ed-tags">Tags</label>
