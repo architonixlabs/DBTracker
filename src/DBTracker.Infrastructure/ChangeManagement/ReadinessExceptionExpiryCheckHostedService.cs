@@ -9,6 +9,7 @@ namespace DBTracker.Infrastructure.ChangeManagement;
 /// <summary>Periodic sweep for exception-expiry notices. ReadinessException:IntervalMinutes (default 1440); &lt;= 0 disables it.</summary>
 public class ReadinessExceptionExpiryCheckHostedService(
     IServiceScopeFactory scopeFactory,
+    Install.InstallState installState,
     IConfiguration configuration,
     WorkerHeartbeatStore heartbeats,
     ILogger<ReadinessExceptionExpiryCheckHostedService> logger) : BackgroundService
@@ -26,6 +27,7 @@ public class ReadinessExceptionExpiryCheckHostedService(
         }
 
         var interval = TimeSpan.FromMinutes(intervalMinutes);
+        await installState.WaitUntilInstalledAsync(stoppingToken);
         heartbeats.Starting(WorkerName, interval);
 
         while (!stoppingToken.IsCancellationRequested)

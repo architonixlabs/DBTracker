@@ -997,6 +997,41 @@ authenticated role already, same as the rest of the app, so no separate "my apps
   counted the summary strip before the new loading state finished (now waits for it), and one was a
   missing space in a heading introduced during the merge. **Not addressed:** a light-theme toggle and
   the remaining em dashes inside code comments (not user-facing).
+- 2026-11-11 · Built I01, the first-run setup wizard at `/install`. In Production (Development and
+  Testing are unchanged), an app with no `App_Data/dbtracker.config.json` and no working pre-wizard
+  deployment sends every page to `/install`, skips migrations, and keeps all six background workers
+  waiting on `InstallState.WaitUntilInstalledAsync`. Steps: one-time setup key (written to
+  `App_Data/setup-key.txt` and the log, constant-time compare, 5 wrong tries per minute per client),
+  SQL Server connection with Windows or SQL login (Test connection, create the database with a
+  `QUOTENAME`'d parameter, or keep an existing DBTracker database and apply only pending migrations),
+  table creation shown migration by migration, optional sample data plus the five demo accounts behind a
+  "not for production" warning, a required first Admin, optional email (ArxMail first, SMTP, or none) with
+  a test send that reports the real provider outcome, an optional backup-share read check as the running
+  identity, then a summary. Finishing creates the Admin before writing the config (so a failure can't
+  leave an installed app nobody can sign in to), writes the file with SQL, SMTP and ArxMail secrets
+  encrypted by Data Protection (keys in `App_Data/keys`, DPAPI machine scope on Windows), records an
+  audit event, deletes the setup key and lands on the login page. **No restart needed:** the config file
+  is loaded through a decrypting JSON provider and reloaded on finish, a singleton
+  `InstallAwareDbContextFactory` stamps each new context with the current connection string, and the
+  email sender is resolved per request. After setup `/install` answers 404, including after a restart.
+  The dev connection string moved from appsettings.json to appsettings.Development.json, since otherwise a
+  fresh Production deploy would inherit `Server=localhost` and never show the wizard (the deployment had
+  no other way in: Production never seeded any user). Static web assets now load in every environment
+  (a no-op when published), so a Production run from the build output serves its CSS and scripts. **Real
+  bugs found:** a first version built DbContext options per scope; contexts created by the notification
+  bell's timer after its page closed then hit a disposed service provider and the unhandled exception
+  killed the server (56 of 94 existing E2E tests failed with connection refused). Replaced with the
+  singleton factory above. The app's own not-found page requires sign-in, so a re-executed 404 for
+  `/install` turned into a login redirect; the gate now writes its own 404. At 360px, a phone-only rule
+  from the antislop pass set `min-height: 44px` on `.form-check-input`, stretching every checkbox and
+  radio in the app into a tall bar; the row (label plus input) is now the 44px target instead. Browser
+  validation on `type=email` fields blocked the wizard's own error list, so its forms are `novalidate`.
+  **Verified:** 592/592 unit (46 new) and 99/99 E2E (94 existing plus 5 new install tests: redirect and
+  wrong key, full wizard to the Admin's dashboard, 404 after setup, settings read back after a restart,
+  sample data with a demo login), each install test on its own port, data folder and throwaway
+  `DBTracker_InstallTest_*` database, dropped on teardown. Screenshots at 1280px and 360px checked: no
+  horizontal overflow, visible focus, no console errors from the app (the only 404 is the
+  `hot-reload-settings.json` dev-tooling request seen in any unpublished run).
 
 ## Out of scope (future)
 - Automated backup execution/orchestration (this tracks status, doesn't run backups)
@@ -1486,7 +1521,7 @@ warning. Found while scoping: a Production deploy today seeds no users at all, s
 
 ### Epic 23 - First-run installation
 
-- [ ] **2026-11-11 | I01 | NEW | P1 | L - Setup wizard at /install.**
+- [x] **2026-11-11 | I01 | NEW | P1 | L - Setup wizard at /install.**
   **Acceptance:** an uninstalled app sends every page request to `/install` and starts no background
   workers or migrations. Step 1 requires a one-time setup key that the app writes to
   `App_Data/setup-key.txt` and its log on first start (constant-time compare, attempts rate-limited,

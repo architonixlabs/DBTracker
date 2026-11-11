@@ -9,6 +9,7 @@ namespace DBTracker.Infrastructure.Recovery;
 /// <summary>Periodic certificate-expiry notice sweep. CertificateExpiry:IntervalMinutes (default 1440); &lt;= 0 disables it.</summary>
 public class CertificateExpiryCheckHostedService(
     IServiceScopeFactory scopeFactory,
+    Install.InstallState installState,
     IConfiguration configuration,
     WorkerHeartbeatStore heartbeats,
     ILogger<CertificateExpiryCheckHostedService> logger) : BackgroundService
@@ -26,6 +27,7 @@ public class CertificateExpiryCheckHostedService(
         }
 
         var interval = TimeSpan.FromMinutes(intervalMinutes);
+        await installState.WaitUntilInstalledAsync(stoppingToken);
         heartbeats.Starting(WorkerName, interval);
 
         while (!stoppingToken.IsCancellationRequested)

@@ -9,6 +9,7 @@ namespace DBTracker.Infrastructure.Lifecycle;
 /// <summary>Periodic support-runway notice sweep. SupportRunway:IntervalMinutes (default 1440); &lt;= 0 disables it.</summary>
 public class SupportRunwayCheckHostedService(
     IServiceScopeFactory scopeFactory,
+    Install.InstallState installState,
     IConfiguration configuration,
     WorkerHeartbeatStore heartbeats,
     ILogger<SupportRunwayCheckHostedService> logger) : BackgroundService
@@ -26,6 +27,7 @@ public class SupportRunwayCheckHostedService(
         }
 
         var interval = TimeSpan.FromMinutes(intervalMinutes);
+        await installState.WaitUntilInstalledAsync(stoppingToken);
         heartbeats.Starting(WorkerName, interval);
 
         while (!stoppingToken.IsCancellationRequested)

@@ -487,3 +487,6 @@ $RECYCLE.BIN/
 
 # Vim temporary swap files
 *.swp
+
+# Install wizard output: setup key, Data Protection keys, saved settings with encrypted secrets
+App_Data/

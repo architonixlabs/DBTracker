@@ -1,0 +1,965 @@
+@page "/install"
+@layout InstallLayout
+@attribute [AllowAnonymous]
+@implements IDisposable
+@using System.ComponentModel.DataAnnotations
+@using DBTracker.Core.Services.Install
+@using DBTracker.Infrastructure.Install
+@inject InstallState State
+@inject SetupKeyStore KeyStore
+@inject AttemptLimiter Limiter
+@inject InstallDatabaseService DatabaseService
+@inject InstallWizardService Wizard
+@inject NavigationManager Nav
+@inject PersistentComponentState AppState
+
+<PageTitle>Set up · DBTracker</PageTitle>
+
+<div class="auth-panel install-panel" data-testid="install-wizard">
+    <div class="auth-brand"><span class="brand-mark" aria-hidden="true"></span> DBTracker</div>
+    <h1>Set up DBTracker</h1>
+
+    <ol class="install-steps" aria-label="Setup steps">
+        @foreach (var step in Steps)
+        {
+            <li class="@StepClass(step)" aria-current="@(step == _step ? "step" : null)">@StepLabel(step)</li>
+        }
+    </ol>
+
+    <h2 class="install-step-title" tabindex="-1" @ref="_stepHeading">@StepTitle(_step)</h2>
+
+    @switch (_step)
+    {
+        case Step.Key:
+            <p class="auth-lede">
+                When DBTracker started without settings, it wrote a one-time setup key to <code>setup-key.txt</code> in its
+                <code>App_Data</code> folder on the server (or the folder set in <code>DBTRACKER_DATA_DIR</code>). The key is also in
+                the application log. Enter it to prove you can read files on this server.
+            </p>
+            <EditForm Model="_keyForm" OnSubmit="VerifyKeyAsync" novalidate>
+                <div class="auth-field mb-3">
+                    <label class="form-label" for="install-key">Setup key</label>
+                    <InputText id="install-key" @bind-Value="_keyForm.Key" class="form-control install-mono" autocomplete="off" spellcheck="false" placeholder="ABCD-EFGH-JKMN-PQRS-TUVW-XYZ2" />
+                </div>
+                @if (_keyError is not null)
+                {
+                    <div class="alert alert-danger" role="alert">@_keyError</div>
+                }
+                <div class="auth-actions">
+                    <button type="submit" class="btn btn-primary">Verify setup key</button>
+                </div>
+            </EditForm>
+            break;
+
+        case Step.Database:
+            <p class="auth-lede">DBTracker stores its data in SQL Server. Point it at a server and a database; setup can create the database for you.</p>
+            <EditForm Model="_db" OnSubmit="TestConnectionAsync" novalidate>
+                <div class="install-grid">
+                    <div class="auth-field">
+                        <label class="form-label" for="install-server">SQL Server</label>
+                        <InputText id="install-server" @bind-Value="_db.Server" class="form-control" placeholder="localhost or sqlhost\SQLEXPRESS" />
+                    </div>
+                    <div class="auth-field">
+                        <label class="form-label" for="install-database">Database name</label>
+                        <InputText id="install-database" @bind-Value="_db.Database" class="form-control" />
+                    </div>
+                </div>
+
+                <fieldset class="install-fieldset">
+                    <legend class="form-label">Sign in to SQL Server with</legend>
+                    <InputRadioGroup @bind-Value="_db.AuthMode">
+                        <div class="form-check">
+                            <InputRadio id="install-auth-windows" Value="@WindowsAuth" class="form-check-input" />
+                            <label class="form-check-label" for="install-auth-windows">Windows authentication as <span class="install-mono">@_identity</span> (recommended for IIS)</label>
+                        </div>
+                        <div class="form-check">
+                            <InputRadio id="install-auth-sql" Value="@SqlAuth" class="form-check-input" />
+                            <label class="form-check-label" for="install-auth-sql">A SQL Server login</label>
+                        </div>
+                    </InputRadioGroup>
+                </fieldset>
+
+                @if (_db.AuthMode == SqlAuth)
+                {
+                    <div class="install-grid">
+                        <div class="auth-field">
+                            <label class="form-label" for="install-sql-user">Login name</label>
+                            <InputText id="install-sql-user" @bind-Value="_db.SqlUser" class="form-control" autocomplete="off" />
+                        </div>
+                        <div class="auth-field">
+                            <label class="form-label" for="install-sql-password">Password</label>
+                            <InputText id="install-sql-password" type="password" @bind-Value="_db.SqlPassword" class="form-control" autocomplete="new-password" />
+                        </div>
+                    </div>
+                    <p class="form-text mt-0">The password is saved encrypted on this server and never shown again.</p>
+                }
+
+                <div class="form-check">
+                    <InputCheckbox id="install-encrypt" @bind-Value="_db.Encrypt" class="form-check-input" />
+                    <label class="form-check-label" for="install-encrypt">Encrypt the connection</label>
+                </div>
+                <div class="form-check mb-3">
+                    <InputCheckbox id="install-trust-cert" @bind-Value="_db.TrustServerCertificate" class="form-check-input" />
+                    <label class="form-check-label" for="install-trust-cert">Trust the server's certificate without validating it</label>
+                    <div class="form-text">Only for a server with a self-signed certificate, such as a local SQL Server Express.</div>
+                </div>
+
+                @if (_check is not null)
+                {
+                    <div class="alert @(_check.CanContinue ? "alert-success" : _check.Status == DatabaseCheckStatus.DatabaseMissing ? "alert-info" : "alert-danger")" role="status">@_check.Message</div>
+                }
+                @if (_dbError is not null)
+                {
+                    <div class="alert alert-danger" role="alert">@_dbError</div>
+                }
+
+                <div class="install-actions">
+                    <button type="submit" class="btn btn-outline-secondary" disabled="@_busy">@(_busy ? "Testing…" : "Test connection")</button>
+                    @if (_check?.Status == DatabaseCheckStatus.DatabaseMissing)
+                    {
+                        <button type="button" class="btn btn-primary" disabled="@_busy" @onclick="CreateDatabaseAsync">Create database @_db.Database.Trim()</button>
+                    }
+                    else if (_check?.Status == DatabaseCheckStatus.DatabaseHasDBTracker)
+                    {
+                        <button type="button" class="btn btn-primary" disabled="@_busy" @onclick="ContinueFromDatabaseAsync">Use the existing database</button>
+                    }
+                    else if (_check?.Status == DatabaseCheckStatus.DatabaseEmpty)
+                    {
+                        <button type="button" class="btn btn-primary" disabled="@_busy" @onclick="ContinueFromDatabaseAsync">Use this database</button>
+                    }
+                </div>
+            </EditForm>
+            break;
+
+        case Step.Tables:
+            @if (_migrations.Count == 0)
+            {
+                <div class="alert alert-success" role="status">All of DBTracker's tables are already in place. Nothing to create.</div>
+            }
+            else
+            {
+                <p class="auth-lede">Setup will create DBTracker's tables in @_db.Database.Trim(), one migration at a time. Existing data is never dropped.</p>
+                <ol class="install-migrations" aria-label="Migrations" aria-live="polite">
+                    @foreach (var row in _migrations)
+                    {
+                        <li class="@row.State.ToString().ToLowerInvariant()">
+                            <span class="badge-health dot @RowBadge(row.State)" aria-hidden="true"></span>
+                            <span class="install-mono">@row.DisplayName</span>
+                            <span class="install-migration-state">@RowLabel(row.State)</span>
+                        </li>
+                    }
+                </ol>
+            }
+            @if (_migrationError is not null)
+            {
+                <div class="alert alert-danger" role="alert">@_migrationError</div>
+            }
+            <div class="install-actions">
+                @if (!_migrationsDone)
+                {
+                    <button type="button" class="btn btn-outline-secondary" disabled="@_busy" @onclick="() => GoTo(Step.Database)">Back</button>
+                    <button type="button" class="btn btn-primary" disabled="@_busy" @onclick="RunMigrationsAsync">@(_busy ? "Creating tables…" : "Create tables")</button>
+                }
+                else
+                {
+                    <button type="button" class="btn btn-primary" @onclick="() => GoTo(Step.Sample)">Continue</button>
+                }
+            </div>
+            break;
+
+        case Step.Sample:
+            <p class="auth-lede">Start empty, or load example data to explore DBTracker before adding your own instances.</p>
+            <div class="form-check">
+                <InputCheckbox id="install-sample" @bind-Value="_loadSample" class="form-check-input" />
+                <label class="form-check-label" for="install-sample">Load sample data and demo accounts</label>
+            </div>
+            @if (_loadSample)
+            {
+                <div class="alert alert-warning" role="alert">
+                    <strong>Not for production.</strong> This adds example instances, backups, restores and lifecycle records, plus five
+                    demo accounts (admin@architonixlabs.com, Priya, Marcus, Angela and Dev). All of them use the published password
+                    <span class="install-mono">ArxDemo#2026!</span>, so anyone who knows it can sign in. Use this on an evaluation
+                    server only, or deactivate the demo accounts from the Users page afterwards.
+                </div>
+            }
+            <div class="install-actions">
+                <button type="button" class="btn btn-outline-secondary" @onclick="() => GoTo(Step.Tables)">Back</button>
+                <button type="button" class="btn btn-primary" @onclick="() => GoTo(Step.Admin)">Continue</button>
+            </div>
+            break;
+
+        case Step.Admin:
+            <p class="auth-lede">This is the account you'll sign in with. It can add other users and assign their roles.</p>
+            <EditForm Model="_admin" OnSubmit="ContinueFromAdminAsync" novalidate>
+                <div class="auth-field mb-3">
+                    <label class="form-label" for="install-admin-name">Display name</label>
+                    <InputText id="install-admin-name" @bind-Value="_admin.DisplayName" class="form-control" autocomplete="name" />
+                </div>
+                <div class="auth-field mb-3">
+                    <label class="form-label" for="install-admin-email">Email</label>
+                    <InputText id="install-admin-email" type="email" @bind-Value="_admin.Email" class="form-control" autocomplete="username" />
+                </div>
+                <div class="install-grid">
+                    <div class="auth-field">
+                        <label class="form-label" for="install-admin-password">Password</label>
+                        <InputText id="install-admin-password" type="password" @bind-Value="_admin.Password" class="form-control" autocomplete="new-password" />
+                    </div>
+                    <div class="auth-field">
+                        <label class="form-label" for="install-admin-confirm">Confirm password</label>
+                        <InputText id="install-admin-confirm" type="password" @bind-Value="_admin.ConfirmPassword" class="form-control" autocomplete="new-password" />
+                    </div>
+                </div>
+                <p class="form-text">At least 6 characters, with an uppercase letter, a lowercase letter and a digit.</p>
+                @if (_adminErrors.Count > 0)
+                {
+                    <div class="alert alert-danger" role="alert">
+                        @foreach (var error in _adminErrors)
+                        {
+                            <div>@error</div>
+                        }
+                    </div>
+                }
+                <div class="install-actions">
+                    <button type="button" class="btn btn-outline-secondary" disabled="@_busy" @onclick="() => GoTo(Step.Sample)">Back</button>
+                    <button type="submit" class="btn btn-primary" disabled="@_busy">Continue</button>
+                </div>
+            </EditForm>
+            break;
+
+        case Step.Email:
+            <p class="auth-lede">DBTracker emails alerts, password resets and scheduled reports. You can skip this and turn email on later.</p>
+            <EditForm Model="_email" OnSubmit="ContinueFromEmail" novalidate>
+                <fieldset class="install-fieldset">
+                    <legend class="form-label">Send email through</legend>
+                    <InputRadioGroup @bind-Value="_email.Provider">
+                        <div class="form-check">
+                            <InputRadio id="install-email-arxmail" Value="@EmailProviders.ArxMail" class="form-check-input" />
+                            <label class="form-check-label" for="install-email-arxmail">ArxMail gateway</label>
+                        </div>
+                        <div class="form-check">
+                            <InputRadio id="install-email-smtp" Value="@EmailProviders.Smtp" class="form-check-input" />
+                            <label class="form-check-label" for="install-email-smtp">An SMTP server</label>
+                        </div>
+                        <div class="form-check">
+                            <InputRadio id="install-email-none" Value="@EmailProviders.None" class="form-check-input" />
+                            <label class="form-check-label" for="install-email-none">Don't send email for now</label>
+                        </div>
+                    </InputRadioGroup>
+                </fieldset>
+
+                @if (_email.Provider == EmailProviders.ArxMail)
+                {
+                    <div class="auth-field mb-3">
+                        <label class="form-label" for="install-arx-endpoint">Gateway URL</label>
+                        <InputText id="install-arx-endpoint" @bind-Value="_email.ArxMailEndpoint" class="form-control" />
+                    </div>
+                    <div class="install-grid">
+                        <div class="auth-field">
+                            <label class="form-label" for="install-arx-from">From address</label>
+                            <InputText id="install-arx-from" type="email" @bind-Value="_email.ArxMailFromAddress" class="form-control" placeholder="dbtracker@architonixlabs.com" />
+                        </div>
+                        <div class="auth-field">
+                            <label class="form-label" for="install-arx-key">API key</label>
+                            <InputText id="install-arx-key" type="password" @bind-Value="_email.ArxMailApiKey" class="form-control" autocomplete="off" />
+                        </div>
+                    </div>
+                }
+                else if (_email.Provider == EmailProviders.Smtp)
+                {
+                    <div class="install-grid">
+                        <div class="auth-field">
+                            <label class="form-label" for="install-smtp-host">SMTP host</label>
+                            <InputText id="install-smtp-host" @bind-Value="_email.SmtpHost" class="form-control" placeholder="smtp.office365.com" />
+                        </div>
+                        <div class="auth-field">
+                            <label class="form-label" for="install-smtp-port">Port</label>
+                            <InputNumber id="install-smtp-port" @bind-Value="_email.SmtpPort" class="form-control" />
+                        </div>
+                        <div class="auth-field">
+                            <label class="form-label" for="install-smtp-user">User name</label>
+                            <InputText id="install-smtp-user" @bind-Value="_email.SmtpUsername" class="form-control" autocomplete="off" />
+                        </div>
+                        <div class="auth-field">
+                            <label class="form-label" for="install-smtp-password">Password</label>
+                            <InputText id="install-smtp-password" type="password" @bind-Value="_email.SmtpPassword" class="form-control" autocomplete="new-password" />
+                        </div>
+                        <div class="auth-field">
+                            <label class="form-label" for="install-smtp-from">From address</label>
+                            <InputText id="install-smtp-from" type="email" @bind-Value="_email.SmtpFromAddress" class="form-control" />
+                        </div>
+                    </div>
+                    <div class="form-check mt-2">
+                        <InputCheckbox id="install-smtp-ssl" @bind-Value="_email.SmtpEnableSsl" class="form-check-input" />
+                        <label class="form-check-label" for="install-smtp-ssl">Use TLS (STARTTLS)</label>
+                    </div>
+                }
+
+                @if (_email.Provider != EmailProviders.None)
+                {
+                    <div class="auth-field mt-3">
+                        <label class="form-label" for="install-report-list">Send scheduled reports to (optional)</label>
+                        <InputText id="install-report-list" @bind-Value="_email.DistributionList" class="form-control" placeholder="dba-team@example.com, it-leads@example.com" />
+                        <div class="form-text">Separate addresses with commas.</div>
+                    </div>
+                    <div class="install-test-row">
+                        <div class="auth-field">
+                            <label class="form-label" for="install-test-to">Send a test email to</label>
+                            <InputText id="install-test-to" type="email" @bind-Value="_email.TestTo" class="form-control" />
+                        </div>
+                        <button type="button" class="btn btn-outline-secondary" disabled="@_busy" @onclick="SendTestEmailAsync">@(_busy ? "Sending…" : "Send test email")</button>
+                    </div>
+                    @if (_testResult is not null)
+                    {
+                        <div class="alert @TestResultClass" role="status">@TestResultText</div>
+                    }
+                }
+
+                @if (_emailErrors.Count > 0)
+                {
+                    <div class="alert alert-danger" role="alert">
+                        @foreach (var error in _emailErrors)
+                        {
+                            <div>@error</div>
+                        }
+                    </div>
+                }
+                <div class="install-actions">
+                    <button type="button" class="btn btn-outline-secondary" disabled="@_busy" @onclick="() => GoTo(Step.Admin)">Back</button>
+                    <button type="submit" class="btn btn-primary" disabled="@_busy">Continue</button>
+                </div>
+            </EditForm>
+            break;
+
+        case Step.Share:
+            <p class="auth-lede">
+                DBTracker reads backup files from folders or network shares as <span class="install-mono">@_identity</span>.
+                Check one now to confirm that account has read access. You can skip this and add backup locations later on each instance.
+            </p>
+            <EditForm Model="_share" OnSubmit="CheckShareAsync" novalidate>
+                <div class="install-test-row">
+                    <div class="auth-field">
+                        <label class="form-label" for="install-share-path">Folder or share</label>
+                        <InputText id="install-share-path" @bind-Value="_share.Path" class="form-control install-mono" placeholder="\\fileserver\sqlbackups" />
+                    </div>
+                    <button type="submit" class="btn btn-outline-secondary" disabled="@_busy">@(_busy ? "Checking…" : "Check access")</button>
+                </div>
+                @if (_shareResult is not null)
+                {
+                    <div class="alert @(_shareResult.CanList ? "alert-success" : "alert-warning")" role="status">@_shareResult.Message</div>
+                }
+                <div class="install-actions">
+                    <button type="button" class="btn btn-outline-secondary" disabled="@_busy" @onclick="() => GoTo(Step.Email)">Back</button>
+                    <button type="button" class="btn btn-primary" disabled="@_busy" @onclick="() => GoTo(Step.Finish)">@(_shareResult is null ? "Skip this check" : "Continue")</button>
+                </div>
+            </EditForm>
+            break;
+
+        case Step.Finish:
+            <p class="auth-lede">Check the settings, then finish. You'll go to the login page and sign in as the Administrator.</p>
+            <dl class="install-summary">
+                <dt>Database</dt>
+                <dd>@_db.Server.Trim() / @_db.Database.Trim(), @(_db.AuthMode == WindowsAuth ? $"Windows authentication as {_identity}" : $"SQL login {_db.SqlUser.Trim()}")</dd>
+                <dt>Sample data</dt>
+                <dd>@(_loadSample ? "Loaded, with the five demo accounts" : "Not loaded")</dd>
+                <dt>Administrator</dt>
+                <dd>@_admin.DisplayName.Trim() (@_admin.Email.Trim())</dd>
+                <dt>Email</dt>
+                <dd>@EmailSummary</dd>
+                <dt>Backup share</dt>
+                <dd>@(_shareResult is null ? "Not checked" : _shareResult.CanList ? $"{_share.Path.Trim()} is readable" : $"{_share.Path.Trim()} was not readable")</dd>
+            </dl>
+            <p class="form-text mt-0">Settings are saved to <code>dbtracker.config.json</code> in the App_Data folder. To run setup again later, delete that file on the server and restart the site.</p>
+            @if (_finishError is not null)
+            {
+                <div class="alert alert-danger" role="alert">@_finishError</div>
+            }
+            <div class="install-actions">
+                <button type="button" class="btn btn-outline-secondary" disabled="@_busy" @onclick="() => GoTo(Step.Share)">Back</button>
+                <button type="button" class="btn btn-primary" disabled="@_busy" @onclick="FinishAsync">@(_busy ? "Finishing setup…" : "Finish setup")</button>
+            </div>
+            break;
+    }
+</div>
+
+@code {
+    private enum Step { Key, Database, Tables, Sample, Admin, Email, Share, Finish }
+    private enum MigrationState { Pending, Running, Done, Failed }
+
+    private sealed class MigrationRow(string name)
+    {
+        public string Name { get; } = name;
+        public string DisplayName => Name.Length > 15 && Name[14] == '_' ? Name[15..] : Name;
+        public MigrationState State { get; set; }
+    }
+
+    private sealed class KeyForm { public string Key { get; set; } = ""; }
+
+    private sealed class DatabaseForm
+    {
+        public string Server { get; set; } = "localhost";
+        public string Database { get; set; } = "DBTracker";
+        public string AuthMode { get; set; } = WindowsAuth;
+        public string SqlUser { get; set; } = "";
+        public string SqlPassword { get; set; } = "";
+        public bool Encrypt { get; set; } = true;
+        public bool TrustServerCertificate { get; set; }
+    }
+
+    private sealed class AdminForm
+    {
+        public string DisplayName { get; set; } = "";
+        public string Email { get; set; } = "";
+        public string Password { get; set; } = "";
+        public string ConfirmPassword { get; set; } = "";
+    }
+
+    private sealed class EmailForm
+    {
+        public string Provider { get; set; } = EmailProviders.ArxMail;
+        public string ArxMailEndpoint { get; set; } = "https://mail.architonixlabs.com/v1/submit";
+        public string ArxMailFromAddress { get; set; } = "";
+        public string ArxMailApiKey { get; set; } = "";
+        public string SmtpHost { get; set; } = "";
+        public int SmtpPort { get; set; } = 587;
+        public bool SmtpEnableSsl { get; set; } = true;
+        public string SmtpUsername { get; set; } = "";
+        public string SmtpPassword { get; set; } = "";
+        public string SmtpFromAddress { get; set; } = "";
+        public string DistributionList { get; set; } = "";
+        public string TestTo { get; set; } = "";
+    }
+
+    private sealed class ShareForm { public string Path { get; set; } = ""; }
+
+    private const string WindowsAuth = "windows";
+    private const string SqlAuth = "sql";
+    private const string ClientStateKey = "install-client";
+    private static readonly Step[] Steps = Enum.GetValues<Step>();
+    private static readonly EmailAddressAttribute EmailCheck = new();
+
+    [CascadingParameter]
+    private HttpContext? HttpContext { get; set; }
+
+    private PersistingComponentStateSubscription _persisting;
+    private ElementReference _stepHeading;
+    private bool _focusHeading;
+    private string _client = "unknown";
+    private readonly string _identity = BackupShareChecker.CurrentIdentityName();
+
+    private Step _step = Step.Key;
+    private bool _authorized;
+    private bool _busy;
+
+    private readonly KeyForm _keyForm = new();
+    private string? _keyError;
+
+    private readonly DatabaseForm _db = new();
+    private DatabaseCheckResult? _check;
+    private string? _dbError;
+    private string _connectionString = "";
+
+    private List<MigrationRow> _migrations = [];
+    private bool _migrationsDone;
+    private string? _migrationError;
+
+    private bool _loadSample;
+
+    private readonly AdminForm _admin = new();
+    private List<string> _adminErrors = [];
+
+    private readonly EmailForm _email = new();
+    private List<string> _emailErrors = [];
+    private EmailSendResult? _testResult;
+
+    private readonly ShareForm _share = new();
+    private BackupShareCheckResult? _shareResult;
+
+    private string? _finishError;
+
+    protected override void OnInitialized()
+    {
+        // The client address is only known during prerendering (a live circuit has no HttpContext), so carry it across.
+        if (AppState.TryTakeFromJson<string>(ClientStateKey, out var client) && !string.IsNullOrEmpty(client))
+        {
+            _client = client;
+        }
+        else if (HttpContext?.Connection.RemoteIpAddress is { } address)
+        {
+            _client = address.ToString();
+        }
+
+        _persisting = AppState.RegisterOnPersisting(() =>
+        {
+            AppState.PersistAsJson(ClientStateKey, _client);
+            return Task.CompletedTask;
+        });
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_focusHeading)
+        {
+            _focusHeading = false;
+            await _stepHeading.FocusAsync();
+        }
+    }
+
+    private bool CanAct => _authorized && !State.IsInstalled;
+
+    private void GoTo(Step step)
+    {
+        if (!CanAct && step != Step.Key)
+        {
+            return;
+        }
+        _step = step;
+        _focusHeading = true;
+    }
+
+    private Task VerifyKeyAsync()
+    {
+        _keyError = null;
+        if (State.IsInstalled)
+        {
+            _keyError = "Setup has already been completed.";
+            return Task.CompletedTask;
+        }
+
+        if (Limiter.IsLockedOut(_client, out var retryAfter))
+        {
+            _keyError = $"Too many wrong keys. Try again in {Math.Max(1, (int)Math.Ceiling(retryAfter.TotalSeconds))} seconds.";
+            return Task.CompletedTask;
+        }
+
+        if (KeyStore.Verify(_keyForm.Key))
+        {
+            Limiter.Reset(_client);
+            _authorized = true;
+            _keyForm.Key = "";
+            GoTo(Step.Database);
+        }
+        else
+        {
+            Limiter.RecordFailure(_client);
+            _keyForm.Key = "";
+            _keyError = "That key doesn't match. Copy it again from setup-key.txt on the server.";
+        }
+        return Task.CompletedTask;
+    }
+
+    private InstallDatabaseSettings DatabaseSettings() => new(
+        _db.Server, _db.Database, _db.AuthMode == WindowsAuth, _db.SqlUser, _db.SqlPassword, _db.Encrypt, _db.TrustServerCertificate);
+
+    private string? ValidateDatabaseForm()
+    {
+        if (string.IsNullOrWhiteSpace(_db.Server))
+        {
+            return "Enter the SQL Server name.";
+        }
+        if (_db.AuthMode == SqlAuth && (string.IsNullOrWhiteSpace(_db.SqlUser) || string.IsNullOrEmpty(_db.SqlPassword)))
+        {
+            return "Enter the SQL login name and password.";
+        }
+        return DatabaseNameValidator.Validate(_db.Database.Trim());
+    }
+
+    private async Task TestConnectionAsync()
+    {
+        if (!CanAct)
+        {
+            return;
+        }
+        _dbError = ValidateDatabaseForm();
+        _check = null;
+        if (_dbError is not null)
+        {
+            return;
+        }
+
+        _busy = true;
+        try
+        {
+            _check = await DatabaseService.CheckAsync(DatabaseSettings());
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task CreateDatabaseAsync()
+    {
+        if (!CanAct)
+        {
+            return;
+        }
+        _busy = true;
+        try
+        {
+            _dbError = await DatabaseService.CreateDatabaseAsync(DatabaseSettings());
+            if (_dbError is null)
+            {
+                _check = await DatabaseService.CheckAsync(DatabaseSettings());
+            }
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task ContinueFromDatabaseAsync()
+    {
+        if (!CanAct)
+        {
+            return;
+        }
+        _dbError = ValidateDatabaseForm();
+        if (_dbError is not null)
+        {
+            return;
+        }
+
+        _busy = true;
+        try
+        {
+            // Re-check: the fields may have changed since the last test.
+            _check = await DatabaseService.CheckAsync(DatabaseSettings());
+            if (!_check.CanContinue)
+            {
+                return;
+            }
+
+            _connectionString = InstallDatabaseService.BuildConnectionString(DatabaseSettings());
+            State.UsePendingConnectionString(_connectionString);
+            _migrations = (await DatabaseService.GetPendingMigrationsAsync(_connectionString)).Select(m => new MigrationRow(m)).ToList();
+            _migrationsDone = _migrations.Count == 0;
+            _migrationError = null;
+            GoTo(Step.Tables);
+        }
+        catch (Exception ex)
+        {
+            _dbError = $"Couldn't read the database's migration history: {ex.GetBaseException().Message}";
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task RunMigrationsAsync()
+    {
+        if (!CanAct)
+        {
+            return;
+        }
+        _busy = true;
+        _migrationError = null;
+        try
+        {
+            foreach (var row in _migrations.Where(r => r.State != MigrationState.Done))
+            {
+                row.State = MigrationState.Running;
+                StateHasChanged();
+                try
+                {
+                    await DatabaseService.ApplyMigrationAsync(_connectionString, row.Name);
+                    row.State = MigrationState.Done;
+                }
+                catch (Exception ex)
+                {
+                    row.State = MigrationState.Failed;
+                    _migrationError = $"{row.DisplayName} failed: {ex.GetBaseException().Message} Check that the login has db_owner on {_db.Database.Trim()}, then try again.";
+                    return;
+                }
+                StateHasChanged();
+            }
+            _migrationsDone = true;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task ContinueFromAdminAsync()
+    {
+        if (!CanAct)
+        {
+            return;
+        }
+        var errors = new List<string>();
+        if (string.IsNullOrWhiteSpace(_admin.DisplayName))
+        {
+            errors.Add("Enter a display name.");
+        }
+        if (string.IsNullOrWhiteSpace(_admin.Email) || !EmailCheck.IsValid(_admin.Email.Trim()))
+        {
+            errors.Add("Enter a valid email address.");
+        }
+        if (_admin.Password != _admin.ConfirmPassword)
+        {
+            errors.Add("The two passwords don't match.");
+        }
+        if (string.IsNullOrEmpty(_admin.Password))
+        {
+            errors.Add("Enter a password.");
+        }
+        else
+        {
+            _busy = true;
+            try
+            {
+                errors.AddRange(await Wizard.ValidateAdminPasswordAsync(_admin.Email.Trim(), _admin.Password));
+            }
+            finally
+            {
+                _busy = false;
+            }
+        }
+
+        _adminErrors = errors;
+        if (errors.Count == 0)
+        {
+            if (string.IsNullOrWhiteSpace(_email.TestTo))
+            {
+                _email.TestTo = _admin.Email.Trim();
+            }
+            GoTo(Step.Email);
+        }
+    }
+
+    private InstallEmailSettings EmailSettings() => new()
+    {
+        Provider = _email.Provider,
+        ArxMailEndpoint = _email.ArxMailEndpoint.Trim(),
+        ArxMailFromAddress = _email.ArxMailFromAddress.Trim(),
+        ArxMailApiKey = _email.ArxMailApiKey.Trim(),
+        SmtpHost = _email.SmtpHost.Trim(),
+        SmtpPort = _email.SmtpPort,
+        SmtpEnableSsl = _email.SmtpEnableSsl,
+        SmtpUsername = _email.SmtpUsername.Trim(),
+        SmtpPassword = _email.SmtpPassword,
+        SmtpFromAddress = _email.SmtpFromAddress.Trim(),
+    };
+
+    private List<string> ValidateEmailForm()
+    {
+        var errors = new List<string>();
+        if (_email.Provider == EmailProviders.ArxMail)
+        {
+            if (!Uri.TryCreate(_email.ArxMailEndpoint.Trim(), UriKind.Absolute, out var uri) || uri.Scheme != Uri.UriSchemeHttps)
+            {
+                errors.Add("Enter the gateway URL, starting with https://.");
+            }
+            if (!EmailCheck.IsValid(_email.ArxMailFromAddress.Trim()) || string.IsNullOrWhiteSpace(_email.ArxMailFromAddress))
+            {
+                errors.Add("Enter the address emails are sent from.");
+            }
+            if (string.IsNullOrWhiteSpace(_email.ArxMailApiKey))
+            {
+                errors.Add("Enter the ArxMail API key.");
+            }
+        }
+        else if (_email.Provider == EmailProviders.Smtp)
+        {
+            if (string.IsNullOrWhiteSpace(_email.SmtpHost))
+            {
+                errors.Add("Enter the SMTP host.");
+            }
+            if (_email.SmtpPort is < 1 or > 65535)
+            {
+                errors.Add("Enter a port between 1 and 65535.");
+            }
+            if (!EmailCheck.IsValid(_email.SmtpFromAddress.Trim()) || string.IsNullOrWhiteSpace(_email.SmtpFromAddress))
+            {
+                errors.Add("Enter the address emails are sent from.");
+            }
+        }
+
+        if (_email.Provider != EmailProviders.None)
+        {
+            var invalid = SplitAddresses(_email.DistributionList).Where(a => !EmailCheck.IsValid(a)).ToList();
+            if (invalid.Count > 0)
+            {
+                errors.Add($"These report addresses aren't valid: {string.Join(", ", invalid)}.");
+            }
+        }
+        return errors;
+    }
+
+    private static IEnumerable<string> SplitAddresses(string list) =>
+        list.Split([',', ';'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+    private async Task SendTestEmailAsync()
+    {
+        if (!CanAct)
+        {
+            return;
+        }
+        _testResult = null;
+        _emailErrors = ValidateEmailForm();
+        if (string.IsNullOrWhiteSpace(_email.TestTo) || !EmailCheck.IsValid(_email.TestTo.Trim()))
+        {
+            _emailErrors.Add("Enter a valid address to send the test email to.");
+        }
+        if (_emailErrors.Count > 0)
+        {
+            return;
+        }
+
+        _busy = true;
+        try
+        {
+            _testResult = await Wizard.SendTestEmailAsync(EmailSettings(), _email.TestTo.Trim());
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private void ContinueFromEmail()
+    {
+        if (!CanAct)
+        {
+            return;
+        }
+        _emailErrors = ValidateEmailForm();
+        if (_emailErrors.Count == 0)
+        {
+            GoTo(Step.Share);
+        }
+    }
+
+    private async Task CheckShareAsync()
+    {
+        if (!CanAct)
+        {
+            return;
+        }
+        _busy = true;
+        try
+        {
+            _shareResult = await BackupShareChecker.CheckAsync(_share.Path.Trim(), TimeSpan.FromSeconds(15));
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task FinishAsync()
+    {
+        if (!CanAct)
+        {
+            return;
+        }
+        _busy = true;
+        _finishError = null;
+        try
+        {
+            var distribution = _email.Provider == EmailProviders.None ? null : string.Join(", ", SplitAddresses(_email.DistributionList));
+            var result = await Wizard.FinishAsync(new InstallFinishRequest(
+                DatabaseSettings(),
+                _loadSample,
+                _admin.Email.Trim(),
+                _admin.DisplayName.Trim(),
+                _admin.Password,
+                EmailSettings(),
+                distribution,
+                _shareResult is null ? null : $"{_share.Path.Trim()} ({(_shareResult.CanList ? "readable" : "not readable")})"));
+
+            if (result.Succeeded)
+            {
+                Nav.NavigateTo("/Account/Login", forceLoad: true);
+                return;
+            }
+
+            if (result.AdminProblem)
+            {
+                _adminErrors = [result.Error ?? "The Administrator account couldn't be created."];
+                GoTo(Step.Admin);
+                return;
+            }
+            _finishError = result.Error;
+        }
+        catch (Exception ex)
+        {
+            _finishError = $"Setup couldn't finish: {ex.GetBaseException().Message}";
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private string StepClass(Step step) => step == _step ? "current" : step < _step ? "done" : "";
+
+    private static string StepLabel(Step step) => step switch
+    {
+        Step.Key => "Setup key",
+        Step.Database => "Database",
+        Step.Tables => "Tables",
+        Step.Sample => "Sample data",
+        Step.Admin => "Administrator",
+        Step.Email => "Email",
+        Step.Share => "Backup share",
+        _ => "Finish",
+    };
+
+    private static string StepTitle(Step step) => step switch
+    {
+        Step.Key => "Enter the setup key",
+        Step.Database => "Connect to SQL Server",
+        Step.Tables => "Create the tables",
+        Step.Sample => "Sample data",
+        Step.Admin => "Create the Administrator account",
+        Step.Email => "Email delivery",
+        Step.Share => "Check a backup share",
+        _ => "Review and finish",
+    };
+
+    private static string RowBadge(MigrationState state) => state switch
+    {
+        MigrationState.Done => "OnTrack",
+        MigrationState.Running => "Overdue",
+        MigrationState.Failed => "Failed",
+        _ => "NeverBackedUp",
+    };
+
+    private static string RowLabel(MigrationState state) => state switch
+    {
+        MigrationState.Done => "Created",
+        MigrationState.Running => "Creating",
+        MigrationState.Failed => "Failed",
+        _ => "Waiting",
+    };
+
+    private string TestResultClass => _testResult?.Outcome switch
+    {
+        EmailSendOutcome.Accepted => "alert-success",
+        EmailSendOutcome.Failed => "alert-danger",
+        _ => "alert-warning",
+    };
+
+    private string TestResultText => _testResult?.Outcome switch
+    {
+        EmailSendOutcome.Accepted => $"The provider accepted the message for {_email.TestTo.Trim()}. Check that inbox to confirm it arrived.",
+        EmailSendOutcome.Failed => $"Sending failed: {_testResult.Detail}",
+        _ => $"Nothing was sent. {(_testResult?.Detail ?? "Email is turned off or the settings are incomplete.")}",
+    };
+
+    private string EmailSummary => _email.Provider switch
+    {
+        EmailProviders.ArxMail => $"ArxMail gateway, from {_email.ArxMailFromAddress.Trim()}{ReportsSuffix}",
+        EmailProviders.Smtp => $"SMTP via {_email.SmtpHost.Trim()}:{_email.SmtpPort}, from {_email.SmtpFromAddress.Trim()}{ReportsSuffix}",
+        _ => "Off. Alerts and reports are logged, not sent.",
+    };
+
+    private string ReportsSuffix => string.IsNullOrWhiteSpace(_email.DistributionList)
+        ? ""
+        : $". Reports go to {string.Join(", ", SplitAddresses(_email.DistributionList))}";
+
+    public void Dispose() => _persisting.Dispose();
+}

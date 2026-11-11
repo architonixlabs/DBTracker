@@ -14,6 +14,7 @@ namespace DBTracker.Infrastructure.Notifications;
 /// <remarks>Alerts:IntervalMinutes (default 10); &lt;= 0 disables it.</remarks>
 public class AlertCheckHostedService(
     IServiceScopeFactory scopeFactory,
+    Install.InstallState installState,
     IConfiguration configuration,
     WorkerHeartbeatStore heartbeats,
     ILogger<AlertCheckHostedService> logger) : BackgroundService
@@ -31,6 +32,7 @@ public class AlertCheckHostedService(
         }
 
         var interval = TimeSpan.FromMinutes(intervalMinutes);
+        await installState.WaitUntilInstalledAsync(stoppingToken);
         heartbeats.Starting(WorkerName, interval);
 
         while (!stoppingToken.IsCancellationRequested)

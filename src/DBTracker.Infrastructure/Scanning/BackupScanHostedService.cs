@@ -10,6 +10,7 @@ namespace DBTracker.Infrastructure.Scanning;
 /// <summary>Re-scans every instance with a backup location configured. BackupScan:IntervalMinutes (default 15); &lt;= 0 disables it, and Scan now still works.</summary>
 public class BackupScanHostedService(
     IServiceScopeFactory scopeFactory,
+    Install.InstallState installState,
     IConfiguration configuration,
     WorkerHeartbeatStore heartbeats,
     ILogger<BackupScanHostedService> logger) : BackgroundService
@@ -27,6 +28,7 @@ public class BackupScanHostedService(
         }
 
         var interval = TimeSpan.FromMinutes(intervalMinutes);
+        await installState.WaitUntilInstalledAsync(stoppingToken);
         heartbeats.Starting(WorkerName, interval);
 
         while (!stoppingToken.IsCancellationRequested)

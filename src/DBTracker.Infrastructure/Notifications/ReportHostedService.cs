@@ -9,6 +9,7 @@ namespace DBTracker.Infrastructure.Notifications;
 /// <summary>Emails the compliance report to Reports:DistributionList every Reports:IntervalDays (default 7); &lt;= 0 disables the schedule. Send now works either way.</summary>
 public class ReportHostedService(
     IServiceScopeFactory scopeFactory,
+    Install.InstallState installState,
     IConfiguration configuration,
     WorkerHeartbeatStore heartbeats,
     ILogger<ReportHostedService> logger) : BackgroundService
@@ -26,6 +27,7 @@ public class ReportHostedService(
         }
 
         var interval = TimeSpan.FromDays(intervalDays);
+        await installState.WaitUntilInstalledAsync(stoppingToken);
         heartbeats.Starting(WorkerName, interval);
 
         while (!stoppingToken.IsCancellationRequested)

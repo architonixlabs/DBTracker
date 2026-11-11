@@ -1,5 +1,6 @@
 using DBTracker.Infrastructure;
 using DBTracker.Infrastructure.Audit;
+using DBTracker.Infrastructure.Install;
 using DBTracker.Infrastructure.ChangeManagement;
 using DBTracker.Infrastructure.Diagnostics;
 using DBTracker.Infrastructure.Identity;
@@ -11,25 +12,23 @@ using DBTracker.Infrastructure.Queries;
 using DBTracker.Infrastructure.Scanning;
 using DBTracker.Web.Components;
 using DBTracker.Web.Components.Account;
+using DBTracker.Web.Install;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Static Web Assets only auto-load in Development; unpublished runs in other environments (e.g. Testing) would 500 on every framework asset.
-if (!builder.Environment.IsProduction())
-{
-    builder.WebHost.UseStaticWebAssets();
-}
+// Static Web Assets only auto-load in Development; unpublished runs elsewhere (Testing, a Production run from bin) would 500 on every
+// framework asset. Published output has no runtime manifest, so this is a no-op there.
+builder.WebHost.UseStaticWebAssets();
 
-var connectionString = builder.Configuration.GetConnectionString("DBTracker")
-    ?? throw new InvalidOperationException("Connection string 'DBTracker' not configured.");
+var installState = await builder.AddInstallSupportAsync();
 
-// One registration path for the options: the scoped context is created from the factory, since AddDbContext too would conflict.
-// NotificationService uses the factory directly because NotificationBell queries concurrently with each page's scoped context.
-builder.Services.AddDbContextFactory<DBTrackerDbContext>(options =>
-    options.UseSqlServer(connectionString));
+// The factory sets each context's connection string from InstallState, so finishing the wizard repoints the app without a restart.
+// The scoped context is created from the factory (registering AddDbContext too would conflict). NotificationService uses the factory
+// directly because NotificationBell queries concurrently with each page's scoped context.
+builder.Services.AddDbContextFactory<DBTrackerDbContext, InstallAwareDbContextFactory>(options => options.UseSqlServer());
 builder.Services.AddScoped<DBTrackerDbContext>(sp =>
     sp.GetRequiredService<IDbContextFactory<DBTrackerDbContext>>().CreateDbContext());
 
@@ -93,18 +92,13 @@ builder.Services.AddScoped<SetupDiagnosticsService>();
 builder.Services.Configure<SmtpOptions>(builder.Configuration.GetSection("Email:Smtp"));
 builder.Services.Configure<ArxMailOptions>(builder.Configuration.GetSection("Email:ArxMail"));
 builder.Services.AddHttpClient<ArxMailEmailSender>();
-switch (builder.Configuration["Email:Provider"])
+// Resolved per request so email settings saved by the install wizard take effect without a restart.
+builder.Services.AddScoped<IEmailSender>(sp => sp.GetRequiredService<IConfiguration>()["Email:Provider"] switch
 {
-    case "Smtp":
-        builder.Services.AddScoped<IEmailSender, SmtpEmailSender>();
-        break;
-    case "ArxMail":
-        builder.Services.AddScoped<IEmailSender>(sp => sp.GetRequiredService<ArxMailEmailSender>());
-        break;
-    default:
-        builder.Services.AddScoped<IEmailSender, NullEmailSender>();
-        break;
-}
+    EmailProviders.Smtp => ActivatorUtilities.CreateInstance<SmtpEmailSender>(sp),
+    EmailProviders.ArxMail => sp.GetRequiredService<ArxMailEmailSender>(),
+    _ => ActivatorUtilities.CreateInstance<NullEmailSender>(sp),
+});
 
 // Webhook alerts alongside email; NullWebhookSender unless a URL is configured.
 builder.Services.Configure<WebhookOptions>(builder.Configuration.GetSection("Alerts:Webhook"));
@@ -157,20 +151,7 @@ builder.Services.AddRazorComponents()
 
 var app = builder.Build();
 
-using (var scope = app.Services.CreateScope())
-{
-    var db = scope.ServiceProvider.GetRequiredService<DBTrackerDbContext>();
-    db.Database.Migrate();
-
-    if (app.Environment.IsDevelopment() || app.Environment.EnvironmentName == "Testing")
-    {
-        await SeedData.SeedAsync(db);
-
-        var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
-        var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
-        await IdentitySeedData.SeedAsync(roleManager, userManager);
-    }
-}
+await app.PrepareDatabaseAsync(installState);
 
 if (!app.Environment.IsDevelopment())
 {
@@ -185,6 +166,8 @@ if (app.Environment.IsProduction())
 }
 app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
 app.UseHttpsRedirection();
+
+app.UseInstallGate(installState);
 
 app.UseAuthentication();
 app.UseAuthorization();
