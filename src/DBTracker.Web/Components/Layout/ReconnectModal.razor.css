@@ -19,61 +19,40 @@
     display: block;
 }
 
-
 #components-reconnect-modal {
-    background-color: white;
+    background-color: var(--dbt-bg-raised, #14171B);
+    color: var(--dbt-text, #D7DBE0);
     width: 20rem;
+    max-width: calc(100vw - 32px);
     margin: 20vh auto;
-    padding: 2rem;
-    border: 0;
-    border-radius: 0.5rem;
-    box-shadow: 0 3px 6px 2px rgba(0, 0, 0, 0.3);
+    padding: 1.75rem;
+    border: 1px solid var(--dbt-border-bright, #343a42);
+    border-radius: 6px;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55);
+    font-size: 14px;
     opacity: 0;
-    transition: display 0.5s allow-discrete, overlay 0.5s allow-discrete;
-    animation: components-reconnect-modal-fadeOutOpacity 0.5s both;
-    &[open]
-
-{
-    animation: components-reconnect-modal-slideUp 1.5s cubic-bezier(.05, .89, .25, 1.02) 0.3s, components-reconnect-modal-fadeInOpacity 0.5s ease-in-out 0.3s;
-    animation-fill-mode: both;
+    transition: display 0.3s allow-discrete, overlay 0.3s allow-discrete;
+    animation: components-reconnect-modal-fadeOutOpacity 0.3s both;
 }
 
+#components-reconnect-modal[open] {
+    animation: components-reconnect-modal-fadeInOpacity 0.3s ease-in-out 0.3s both;
 }
 
 #components-reconnect-modal::backdrop {
-    background-color: rgba(0, 0, 0, 0.4);
-    animation: components-reconnect-modal-fadeInOpacity 0.5s ease-in-out;
+    background-color: rgba(0, 0, 0, 0.6);
+    animation: components-reconnect-modal-fadeInOpacity 0.3s ease-in-out;
     opacity: 1;
 }
 
-@keyframes components-reconnect-modal-slideUp {
-    0% {
-        transform: translateY(30px) scale(0.95);
-    }
-
-    100% {
-        transform: translateY(0);
-    }
-}
-
 @keyframes components-reconnect-modal-fadeInOpacity {
-    0% {
-        opacity: 0;
-    }
-
-    100% {
-        opacity: 1;
-    }
+    0% { opacity: 0; }
+    100% { opacity: 1; }
 }
 
 @keyframes components-reconnect-modal-fadeOutOpacity {
-    0% {
-        opacity: 1;
-    }
-
-    100% {
-        opacity: 0;
-    }
+    0% { opacity: 1; }
+    100% { opacity: 0; }
 }
 
 .components-reconnect-container {
@@ -89,69 +68,51 @@
 }
 
 #components-reconnect-modal button {
-    border: 0;
-    background-color: #6b9ed2;
-    color: white;
-    padding: 4px 24px;
-    border-radius: 4px;
+    min-height: 40px;
+    border: 1px solid var(--dbt-accent, #E8A33D);
+    background-color: var(--dbt-accent, #E8A33D);
+    color: #1A1203;
+    font-weight: 500;
+    padding: 6px 24px;
+    border-radius: 3px;
+    cursor: pointer;
 }
 
-    #components-reconnect-modal button:hover {
-        background-color: #3b6ea2;
-    }
+#components-reconnect-modal button:hover {
+    background-color: var(--dbt-accent-hover, #F2B65A);
+    border-color: var(--dbt-accent-hover, #F2B65A);
+}
 
-    #components-reconnect-modal button:active {
-        background-color: #6b9ed2;
-    }
+#components-reconnect-modal button:active {
+    background-color: #D9942F;
+}
 
+/* Loading indicator while the connection is being re-established; it stops as soon as it resolves. */
 .components-rejoining-animation {
     position: relative;
-    width: 80px;
-    height: 80px;
+    width: 48px;
+    height: 48px;
 }
 
+.components-rejoining-animation div {
+    position: absolute;
+    inset: 0;
+    border: 2px solid var(--dbt-border-bright, #343a42);
+    border-top-color: var(--dbt-accent, #E8A33D);
+    border-radius: 50%;
+    animation: components-rejoining-spin 0.9s linear infinite;
+}
+
+.components-rejoining-animation div:nth-child(2) {
+    display: none;
+}
+
+@keyframes components-rejoining-spin {
+    to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
     .components-rejoining-animation div {
-        position: absolute;
-        border: 3px solid #0087ff;
-        opacity: 1;
-        border-radius: 50%;
-        animation: components-rejoining-animation 1.5s cubic-bezier(0, 0.2, 0.8, 1) infinite;
-    }
-
-        .components-rejoining-animation div:nth-child(2) {
-            animation-delay: -0.5s;
-        }
-
-@keyframes components-rejoining-animation {
-    0% {
-        top: 40px;
-        left: 40px;
-        width: 0;
-        height: 0;
-        opacity: 0;
-    }
-
-    4.9% {
-        top: 40px;
-        left: 40px;
-        width: 0;
-        height: 0;
-        opacity: 0;
-    }
-
-    5% {
-        top: 40px;
-        left: 40px;
-        width: 0;
-        height: 0;
-        opacity: 1;
-    }
-
-    100% {
-        top: 0px;
-        left: 0px;
-        width: 80px;
-        height: 80px;
-        opacity: 0;
+        animation-duration: 3s;
     }
 }

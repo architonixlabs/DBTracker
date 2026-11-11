@@ -5,38 +5,35 @@
 
 <PageTitle>Approve sign-in · DBTracker</PageTitle>
 
-<div class="login-card">
-    <div class="term-titlebar">
-        <span class="term-dots"><span></span><span></span><span></span></span>
-        <span>dbtracker:~$ device-link request</span>
-    </div>
-    <div class="term-body">
-        @if (string.IsNullOrWhiteSpace(Token))
-        {
-            <p class="text-danger mb-0">Missing or invalid sign-in request.</p>
-        }
-        else
-        {
-            <h2>confirm device</h2>
-            <p class="text-muted small mb-0">
-                Someone scanned a DBTracker QR code and is waiting to sign in as
-                <strong>@_email</strong> (@_role). Only approve this if it's you.
-            </p>
+<div class="auth-panel">
+    <div class="auth-brand"><span class="brand-mark" aria-hidden="true"></span> DBTracker</div>
+    @if (string.IsNullOrWhiteSpace(Token))
+    {
+        <h1>This request can't be used</h1>
+        <p class="text-danger mb-0" role="alert">The log-in request is missing or invalid. Start again from the QR code on the other device.</p>
+        <a class="btn btn-outline-secondary align-self-start" href="/">Back to dashboard</a>
+    }
+    else
+    {
+        <h1>Approve this log-in?</h1>
+        <p class="text-muted mb-0">
+            Someone scanned a DBTracker QR code and is waiting to log in as
+            <strong>@_email</strong> (@_role). Only approve this if it's you.
+        </p>
 
-            <div class="d-flex gap-2">
-                <form action="/device-link/approve" method="post" style="flex:1">
-                    <AntiforgeryToken />
-                    <input type="hidden" name="token" value="@Token" />
-                    <button type="submit" class="btn btn-primary w-100">Approve</button>
-                </form>
-                <form action="/device-link/deny" method="post" style="flex:1">
-                    <AntiforgeryToken />
-                    <input type="hidden" name="token" value="@Token" />
-                    <button type="submit" class="btn btn-outline-secondary w-100">Deny</button>
-                </form>
-            </div>
-        }
-    </div>
+        <div class="d-flex gap-2">
+            <form action="/device-link/approve" method="post" class="flex-fill">
+                <AntiforgeryToken />
+                <input type="hidden" name="token" value="@Token" />
+                <button type="submit" class="btn btn-primary w-100">Approve</button>
+            </form>
+            <form action="/device-link/deny" method="post" class="flex-fill">
+                <AntiforgeryToken />
+                <input type="hidden" name="token" value="@Token" />
+                <button type="submit" class="btn btn-outline-secondary w-100">Deny</button>
+            </form>
+        </div>
+    }
 </div>
 
 @code {

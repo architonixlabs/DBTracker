@@ -13,47 +13,45 @@
 
 <PageTitle>Log in · DBTracker</PageTitle>
 
-<div class="login-card">
-    <div class="term-titlebar">
-        <span class="term-dots"><span></span><span></span><span></span></span>
-        <span>priya@architonix:~$ dbtracker login</span>
-    </div>
-    <div class="term-body">
-        <h2>authenticate</h2>
+<div class="auth-panel">
+    <div class="auth-brand"><span class="brand-mark" aria-hidden="true"></span> DBTracker</div>
+    <h1>Log in</h1>
+    <p class="auth-lede">Backup, restore and lifecycle tracking for your database instances.</p>
 
-        <StatusMessage Message="@errorMessage" />
+    <StatusMessage Message="@errorMessage" />
 
-        <EditForm EditContext="editContext" method="post" OnSubmit="LoginUser" FormName="login">
-            <DataAnnotationsValidator />
-            <ValidationSummary class="text-danger" role="alert" />
+    <EditForm EditContext="editContext" method="post" OnSubmit="LoginUser" FormName="login">
+        <DataAnnotationsValidator />
+        <ValidationSummary class="validation-errors" role="alert" />
 
-            <div class="prompt-field mb-3">
-                <label for="login-email">email</label>
-                <InputText id="login-email" @bind-Value="Input.Email" class="form-control" autocomplete="username" aria-required="true" placeholder="name@architonixlabs.com" />
-                <ValidationMessage For="() => Input.Email" class="text-danger small" />
-            </div>
-            <div class="prompt-field mb-3">
-                <label for="login-password">password</label>
-                <InputText id="login-password" type="password" @bind-Value="Input.Password" class="form-control" autocomplete="current-password" aria-required="true" />
-                <ValidationMessage For="() => Input.Password" class="text-danger small" />
-            </div>
-            <div class="form-check mb-3">
-                <InputCheckbox @bind-Value="Input.RememberMe" class="form-check-input" id="rememberMe" />
-                <label class="form-check-label" for="rememberMe">keep session alive</label>
-            </div>
+        <div class="auth-field mb-3">
+            <label class="form-label" for="login-email">Email</label>
+            <InputText id="login-email" @bind-Value="Input.Email" class="form-control" autocomplete="username" aria-required="true" placeholder="name@architonixlabs.com" />
+            <ValidationMessage For="() => Input.Email" class="validation-message" />
+        </div>
+        <div class="auth-field mb-3">
+            <label class="form-label" for="login-password">Password</label>
+            <InputText id="login-password" type="password" @bind-Value="Input.Password" class="form-control" autocomplete="current-password" aria-required="true" />
+            <ValidationMessage For="() => Input.Password" class="validation-message" />
+        </div>
+        <div class="form-check mb-3">
+            <InputCheckbox @bind-Value="Input.RememberMe" class="form-check-input" id="rememberMe" />
+            <label class="form-check-label" for="rememberMe">Keep me signed in on this device</label>
+        </div>
+        <div class="auth-actions">
             <button type="submit" class="w-100 btn btn-primary">Log in</button>
-        </EditForm>
-        <a class="small text-muted d-block mt-2" href="/Account/ForgotPassword">Forgot your password?</a>
+            <a class="auth-secondary-link" href="/Account/ForgotPassword">Forgot your password?</a>
+        </div>
+    </EditForm>
 
-        <div class="qr-login">
-            <button type="button" class="qr-toggle" id="qr-toggle">
-                <i class="bi bi-qr-code"></i> authenticate via linked device
-            </button>
-            <div class="qr-panel" id="qr-panel" hidden>
-                <img id="qr-image" alt="QR code — scan with your phone to sign in" />
-                <p class="qr-hint">Scan with a phone that's already signed in to DBTracker. Approve the request there and this screen signs in automatically.</p>
-                <p class="qr-status" id="qr-status"></p>
-            </div>
+    <div class="qr-login">
+        <button type="button" class="qr-toggle" id="qr-toggle" aria-expanded="false" aria-controls="qr-panel">
+            <i class="bi bi-qr-code" aria-hidden="true"></i> Log in with your phone
+        </button>
+        <div class="qr-panel" id="qr-panel" hidden>
+            <img id="qr-image" width="160" height="160" alt="QR code to scan with your phone to log in" />
+            <p class="qr-hint">Scan with a phone that's already logged in to DBTracker. Approve the request there and this screen logs in automatically.</p>
+            <p class="qr-status" id="qr-status" role="status" aria-live="polite"></p>
         </div>
     </div>
 </div>

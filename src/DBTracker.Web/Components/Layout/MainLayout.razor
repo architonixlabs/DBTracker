@@ -1,16 +1,37 @@
 ﻿@inherits LayoutComponentBase
+@inject NavigationManager Nav
 
 <div class="app-shell">
     <NavMenu />
     <main class="app-main">
-        @Body
+        <ErrorBoundary @ref="_errorBoundary">
+            <ChildContent>
+                @Body
+            </ChildContent>
+            <ErrorContent>
+                <div class="alert alert-danger" role="alert">
+                    <p class="mb-2">This page hit an error and couldn't finish loading. The rest of DBTracker still works.</p>
+                    <a href="@Nav.Uri" data-enhance-nav="false">Reload this page</a>
+                    <span class="mx-2" aria-hidden="true">·</span>
+                    <a href="/">Go to the dashboard</a>
+                </div>
+            </ErrorContent>
+        </ErrorBoundary>
     </main>
 </div>
 
 <ToastHost />
 
-<div id="blazor-error-ui" data-nosnippet>
-    An unhandled error has occurred.
-    <a href="." class="reload">Reload</a>
-    <span class="dismiss">🗙</span>
+<div id="blazor-error-ui" role="alert" data-nosnippet>
+    Something went wrong and this page stopped responding.
+    <a href="." class="reload">Reload the page</a>
+    <button type="button" class="dismiss" aria-label="Dismiss error message">&times;</button>
 </div>
+
+@code {
+    private ErrorBoundary? _errorBoundary;
+
+    // Clear a caught error when the user navigates to another page, otherwise the error message
+    // would stay in place of every page rendered afterwards.
+    protected override void OnParametersSet() => _errorBoundary?.Recover();
+}

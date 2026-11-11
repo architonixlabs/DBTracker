@@ -1,8 +1,8 @@
 @inject ComplianceReportService ReportService
 @inject ToastService Toasts
 
-<button class="btn @ButtonClass" @onclick="ToggleExpanded" disabled="@_sending">
-    <i class="bi bi-envelope"></i> @(_sending ? "Sending…" : ButtonText)
+<button type="button" class="btn @ButtonClass" @onclick="ToggleExpanded" disabled="@_sending" aria-expanded="@(_expanded ? "true" : "false")">
+    <i class="bi bi-envelope" aria-hidden="true"></i> @(_sending ? "Sending…" : ButtonText)
 </button>
 
 @if (_expanded)
@@ -10,16 +10,17 @@
     <div class="dbt-card mt-2" style="max-width:520px;">
         @if (FilteredScope is not null)
         {
-            <div class="mb-3">
+            <fieldset class="mb-3">
+                <legend class="form-label">Report scope</legend>
                 <label class="form-check d-flex align-items-center gap-2 mb-1">
-                    <input type="radio" class="form-check-input" checked="@(_useFiltered == false)" @onchange="() => SelectScope(false)" />
+                    <input type="radio" name="report-scope" class="form-check-input" checked="@(_useFiltered == false)" @onchange="() => SelectScope(false)" />
                     <span class="small">Full inventory (@FullScopeCount instance(s))</span>
                 </label>
                 <label class="form-check d-flex align-items-center gap-2">
-                    <input type="radio" class="form-check-input" checked="@(_useFiltered == true)" @onchange="() => SelectScope(true)" />
-                    <span class="small">Current filtered view — @FilteredScope.Description (@FilteredScope.InstanceIds.Count instance(s))</span>
+                    <input type="radio" name="report-scope" class="form-check-input" checked="@(_useFiltered == true)" @onchange="() => SelectScope(true)" />
+                    <span class="small">Current filtered view: @FilteredScope.Description (@FilteredScope.InstanceIds.Count instance(s))</span>
                 </label>
-            </div>
+            </fieldset>
         }
         else
         {
@@ -48,10 +49,10 @@
         }
 
         <div class="d-flex gap-2">
-            <button class="btn btn-primary btn-sm" @onclick="ConfirmSend" disabled="@(_sending || _preview is null || _preview.Recipients.Count == 0)">
+            <button type="button" class="btn btn-primary btn-sm" @onclick="ConfirmSend" disabled="@(_sending || _preview is null || _preview.Recipients.Count == 0)">
                 Confirm &amp; send
             </button>
-            <button class="btn btn-outline-secondary btn-sm" @onclick="Cancel" disabled="@_sending">Cancel</button>
+            <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="Cancel" disabled="@_sending">Cancel</button>
         </div>
     </div>
 }
@@ -111,7 +112,7 @@
         }
         else if (result.Disabled)
         {
-            Toasts.Error("Not sent — no email provider configured (Email:Provider).");
+            Toasts.Error("Not sent: no email provider configured (Email:Provider).");
         }
         else if (result.FailedCount == 0)
         {
@@ -121,11 +122,11 @@
         }
         else if (result.AcceptedCount == 0)
         {
-            Toasts.Error($"Report failed to send to all {result.FailedCount} recipient(s) — see server log.");
+            Toasts.Error($"Report failed to send to all {result.FailedCount} recipient(s). Check the server log for details.");
         }
         else
         {
-            Toasts.Error($"Partial send: {result.AcceptedCount} accepted, {result.FailedCount} failed — see server log.");
+            Toasts.Error($"Partial send: {result.AcceptedCount} accepted, {result.FailedCount} failed. Check the server log for details.");
         }
     }
 }
