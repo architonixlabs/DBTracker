@@ -178,7 +178,7 @@ public class InstanceLifecycleTests
     }
 
     private Task GotoAsync(string path) =>
-        _page.GotoAsync(TestServerFixture.BaseUrl + path, new PageGotoOptions { WaitUntil = WaitUntilState.NetworkIdle });
+        _page.GotoAsync(TestServerFixture.BaseUrl + path, new PageGotoOptions { WaitUntil = WaitUntilState.Load });
 
     /// <summary>
     /// Blazor Server static-prerenders a page, then its interactive SignalR circuit attaches a

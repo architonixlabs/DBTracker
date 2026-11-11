@@ -221,7 +221,7 @@ public class Epic19MigrationPlanningTests
     }
 
     private Task GotoAsync(string path) =>
-        _page.GotoAsync(TestServerFixture.BaseUrl + path, new PageGotoOptions { WaitUntil = WaitUntilState.NetworkIdle });
+        _page.GotoAsync(TestServerFixture.BaseUrl + path, new PageGotoOptions { WaitUntil = WaitUntilState.Load });
 
     private Task WaitForCircuitAsync() => _page.WaitForTimeoutAsync(800);
 }

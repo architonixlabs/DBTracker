@@ -33,7 +33,7 @@ public class CrossEpicIntegrationTests
     }
 
     private Task GotoAsync(string path) =>
-        _page.GotoAsync(TestServerFixture.BaseUrl + path, new PageGotoOptions { WaitUntil = WaitUntilState.NetworkIdle });
+        _page.GotoAsync(TestServerFixture.BaseUrl + path, new PageGotoOptions { WaitUntil = WaitUntilState.Load });
 
     private Task WaitForCircuitAsync() => _page.WaitForTimeoutAsync(800);
 
@@ -245,7 +245,7 @@ public class CrossEpicIntegrationTests
 
         if (snapshotHref is not null)
         {
-            await _page.GotoAsync(TestServerFixture.BaseUrl + snapshotHref, new PageGotoOptions { WaitUntil = WaitUntilState.NetworkIdle });
+            await _page.GotoAsync(TestServerFixture.BaseUrl + snapshotHref, new PageGotoOptions { WaitUntil = WaitUntilState.Load });
             await WaitForCircuitAsync();
             var snapshotBodyBefore = await _page.Locator("body").InnerTextAsync();
             Assert.That(snapshotBodyBefore, Does.Contain(instanceName), "The saved snapshot must include the instance that existed at save time.");
@@ -266,7 +266,7 @@ public class CrossEpicIntegrationTests
             await Assertions.Expect(_page.Locator("body")).Not.ToContainTextAsync(instanceName);
 
             // ...but the previously saved snapshot still shows it — frozen, not re-derived live.
-            await _page.GotoAsync(TestServerFixture.BaseUrl + snapshotHref, new PageGotoOptions { WaitUntil = WaitUntilState.NetworkIdle });
+            await _page.GotoAsync(TestServerFixture.BaseUrl + snapshotHref, new PageGotoOptions { WaitUntil = WaitUntilState.Load });
             await WaitForCircuitAsync();
             await Assertions.Expect(_page.Locator("body")).ToContainTextAsync(instanceName);
         }

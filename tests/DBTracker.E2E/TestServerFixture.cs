@@ -56,9 +56,10 @@ public class TestServerFixture : IAsyncDisposable
         await WaitForServerReadyAsync(_process);
 
         Playwright = await Microsoft.Playwright.Playwright.CreateAsync();
+        var headed = Environment.GetEnvironmentVariable("E2E_HEADED") == "1";
         Browser = await Playwright.Chromium.LaunchAsync(new BrowserTypeLaunchOptions
         {
-            Headless = true
+            Headless = !headed
         });
     }
 

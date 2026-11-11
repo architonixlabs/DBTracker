@@ -931,6 +931,39 @@ authenticated role already, same as the rest of the app, so no separate "my apps
   ChangeWindowDetail/CampaignChangeWindows fixes being reviewed directly against the exact
   AuthorizeView pattern already proven correct on dozens of other pages in this app. Recommend a full
   E2E suite rerun in a fresh session/machine state as a final confirmation.
+- 2026-11-11 — Resolved the deferred Login.razor bug above, and found that the "dev-machine resource
+  exhaustion" explanation for the recurring E2E navigation timeouts was wrong. **Login fix:** the root
+  cause was `<Routes @rendermode="InteractiveServer" />` in App.razor applying the interactive circuit
+  to every page, Login included. A static root can host interactive descendants but not the reverse,
+  so Login couldn't opt out on its own. App.razor (always static SSR, so its own `HttpContext` is the
+  real per-request one) now picks the render mode per request: `null` (static SSR) for
+  `/Account/Login`, `InteractiveServer` for everything else, so the rest of the app keeps its single
+  persistent circuit (the toast-bus fix). A first version carved out all of `/Account`, which broke
+  ForgotPassword (caught by its existing E2E test) and, silently, ResetPassword and
+  `/account/change-password` (no E2E coverage): those pages use `EditForm OnValidSubmit` without a
+  `FormName`, so they only work interactively. The carve-out was narrowed to Login, the only page that
+  writes the auth cookie. A new regression test,
+  `TemporaryPassword_ForcesChangePassword_AndTheNewPasswordSignsIn`, then surfaced a separate
+  pre-existing U16 bug: users created with a temporary password were
+  never actually forced to change it. On .NET 10, `NavigationManager.NavigateTo` no longer throws during
+  static SSR, so Login's `RedirectTo(ReturnUrl ?? "/")` right after the change-password redirect won.
+  Fixed with an explicit `return`, and the test now passes. **Wait-strategy fix:** with the
+  render-mode fix applied, a headed run of the 5 CrossEpicIntegrationTests still failed 5/5, every one
+  a 30s timeout in `GotoAsync(..., WaitUntil = NetworkIdle)` on an authenticated page, while the server
+  log showed zero exceptions. `networkidle` needs about 500ms with no network activity, which a page with
+  a persistent SignalR circuit plus background polling (U03 auto-refresh, notification bell) can't
+  reliably provide. All 30 `WaitUntilState.NetworkIdle` uses across 23 E2E files were changed to
+  `WaitUntilState.Load`. Every call site already follows navigation with its own
+  `WaitForSelectorAsync`/locator assertion, so the "page actually rendered" check is unchanged.
+  Headed runs are now opt-in via `E2E_HEADED=1` (TestServerFixture). **Verified:** one complete run,
+  546/546 unit and 94/94 E2E (93 existing plus the new test), with zero exceptions in the shared test
+  server's log for that run (Testing logs at Warning and above; the earlier failing run logged 196
+  `NullReferenceException`s through the same capture). **Inferred, not proven:** that `networkidle`
+  rather than machine load caused the earlier passes' late-session timeouts. The symptom matches
+  exactly, the server log was clean, and switching waits removed it across a full run, but machine
+  load wasn't independently measured. **Not addressed:** each test file still has its own copy of
+  the `GotoAsync` and fixed 800ms `WaitForCircuitAsync` helpers (no shared base class). Consolidating
+  them would stop this recurring but was left out to keep the change small.
 
 ## Out of scope (future)
 - Automated backup execution/orchestration (this tracks status, doesn't run backups)
