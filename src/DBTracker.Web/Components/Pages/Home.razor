@@ -123,7 +123,7 @@ else
                 </tr>
             </thead>
             <tbody>
-                @foreach (var o in Sorted())
+                @foreach (var o in Sorted().Take(DashboardRowLimit))
                 {
                     <tr @onclick='() => Nav.NavigateTo($"/instances/{o.Id}")'>
                         <td>
@@ -149,6 +149,14 @@ else
             </tbody>
         </table>
     </div>
+
+    @if (Sorted().Count() > DashboardRowLimit)
+    {
+        <p class="small text-muted mt-2" role="status" data-testid="dashboard-row-limit">
+            Showing the @DashboardRowLimit most at risk of @Sorted().Count() instance(s).
+            <a href="@($"/instances{(_filterHealth is null ? "" : $"?health={_filterHealth}")}")">See them all in Instances</a>
+        </p>
+    }
 
     @if (!Sorted().Any())
     {
@@ -256,6 +264,10 @@ else
         [BackupHealth.Overdue] = 2,
         [BackupHealth.OnTrack] = 3,
     };
+
+    // G28: rendering every instance here (about 1,000 rows, re-rendered on each 30s refresh) took ~8 s to be ready on a
+    // phone. The dashboard answers "what needs attention first"; the full, filterable list is on Instances.
+    private const int DashboardRowLimit = 25;
 
     private IEnumerable<InstanceListRow> Sorted()
     {

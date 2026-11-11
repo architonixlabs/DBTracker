@@ -1,4 +1,4 @@
-@implements IDisposable
+﻿@implements IDisposable
 @inject NotificationService Notifications
 @inject AuthenticationStateProvider AuthProvider
 @inject NavigationManager Nav
@@ -10,7 +10,7 @@
    links that Tab moves through, so it is not an ARIA menu and needs no arrow-key handling. Content renders
    only while open, so its buttons are not duplicated on the /notifications page. *@
 <div class="notif-bell-wrap" @onkeydown="OnKeyDown">
-    <button type="button" class="notif-bell-btn" @ref="_bellButtonRef" @onclick="OnBellClick" popovertarget="notif-dropdown"
+    <button type="button" class="notif-bell-btn" style="anchor-name: --notif-bell" @ref="_bellButtonRef" @onclick="OnBellClick" popovertarget="notif-dropdown"
             aria-expanded="@(_open ? "true" : "false")" aria-controls="notif-dropdown" aria-label="@BellLabel">
         <i class="bi @(_refreshError is not null ? "bi-bell-slash" : "bi-bell")" aria-hidden="true"></i>
         @if (_unreadCount > 0)
@@ -19,7 +19,7 @@
         }
     </button>
 
-    <div class="notif-dropdown dbt-anchored @(_open ? "is-open" : "")" id="notif-dropdown" popover="auto" @ref="_dropdownRef"
+    <div class="notif-dropdown dbt-anchored @(_open ? "is-open" : "")" id="notif-dropdown" style="position-anchor: --notif-bell" popover="auto" @ref="_dropdownRef"
          role="region" aria-label="Recent notifications" data-loaded="@_open">
         @if (_open)
         {

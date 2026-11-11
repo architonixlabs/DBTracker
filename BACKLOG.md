@@ -1964,6 +1964,55 @@ tests were updated for the archive choice and the explicit checklist start.
       preloaded with `crossorigin`, and `font-size-adjust: from-font`.
   - **Still open:** the LCP before/after numbers belong to G28.
 - 2026-11-11 | UPDATE-030 | Closes G09-G15, G23, G25 and G27. Full E2E run on the merged tracks: 127 of 135 passed. The 8 failures were fixed and all 8 rerun green. Two were real bugs: (1) Razor rendered "v@p.Version" literally on the Ownership and Apply policy pages, because Razor reads `v@p` as an email address; it is now `v@(p.Version)`. (2) A backup or restore logged with the untouched "now" default was stored rounded down to the minute, up to 59 seconds early, so it could fall before a change start and be excluded as post-change evidence; it now means the actual current time. The rest were test issues: two tests clicked the first submit button on the page, which is the sidebar sign-out; a caption and an alert text had changed wording; a one-shot click raced the circuit; and the paging test assumed a single page. 988 unit tests pass.
+- 2026-11-12 | UPDATE-031 | G26 and G29-G31 delivered (tracks E and F, following the installed modern-web-guidance
+  skill's passkey, dialog, popover, menu, toggletip and container-query guides).
+  - **G26 (passkeys):**
+    - `/account/passkeys` adds, renames and removes passkeys, and every change is audited. Sign-in has a "Sign in with a
+      passkey" button and passkey autofill on the email field.
+    - Built on ASP.NET Core Identity's .NET 10 passkey support (schema version 3, migration `AddPasskeys` adds only
+      `AspNetUserPasskeys`), with user verification required.
+    - `webauthn-polyfills@0.1.7` (Apache-2.0) is served from wwwroot, not a CDN.
+    - Deactivated accounts are refused and must-change-password users are still sent to change it. Both are proven by
+      E2E with a Chrome virtual authenticator.
+    - `Passkeys:ServerDomain` is documented in DEPLOYMENT.md. Passkeys need HTTPS or localhost.
+  - **G29:** a `ModalDialog` component (`<dialog>` with `showModal()`) for archive, cancel retirement checklist, revoke
+    access token, and exception revoke and renew. Focus returns to the opener, Esc closes, and errors show inside the
+    dialog. Revoking a token now asks for confirmation.
+  - **G30:**
+    - The notification menu is a `popover="auto"`.
+    - A `Toggletip` component replaces title-only explanations; the 13 remaining titles only repeat visible text or
+      aria-labels.
+    - Anchor positioning sits behind `@supports`, with a script fallback. Each anchor is named explicitly
+      (`anchor-name`/`position-anchor`) after E2E showed the implicit popovertarget anchor isn't reliable.
+    - Polyfills from a CDN were not used, to keep the no-third-party rule (G27).
+  - **G31:** container queries for the stat strip, detail-card rows and key-value lists, with the old media queries as the
+    fallback.
+- 2026-11-12 | UPDATE-032 | G28 delivered: lab Core Web Vitals baseline with `tests/DBTracker.E2E/Benchmarks/CoreWebVitalsBaseline.cs`.
+  It is `[Explicit]`, uses PerformanceObserver for LCP, CLS, Event Timing and long animation frames, and tops the inventory
+  up to 1,000 instances with 30 days of backups.
+  - **Reports:** it didn't finish loading within 30 s, because Backup activity rendered every run (about 7,000 rows). It now
+    shows the newest 200, with "Show 200 more" and a "failed and missed only" switch; the export still has every run.
+  - **Dashboard:** it took 7.9 s to be ready on the phone profile (LCP 2.9 s), because it rendered every instance. It now
+    shows the 25 most at risk, with a link to the full list in Instances.
+  - **Results after both fixes:**
+
+| Profile | Page | Ready ms | LCP ms | CLS | Slowest interaction ms |
+|---|---|---|---|---|---|
+| Desktop | Dashboard | 164 | 153 | 0.000 | 24 |
+| Desktop | Instances | 400 | 320 | 0.009 | under 16 |
+| Desktop | Reports | 384 | 273 | 0.000 | 16 |
+| Desktop | Instance detail | 83 | 130 | 0.008 | 16 |
+| Desktop | New instance form | 83 | 50 | 0.000 | under 16 |
+| Phone 360 px, 4x CPU | Dashboard | 516 | 284 | 0.000 | 56 |
+| Phone 360 px, 4x CPU | Instances | 690 | 338 | 0.042 | under 16 |
+| Phone 360 px, 4x CPU | Reports | 1,608 | 670 | 0.000 | 96 |
+| Phone 360 px, 4x CPU | Instance detail | 473 | 761 | 0.110 | 32 |
+| Phone 360 px, 4x CPU | New instance form | 336 | 194 | 0.000 | under 16 |
+
+  - **Against the "good" limits:** every LCP is under 2.5 s and every interaction under 200 ms. CLS is under 0.1 except
+    instance detail on the phone (0.110), opened as G33.
+  - **Other fixes from the post-merge E2E run:** popover anchors, and four test issues: a test user's display name
+    containing "Deactivated", a sign-in selector, a 360 px row click, and the inbox tests' menu close.
 - 2026-11-11 | UPDATE-025 | Clarifies the Progress log's D22 entry (see UPDATE-022): after G01, "NotApplicable is not treated as passing" is replaced by "NotApplicable only when proven" and "no second archive path" holds for retirements. The D21 entry's "a DBA can record a contract" is true after G06. Earlier wording is kept as history.
 
 ### Epic 25 - Finish partly built features
@@ -2148,7 +2197,7 @@ fallback.
   - Verify the setup wizard, sign-in, the QR flow and every page with the E2E suite and no CSP
     console errors.
 
-- [ ] **2026-11-11 | G26 | NEW | P2 | M - Passkey sign-in.**
+- [x] **2026-11-11 | G26 | NEW | P2 | M - Passkey sign-in.**
   Dev forgets passwords, Sam wants fewer resets, Angela wants phishing-resistant sign-in, and Noor
   signs in on a phone.
   **Acceptance:**
@@ -2169,7 +2218,7 @@ fallback.
     preloaded, using `font-display: swap`.
   - Record LCP before and after on the dashboard (see G28).
 
-- [ ] **2026-11-11 | G28 | NEW | P2 | S - Core Web Vitals baseline (LCP, INP, CLS).**
+- [x] **2026-11-11 | G28 | NEW | P2 | S - Core Web Vitals baseline (LCP, INP, CLS).**
   Measure before optimizing. This links to U06's never-run benchmark (G09).
   **Acceptance:**
   - Measure with Lighthouse or DevTools on the representative dataset: the dashboard, instance list,
@@ -2177,7 +2226,7 @@ fallback.
   - Record the numbers in the Progress log, list the long tasks and slow interactions found, and
     open items for anything outside "good".
 
-- [ ] **2026-11-11 | G29 | NEW | P3 | M - Native dialogs for confirmations.**
+- [x] **2026-11-11 | G29 | NEW | P3 | M - Native dialogs for confirmations.**
   Alex needs focus kept inside a confirmation, Esc to cancel, and focus returned afterwards. Noor
   needs it to fit a phone. Covers archive, cancel retirement checklist, revoke token and similar
   consequential actions.
@@ -2186,7 +2235,7 @@ fallback.
     to close.
   - Existing data-testids keep working, and the E2E tests pass.
 
-- [ ] **2026-11-11 | G30 | NEW | P3 | M - Popover API for the notification menu and tooltips.**
+- [x] **2026-11-11 | G30 | NEW | P3 | M - Popover API for the notification menu and tooltips.**
   The notification dropdown is hand-built, and 21 controls rely on `title` tooltips that touch and
   keyboard users never see (Noor, Alex).
   **Acceptance:**
@@ -2194,7 +2243,7 @@ fallback.
   - Replace `title`-only explanations with visible text or a toggletip using `popover`.
   - CSS anchor positioning only as an enhancement, with a plain fallback position.
 
-- [ ] **2026-11-11 | G31 | NEW | P3 | S - Container queries for cards and stat cells.**
+- [x] **2026-11-11 | G31 | NEW | P3 | S - Container queries for cards and stat cells.**
   Noor and Alex at 200% zoom: dashboard stat cells and detail cards should reflow by their own
   width, not just the window's.
   **Acceptance:** container queries on the stat row, detail cards and key-value lists, with the
@@ -2224,6 +2273,12 @@ fallback.
   - **Decision for the owner:** response-time targets for U06. The benchmark (1,000 instances,
     100,607 backups) gave medians of 48-65 ms for a list page and 144-240 ms for the heaviest
     report loads. Suggested targets: 250 ms for a list page and 500 ms for a report, at this size.
+
+- [ ] **2026-11-12 | G33 | NEW | P3 | S - Layout shift on instance detail (phone).**
+  Found by G28. On the 360 px, 4x CPU profile, instance detail scores CLS 0.110, just over the 0.1 "good" limit (desktop
+  0.008). Noor sees the page jump as later sections load.
+  **Acceptance:** find the shifting element with the Layout Shift API or DevTools, reserve its space, and re-measure with
+  `CoreWebVitalsBaseline` to below 0.1.
 
 ### Audit corrections to existing text
 

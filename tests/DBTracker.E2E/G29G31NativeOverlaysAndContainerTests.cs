@@ -178,7 +178,9 @@ public class G29G31NativeOverlaysAndContainerTests
         await GotoAsync("/instances");
         await _page.WaitForSelectorAsync(".dbt-table tbody tr");
         await WaitForCircuitAsync();
-        await _page.ClickAsync(".dbt-table tbody tr");
+        // Follow the row's link rather than clicking the row's middle: at 360px the row reflows and the link may not sit there.
+        var href = await _page.Locator("a.instance-row-link").First.GetAttributeAsync("href");
+        await GotoAsync("/" + href!.TrimStart('/'));
         await _page.WaitForURLAsync(url => System.Text.RegularExpressions.Regex.IsMatch(url, @"/instances/\d+"));
         await WaitForCircuitAsync();
     }

@@ -86,17 +86,25 @@ else
                 </button>
             </div>
 
+            var notSuccessCount = rowsInRange.Count(r => r.Status != BackupStatus.Success);
+            var listed = _activityProblemsOnly ? rowsInRange.Where(r => r.Status != BackupStatus.Success).ToList() : rowsInRange;
+            var shown = listed.Take(_activityShown).ToList();
+
             @if (rowsInRange.Count == 0)
             {
                 <div class="empty-state"><i aria-hidden="true" class="bi bi-inbox"></i>No backup runs in this window.</div>
             }
             else
             {
+                <div class="form-check mb-2">
+                    <input class="form-check-input" type="checkbox" id="activity-problems-only" @bind="_activityProblemsOnly" @bind:after="ResetActivityPaging" data-testid="activity-problems-only" />
+                    <label class="form-check-label small" for="activity-problems-only">Show only failed and missed runs (@notSuccessCount). The export always has every run.</label>
+                </div>
                 <div class="dbt-table">
                     <table aria-label="Backup runs in range" class="table">
                         <thead><tr><th>When</th><th>Instance</th><th>Company / Dept</th><th>Engine</th><th>Type</th><th>Status</th><th>Size</th><th>Duration</th><th>Source</th><th>Evidence <Toggletip Label="About evidence levels" TestId="report-evidence-help"><EvidenceLevelsHelp /></Toggletip></th></tr></thead>
                         <tbody>
-                            @foreach (var r in rowsInRange)
+                            @foreach (var r in shown)
                             {
                                 <tr>
                                     <td><LocalTime Utc="r.TimestampUtc" Format="MMM d, h:mm tt" ShowUtc="false" /></td>
@@ -122,6 +130,13 @@ else
                             }
                         </tbody>
                     </table>
+                </div>
+                <div class="d-flex align-items-center gap-3 mt-2" role="status" data-testid="activity-paging">
+                    <span class="small text-muted">Showing the newest @shown.Count of @listed.Count run(s).</span>
+                    @if (shown.Count < listed.Count)
+                    {
+                        <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="() => _activityShown += ActivityPageSize" data-testid="activity-show-more">Show @Math.Min(ActivityPageSize, listed.Count - shown.Count) more</button>
+                    }
                 </div>
             }
             break;
@@ -608,6 +623,14 @@ else
     private string? _rangeError;
     private bool _scanAttentionOnly;
     private List<BackupActivityRow> _activityRows = new();
+
+    // G28: rendering every run in the window (about 7,000 rows for 7 days at 1,000 instances) made the page take tens of
+    // seconds over the circuit. Show the newest runs in pages; the export still covers every run.
+    private const int ActivityPageSize = 200;
+    private int _activityShown = ActivityPageSize;
+    private bool _activityProblemsOnly;
+
+    private void ResetActivityPaging() => _activityShown = ActivityPageSize;
     private (DateTime FromUtc, DateTime ToUtc) _activityRangeUtc;
 
     // U22: Period A/B default to two adjacent 30-day windows: "this period vs. the one before it".
@@ -666,6 +689,7 @@ else
     {
         var (fromUtc, toUtc) = CurrentRangeUtc();
         _activityRows = await OverviewService.GetBackupActivityAsync(fromUtc, toUtc);
+        ResetActivityPaging();
         _activityRangeUtc = (fromUtc, toUtc);
     }
 

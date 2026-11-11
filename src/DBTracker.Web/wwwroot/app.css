@@ -1639,7 +1639,9 @@ html.no-popover .notif-dropdown:not(.is-open) {
 }
 
 /* ---------- Anchored popovers (notification menu, toggletips) ---------- */
-/* CSS anchor positioning is an enhancement: popovertarget makes the trigger the implicit anchor.
+/* CSS anchor positioning is an enhancement. Each trigger names itself (anchor-name) and its popover points at it
+   (position-anchor), set per instance in the markup: the implicit popovertarget anchor isn't supported everywhere
+   anchor positioning is, and without an anchor the popover is placed against the viewport instead.
    Elsewhere dbtracker.js sets top/left from the trigger (below it, flipped above near the bottom edge,
    kept inside the viewport). Both blocks are gated so neither keeps the UA's centered placement. */
 @supports (position-area: block-end) {

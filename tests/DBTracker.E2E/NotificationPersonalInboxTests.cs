@@ -161,7 +161,7 @@ public class NotificationPersonalInboxTests
         await _page.WaitForSelectorAsync(".notif-bell-btn");
         await _page.ClickAsync(".notif-bell-btn");
         await _page.WaitForTimeoutAsync(400);
-        await _page.ClickAsync(".notif-bell-btn"); // close it again
+        await _page.Keyboard.PressAsync("Escape"); // close it again (the menu is a popover; Esc returns focus to the bell)
     }
 
     private Task GotoAsync(string path) =>

@@ -95,8 +95,8 @@ public class SavedViewsAndPagingTests
         await _page.WaitForTimeoutAsync(400);
         Assert.That(_page.Url, Does.Contain("dir=desc"));
 
-        var firstNameDesc = await _page.Locator(".dbt-table tbody tr").First.InnerTextAsync();
-        Assert.That(firstNameDesc, Is.Not.EqualTo(firstNameAsc));
+        // The URL updates before the re-render lands, so wait for the first row to change rather than reading it once.
+        await Assertions.Expect(_page.Locator(".dbt-table tbody tr").First).Not.ToHaveTextAsync(firstNameAsc);
     }
 
     [Test]

@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using System.Text.Json;
 using Microsoft.Playwright;
 
@@ -95,9 +96,19 @@ public class PasskeyTests
         await Assertions.Expect(_page.Locator("[data-testid=passkey-name-cell]")).Not.ToBeEmptyAsync();
         await LogOutAsync(_page);
 
-        var userRow = _admin!.Locator("tr", new PageLocatorOptions { HasText = email });
+        // Reload: the admin page has been idle since it created the user. The display name itself contains "Deactivated",
+        // so check the status badge and the stored flag, not the row text.
+        await GotoAsync(_admin!, "/users");
+        await _admin!.WaitForSelectorAsync("button[type=submit]");
+        await WaitForCircuitAsync(_admin);
+        var userRow = _admin.Locator("tr", new PageLocatorOptions { HasText = email });
         await userRow.Locator("button:has-text('Deactivate')").ClickAsync();
-        await Assertions.Expect(userRow).ToContainTextAsync("Deactivated");
+        await Assertions.Expect(userRow.Locator(".badge-health", new LocatorLocatorOptions { HasText = "Deactivated" })).ToBeVisibleAsync();
+        using (var db = new DBTracker.Infrastructure.DBTrackerDbContext(new DbContextOptionsBuilder<DBTracker.Infrastructure.DBTrackerDbContext>()
+                   .UseSqlServer("Server=localhost;Database=DBTracker_Test;Integrated Security=True;TrustServerCertificate=True;").Options))
+        {
+            Assert.That(await db.Users.Where(u => u.Email == email).Select(u => u.IsActive).SingleAsync(), Is.False, "The account must really be deactivated.");
+        }
 
         await SignInWithPasskeyButtonAsync(_page);
         await Assertions.Expect(_page.Locator("[data-testid=passkey-signin-error]")).ToContainTextAsync("deactivated");
@@ -137,6 +148,18 @@ public class PasskeyTests
 
     private static async Task AddVirtualAuthenticatorAsync(IPage page)
     {
+        // Chrome's virtual authenticator answers a conditional (autofill) request by itself, which a real browser only does
+        // after the user picks a passkey. Report no conditional support so the page skips autofill and these tests drive the
+        // explicit "Sign in with a passkey" path deterministically. Defined non-writable so the polyfill can't replace it.
+        await page.AddInitScriptAsync("""
+            if (window.PublicKeyCredential) {
+              const real = PublicKeyCredential.getClientCapabilities?.bind(PublicKeyCredential);
+              Object.defineProperty(PublicKeyCredential, 'getClientCapabilities', {
+                configurable: false, writable: false,
+                value: async () => ({ ...(real ? await real() : { passkeyPlatformAuthenticator: true, userVerifyingPlatformAuthenticator: true }), conditionalGet: false })
+              });
+            }
+            """);
         var cdp = await page.Context.NewCDPSessionAsync(page);
         await cdp.SendAsync("WebAuthn.enable", new Dictionary<string, object> { ["enableUI"] = false });
         JsonElement? added = await cdp.SendAsync("WebAuthn.addVirtualAuthenticator", new Dictionary<string, object>
