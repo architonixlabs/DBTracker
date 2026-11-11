@@ -92,9 +92,17 @@ public static class InstallStartupExtensions
                 return;
             }
 
-            if (state.IsInstalled || isInstallPath || IsFrameworkOrAsset(path))
+            if (state.IsInstalled || isInstallPath || IsFrameworkOrAsset(path) || path.Equals("/healthz", StringComparison.OrdinalIgnoreCase))
             {
                 await next();
+                return;
+            }
+
+            // API clients (the tray app) expect JSON, not the wizard's HTML.
+            if (path.StartsWithSegments("/api", StringComparison.OrdinalIgnoreCase))
+            {
+                context.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
+                await context.Response.WriteAsJsonAsync(new { error = "setup_required", message = "DBTracker isn't set up yet." });
                 return;
             }
 

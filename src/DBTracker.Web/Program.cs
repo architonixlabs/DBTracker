@@ -10,6 +10,7 @@ using DBTracker.Infrastructure.Notifications;
 using DBTracker.Infrastructure.Ownership;
 using DBTracker.Infrastructure.Queries;
 using DBTracker.Infrastructure.Scanning;
+using DBTracker.Web.Api;
 using DBTracker.Web.Components;
 using DBTracker.Web.Components.Account;
 using DBTracker.Web.Install;
@@ -51,6 +52,7 @@ builder.Services.AddScoped<AuditRecorder>();
 builder.Services.AddScoped<InstanceArchiveService>();
 builder.Services.AddScoped<InstanceBulkEditService>();
 builder.Services.AddScoped<AccountLifecycleService>();
+builder.Services.AddScoped<PersonalAccessTokenService>();
 
 builder.Services.AddScoped<TeamService>();
 builder.Services.AddScoped<BackupPolicyService>();
@@ -130,9 +132,17 @@ builder.Services.AddAuthentication(options =>
         });
     });
 
+// Personal access tokens for /api/*; only endpoints that ask for this scheme's policy use it, so cookie sign-in is unaffected.
+builder.Services.AddAuthentication()
+    .AddScheme<Microsoft.AspNetCore.Authentication.AuthenticationSchemeOptions, AccessTokenAuthenticationHandler>(
+        AccessTokenDefaults.Scheme, _ => { });
+
 // No global FallbackPolicy: every page and endpoint declares its authorization explicitly. A fallback also caught /_blazor transport
 // endpoints, redirecting them to login and breaking the circuit on anonymous pages (e.g. Forgot/Reset password).
-builder.Services.AddAuthorization();
+builder.Services.AddAuthorization(options =>
+    options.AddPolicy(AccessTokenDefaults.Policy, policy => policy
+        .AddAuthenticationSchemes(AccessTokenDefaults.Scheme)
+        .RequireAuthenticatedUser()));
 
 builder.Services.AddIdentityCore<ApplicationUser>(options =>
     {
@@ -180,6 +190,7 @@ app.MapRazorComponents<App>()
 
 app.MapIdentityLogoutEndpoint();
 app.MapDeviceLinkEndpoints();
+app.MapTrayApi();
 
 app.Run();
 

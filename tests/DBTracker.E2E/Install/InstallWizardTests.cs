@@ -8,6 +8,11 @@ namespace DBTracker.InstallE2E;
 [NonParallelizable]
 public class InstallWizardTests
 {
+    private static readonly HttpClient Http = new(new HttpClientHandler { AllowAutoRedirect = false })
+    {
+        BaseAddress = new Uri(InstallServerFixture.BaseUrl),
+    };
+
     private InstallServerFixture _server = null!;
     private IPage _page = null!;
 
@@ -39,6 +44,17 @@ public class InstallWizardTests
 
         await Assertions.Expect(_page.Locator(".alert-danger")).ToContainTextAsync("doesn't match");
         await Assertions.Expect(_page.Locator("h2.install-step-title")).ToHaveTextAsync("Enter the setup key");
+
+        // The tray app's endpoints answer before setup instead of being sent to the wizard.
+        using var health = await Http.GetAsync("/healthz");
+        Assert.That((int)health.StatusCode, Is.EqualTo(200));
+        var healthJson = await health.Content.ReadAsStringAsync();
+        Assert.That(healthJson, Does.Contain("\"status\":\"setup-required\"").And.Contain("\"installed\":false").And.Contain("\"database\":\"not-configured\""));
+
+        using var api = await Http.GetAsync("/api/tray/summary");
+        Assert.That((int)api.StatusCode, Is.EqualTo(503));
+        Assert.That(api.Headers.Location, Is.Null);
+        Assert.That(await api.Content.ReadAsStringAsync(), Does.Contain("setup_required"));
     }
 
     [Test, Order(2)]
@@ -63,6 +79,10 @@ public class InstallWizardTests
         var response = await GotoAsync(_page, "/install");
         Assert.That(response!.Status, Is.EqualTo(404));
         Assert.That(await _page.Locator("[data-testid=install-wizard]").CountAsync(), Is.Zero);
+
+        using var health = await Http.GetAsync("/healthz");
+        Assert.That((int)health.StatusCode, Is.EqualTo(200));
+        Assert.That(await health.Content.ReadAsStringAsync(), Does.Contain("\"status\":\"ok\"").And.Contain("\"installed\":true"));
     }
 
     [Test, Order(4)]

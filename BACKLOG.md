@@ -1064,6 +1064,26 @@ authenticated role already, same as the rest of the app, so no separate "my apps
   is created. The SQL login is deliberately kept on uninstall (a database may still map a user to it);
   DEPLOYMENT.md gives the DROP LOGIN line. **Still not covered:** the Options page click-through and a
   version-to-version upgrade.
+- 2026-11-11 · Built I06, personal access tokens and the tray API. `/account/tokens` (any signed-in
+  role, linked from the user menu) creates a named token with a 30/90/180/365-day expiry (default 90),
+  shows it once with a Copy button, lists created / last used / expires / status, and revokes. Tokens
+  are `dbt_` plus base64url of 32 random bytes; only a SHA-256 hash and a 10-character display prefix
+  are stored, checked in constant time, and last used is written at most once a minute
+  (`PersonalAccessTokenCodec`, pure and unit-tested). Create and revoke go through the U19 audit
+  recorder, and deactivating a user revokes their tokens as well as failing them on every request via
+  the active-account check. `GET /api/tray/summary` uses a separate bearer-only authentication scheme
+  applied by policy to that endpoint alone, so cookie sign-in and the Login render-mode fix are
+  untouched; it never redirects (the handler turns off status-code pages, which would otherwise
+  re-execute a 401 into the sign-in-only not-found page and so into a login redirect) and returns the
+  dashboard's counts and its worst-first at-risk list (max 20, `TraySummaryBuilder`). Anonymous
+  `GET /healthz` reports status, setup state, database reachability (3-second probe, cached 10
+  seconds so many tray apps cost one connection) and version, with no other detail; the install gate
+  lets it through before setup and answers `/api/*` with a 503 JSON instead of the wizard redirect. One
+  EF migration (`AddPersonalAccessTokens`). No product bugs found; two test-only mistakes fixed along
+  the way (a bare `button[type=submit]` on the change-password page clicked the sidebar's Log out
+  button, and an unnecessary wait on Blazor's in-page navigation was timing-dependent). **Verified:**
+  619/619 unit (27 new) and 103/103 E2E (4 new `AccessTokenTests`, plus before/after-setup `/healthz`
+  and `/api` checks added to the Production install tests).
 
 ## Out of scope (future)
 - Automated backup execution/orchestration (this tracks status, doesn't run backups)
@@ -1625,7 +1645,7 @@ a user, so personal access tokens are a separate web-app item (I06).
   personal access token stored per Windows user with DPAPI. Pure logic in a netstandard2.0 library with
   unit tests.
 
-- [ ] **2026-11-11 | I06 | NEW | P2 | M - Personal access tokens and the tray API.**
+- [x] **2026-11-11 | I06 | NEW | P2 | M - Personal access tokens and the tray API.**
   **Acceptance:** `/account/tokens` (any signed-in role) creates a named token with an expiry (default
   90 days), shows it once, lists the user's tokens with created / last used / expires, and revokes them.
   Only a SHA-256 hash is stored; tokens look like `dbt_<random>`. Create and revoke are audited.

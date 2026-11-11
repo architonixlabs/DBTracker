@@ -75,6 +75,8 @@ public class DBTrackerDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<EditionCostEstimate> EditionCostEstimates => Set<EditionCostEstimate>();
     public DbSet<RetirementChecklist> RetirementChecklists => Set<RetirementChecklist>();
 
+    public DbSet<PersonalAccessToken> PersonalAccessTokens => Set<PersonalAccessToken>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -271,6 +273,18 @@ public class DBTrackerDbContext : IdentityDbContext<ApplicationUser>
             entity.HasIndex(e => new { e.UserId, e.ViewType });
             // One user can't have two saved views with the same name for the same page.
             entity.HasIndex(e => new { e.UserId, e.ViewType, e.Name }).IsUnique();
+        });
+
+        modelBuilder.Entity<PersonalAccessToken>(entity =>
+        {
+            entity.Property(e => e.UserId).HasMaxLength(450).IsRequired();
+            entity.Property(e => e.Name).HasMaxLength(100).IsRequired();
+            entity.Property(e => e.TokenHash).HasMaxLength(64).IsRequired();
+            entity.Property(e => e.DisplayPrefix).HasMaxLength(16).IsRequired();
+            entity.Property(e => e.RevokedBy).HasMaxLength(256);
+
+            entity.HasIndex(e => e.TokenHash).IsUnique();
+            entity.HasIndex(e => e.UserId);
         });
 
         modelBuilder.Entity<NotificationReadState>(entity =>

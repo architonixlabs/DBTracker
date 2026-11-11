@@ -1,0 +1,212 @@
+@page "/account/tokens"
+@attribute [Authorize]
+@using System.ComponentModel.DataAnnotations
+@inject PersonalAccessTokenService Tokens
+@inject AuthenticationStateProvider AuthProvider
+@inject ToastService Toasts
+@inject IJSRuntime JS
+
+<PageTitle>Access tokens · DBTracker</PageTitle>
+
+<div class="app-topbar">
+    <div>
+        <h1>Access tokens</h1>
+        <div class="subtitle">Personal tokens let read-only tools, such as the DBTracker tray app, see backup risk counts as you. A token can't change anything. Creating and revoking tokens is recorded in the audit trail.</div>
+    </div>
+</div>
+
+<div class="row g-3">
+    <div class="col-md-5">
+        <div class="dbt-card">
+            <h2 class="h6 text-muted mb-3">Create a token</h2>
+            <EditForm Model="_form" OnValidSubmit="Create">
+                <DataAnnotationsValidator />
+                <div class="mb-2">
+                    <label for="token-name" class="form-label small">Token name</label>
+                    <InputText id="token-name" class="form-control form-control-sm" @bind-Value="_form.Name" placeholder="Tray app on SQLPROD01" />
+                    <ValidationMessage For="() => _form.Name" />
+                    <div class="form-text">So you can tell your tokens apart later.</div>
+                </div>
+                <div class="mb-3">
+                    <label for="token-expiry" class="form-label small">Expires after</label>
+                    <InputSelect id="token-expiry" class="form-select form-select-sm" @bind-Value="_form.ExpiryDays">
+                        @foreach (var days in PersonalAccessTokenCodec.ExpiryChoicesDays)
+                        {
+                            <option value="@days">@days days</option>
+                        }
+                    </InputSelect>
+                </div>
+                <button type="submit" class="btn btn-primary btn-sm" disabled="@_creating">@(_creating ? "Creating…" : "Create token")</button>
+            </EditForm>
+        </div>
+
+        @if (_newToken is not null)
+        {
+            <div class="dbt-card mt-3" role="status" data-testid="new-token-panel">
+                <h2 class="h6 mb-2">Copy your new token now</h2>
+                <p class="small mb-2">You won't see it again. If you lose it, revoke it and create another.</p>
+                <label for="new-token-value" class="form-label small">Token for "@_newTokenName"</label>
+                <div class="d-flex gap-2 flex-wrap">
+                    <input id="new-token-value" class="form-control form-control-sm" readonly value="@_newToken" style="font-family:var(--dbt-mono);min-width:0;flex:1 1 16rem;" />
+                    <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="CopyToken">Copy token</button>
+                </div>
+                <button type="button" class="btn btn-link btn-sm px-0 mt-2" @onclick="DismissToken">I've copied it, hide it</button>
+            </div>
+        }
+    </div>
+
+    <div class="col-md-7">
+        @if (_loadError is not null)
+        {
+            <div class="alert alert-warning small" role="alert">
+                Your tokens couldn't be loaded. <button type="button" class="btn btn-link btn-sm p-0 align-baseline" @onclick="Load">Try again</button>
+            </div>
+        }
+        else if (_tokens is null)
+        {
+            <div class="text-muted small" role="status">Loading your tokens…</div>
+        }
+        else if (_tokens.Count == 0)
+        {
+            <div class="empty-state py-3"><i aria-hidden="true" class="bi bi-key"></i>You have no tokens yet. Create one for the DBTracker tray app.</div>
+        }
+        else
+        {
+            <div class="dbt-table">
+                <table aria-label="Your access tokens" class="table">
+                    <thead>
+                        <tr><th scope="col">Name</th><th scope="col">Starts with</th><th scope="col">Created</th><th scope="col">Last used</th><th scope="col">Expires</th><th scope="col">Status</th><th scope="col"><span class="visually-hidden">Actions</span></th></tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var t in _tokens)
+                        {
+                            var state = PersonalAccessTokenCodec.StateOf(t, DateTime.UtcNow);
+                            <tr>
+                                <td>@t.Name</td>
+                                <td class="small" style="font-family:var(--dbt-mono);">@(t.DisplayPrefix)…</td>
+                                <td class="small">@t.CreatedAtUtc.ToLocalTime().ToString("MMM d, yyyy")</td>
+                                <td class="small">@(t.LastUsedAtUtc is { } used ? used.ToLocalTime().ToString("MMM d, yyyy h:mm tt") : "Never")</td>
+                                <td class="small">@t.ExpiresAtUtc.ToLocalTime().ToString("MMM d, yyyy")</td>
+                                <td>
+                                    @switch (state)
+                                    {
+                                        case AccessTokenState.Active:
+                                            <span class="badge-health dot OnTrack">Active</span>
+                                            break;
+                                        case AccessTokenState.Expired:
+                                            <span class="badge-health dot Overdue">Expired</span>
+                                            break;
+                                        default:
+                                            <span class="badge-health dot NeverBackedUp">Revoked</span>
+                                            break;
+                                    }
+                                </td>
+                                <td class="small">
+                                    @if (state == AccessTokenState.Active)
+                                    {
+                                        <button type="button" class="btn btn-outline-danger btn-sm" @onclick="() => Revoke(t)" aria-label="@($"Revoke token {t.Name}")">Revoke</button>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    private readonly CreateModel _form = new();
+    private List<PersonalAccessToken>? _tokens;
+    private string? _loadError;
+    private bool _creating;
+    private string? _newToken;
+    private string? _newTokenName;
+    private string _userId = "";
+    private string _userName = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        var state = await AuthProvider.GetAuthenticationStateAsync();
+        _userId = state.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? "";
+        _userName = state.User.Identity?.Name ?? "unknown";
+        await Load();
+    }
+
+    private async Task Load()
+    {
+        try
+        {
+            _tokens = await Tokens.ListAsync(_userId);
+            _loadError = null;
+        }
+        catch (Exception ex)
+        {
+            _loadError = ex.Message;
+        }
+    }
+
+    private async Task Create()
+    {
+        _creating = true;
+        try
+        {
+            var created = await Tokens.CreateAsync(_userId, _userName, _form.Name, _form.ExpiryDays);
+            _newToken = created.Token;
+            _newTokenName = created.Record.Name;
+            _form.Name = "";
+            Toasts.Success($"Token \"{created.Record.Name}\" created. Copy it now.");
+            await Load();
+        }
+        catch (Exception)
+        {
+            Toasts.Error("The token couldn't be created. Try again.");
+        }
+        finally
+        {
+            _creating = false;
+        }
+    }
+
+    private async Task CopyToken()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", _newToken);
+            Toasts.Success("Token copied to the clipboard.");
+        }
+        catch (Exception)
+        {
+            Toasts.Error("Couldn't reach the clipboard. Select the token and copy it by hand.");
+        }
+    }
+
+    private void DismissToken()
+    {
+        _newToken = null;
+        _newTokenName = null;
+    }
+
+    private async Task Revoke(PersonalAccessToken token)
+    {
+        if (await Tokens.RevokeAsync(_userId, _userName, token.Id))
+        {
+            Toasts.Success($"Token \"{token.Name}\" revoked. Anything using it stops working now.");
+        }
+        else
+        {
+            Toasts.Error("That token was already revoked.");
+        }
+        await Load();
+    }
+
+    private class CreateModel
+    {
+        [Required(ErrorMessage = "Give the token a name.")]
+        [StringLength(100, ErrorMessage = "Keep the name under 100 characters.")]
+        public string Name { get; set; } = "";
+
+        public int ExpiryDays { get; set; } = PersonalAccessTokenCodec.DefaultExpiryDays;
+    }
+}

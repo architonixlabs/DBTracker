@@ -18,7 +18,8 @@ public class AccountLifecycleService(
     UserManager<ApplicationUser> userManager,
     DBTrackerDbContext db,
     IEmailSender emailSender,
-    AuditRecorder audit)
+    AuditRecorder audit,
+    PersonalAccessTokenService accessTokens)
 {
     public async Task<int> CountActiveAdminsAsync(string? excludingUserId = null)
     {
@@ -109,6 +110,9 @@ public class AccountLifecycleService(
             {
                 await db.SaveChangesAsync();
             }
+
+            // Token validation also checks IsActive; revoking keeps them dead if the account is reactivated later.
+            await accessTokens.RevokeAllForUserAsync(userId, actorId, actorName, "account deactivated");
         }
 
         await audit.RecordUserActionAsync(actorId, actorName, isActive ? "UserReactivated" : "UserDeactivated", "User", userId, user.Email ?? user.UserName ?? userId);
