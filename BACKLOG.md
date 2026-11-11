@@ -1544,3 +1544,30 @@ warning. Found while scoping: a Production deploy today seeds no users at all, s
   Protocol for Blazor Server, SQL Server), app pool and site setup, App_Data write permission, SQL access
   for the app pool identity, where to find the setup key, backup-share permissions, upgrades, and how to
   rerun the wizard. `dotnet publish` with the profile succeeds.
+
+2026-11-11 | NEW-004 | Added a Windows installer after the owner asked for a setup file that checks
+prerequisites, downloads and installs what's missing (or asks), installs into IIS, then opens the setup
+wizard. Persona check: Sam (admin) is the main user, replacing the manual DEPLOYMENT.md steps; Priya
+(DBA) needs the app pool identity to get a SQL login; Angela (auditor) needs an install log of what was
+changed. Owner decisions: MSI built with the WiX Toolset; offer SQL Server Express when no SQL Server
+is found. Because an MSI cannot chain other installers, prerequisites live in a WiX bundle (Setup.exe)
+that runs the MSI last.
+
+- [ ] **2026-11-11 | I03 | NEW | P1 | L - DBTracker.msi (WiX).**
+  **Acceptance:** per-machine MSI with a fixed UpgradeCode and major-upgrade support; installs the
+  published app to a chosen folder (default `C:\inetpub\DBTracker`); creates the app pool (No Managed
+  Code) and site on a chosen free port; grants the app pool identity Modify on `App_Data`; optionally
+  creates a SQL login for `IIS APPPOOL\<pool>` with dbcreator on a chosen server; launch conditions that
+  name exactly what's missing (IIS, WebSocket Protocol, .NET 10 Hosting Bundle) when run without the
+  bundle; finishes with "Open the setup wizard" (browser to `/install`, setup key location shown).
+  Uninstall removes the site, app pool and program files but keeps `App_Data` (config, keys, setup key)
+  unless the user chooses otherwise. Verbose MSI log on request. Builds with `dotnet build`, no global
+  WiX install.
+
+- [ ] **2026-11-11 | I04 | NEW | P1 | M - DBTracker-Setup.exe prerequisites bundle (WiX Burn).**
+  **Acceptance:** detects and, after one confirmation, installs: IIS with the WebSocket Protocol and
+  required features (DISM, Windows client and Server), the .NET 10 Hosting Bundle, and optionally SQL
+  Server Express when no local instance exists (or skips it so the wizard can use a remote server).
+  Every download comes from Microsoft with a pinned SHA-512 taken from Microsoft's own release
+  metadata at build time, never a guessed URL. Restarts IIS after the Hosting Bundle. Runs the MSI last
+  and ends by opening the setup wizard. Quiet mode for unattended installs. Install log in %TEMP%.
