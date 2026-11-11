@@ -1,0 +1,305 @@
+@page "/lifecycle/import"
+@attribute [Authorize(Roles = Roles.CanEditPolicy)]
+@inject ReleaseCatalogService Catalog
+@inject AdvisoryService Advisories
+@inject VersionObservationService Observations
+@inject AuditRecorder Audit
+@inject ToastService Toasts
+@inject IJSRuntime JS
+@inject AuthenticationStateProvider AuthProvider
+
+<PageTitle>Import lifecycle facts · DBTracker</PageTitle>
+
+<div class="app-topbar">
+    <div>
+        <h1>Import lifecycle facts</h1>
+        <div class="subtitle">
+            Load the release catalogue, security advisories or version metadata from a CSV file. Each import shows a preview first,
+            and re-importing the same file updates or skips rows instead of duplicating them. <a href="/lifecycle">Back to the lifecycle hub</a>
+        </div>
+    </div>
+</div>
+
+<div class="filter-bar" role="group" aria-label="What to import">
+    @foreach (var kind in Enum.GetValues<ImportKind>())
+    {
+        <button type="button" class="btn @(kind == _kind ? "btn-primary" : "btn-outline-secondary")" aria-pressed="@(kind == _kind ? "true" : "false")"
+                data-testid="import-kind-@kind" @onclick="() => SelectKind(kind)">@KindLabel(kind)</button>
+    }
+</div>
+
+<div class="dbt-card" style="max-width: 900px;">
+    <div class="d-flex justify-content-between align-items-start mb-2 flex-wrap gap-2">
+        <h2 class="h6 text-muted mb-0">@KindLabel(_kind): file</h2>
+        <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="DownloadTemplate" data-testid="import-template-button">
+            <i class="bi bi-download" aria-hidden="true"></i> Download CSV template
+        </button>
+    </div>
+    <p class="text-muted small mb-3" id="lifecycle-import-help">@KindHelp(_kind) Lines starting with <code>#</code> are ignored, so the template's example row and notes can stay. Leave a column out to keep what is stored. Maximum file size is 2 MB.</p>
+    <details class="mb-3">
+        <summary class="small">Column guide: what each column accepts</summary>
+        <table class="table table-sm dbt-table mt-2 mb-0" aria-label="Import columns and the values they accept">
+            <thead><tr><th scope="col">Column</th><th scope="col">Required</th><th scope="col">Accepts</th></tr></thead>
+            <tbody>
+                @foreach (var column in Guide(_kind))
+                {
+                    <tr>
+                        <td class="small"><code>@column.Name</code></td>
+                        <td class="small">@(column.Required ? "Yes" : "")</td>
+                        <td class="small">@column.Help</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </details>
+    <label class="form-label small" for="lifecycle-import-file">CSV file</label>
+    @* The key resets the file input when the import kind changes. *@
+    <InputFile @key="_kind" id="lifecycle-import-file" OnChange="OnFileSelected" class="form-control" accept=".csv" aria-describedby="lifecycle-import-help" disabled="@_parsing" data-testid="lifecycle-import-file" />
+
+    @if (_parsing)
+    {
+        <p class="text-muted small mt-2 mb-0" role="status">Reading @_fileName…</p>
+    }
+    else if (_fileError is not null)
+    {
+        <p class="small mt-2 mb-0" role="alert" style="color:var(--dbt-failed);">@_fileError</p>
+    }
+</div>
+
+@if (_rows is not null)
+{
+    <div class="dbt-card mt-4" data-testid="lifecycle-import-preview">
+        <h2 class="h6 text-muted mb-3">Preview</h2>
+        <p class="mb-3" role="status" data-testid="lifecycle-import-summary">
+            <span style="color:var(--dbt-ontrack)">@Count(ImportRowPlan.Create) create</span>,
+            <span style="color:var(--dbt-overdue)">@Count(ImportRowPlan.Update) update</span>,
+            <span class="text-muted">@Count(ImportRowPlan.Skip) unchanged (skip)</span>
+            @if (Count(ImportRowPlan.Ambiguous) > 0)
+            {
+                <span>, <span style="color:var(--dbt-failed)">@Count(ImportRowPlan.Ambiguous) not imported</span></span>
+            }
+            @if (_errors.Count > 0)
+            {
+                <span>, <span style="color:var(--dbt-failed)">@_errors.Count row(s) with errors (skipped)</span></span>
+            }
+        </p>
+
+        @if (_errors.Count > 0)
+        {
+            <p class="text-muted small mb-2">Fix these rows and upload the file again. Valid rows are not affected.</p>
+            <div class="dbt-table mb-4">
+                <table class="table" aria-label="Rows with errors" data-testid="lifecycle-import-errors">
+                    <thead><tr><th scope="col">Row</th><th scope="col">Error</th></tr></thead>
+                    <tbody>
+                        @foreach (var e in _errors)
+                        {
+                            <tr><td>@e.RowNumber</td><td class="text-danger">@e.Message</td></tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+
+        @if (_rows.Count > 0)
+        {
+            <div class="dbt-table mb-4">
+                <table class="table" aria-label="Import plan per row">
+                    <thead><tr><th scope="col">Row</th><th scope="col">Plan</th><th scope="col">Item</th><th scope="col">Detail</th></tr></thead>
+                    <tbody>
+                        @foreach (var row in _rows.Take(200))
+                        {
+                            <tr data-testid="lifecycle-import-row">
+                                <td class="small">@row.RowNumber</td>
+                                <td><span class="badge-health dot @PlanClass(row.Plan)">@row.Plan</span></td>
+                                <td class="small">@row.Label</td>
+                                <td class="small text-muted">@row.Detail</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+            @if (_rows.Count > 200)
+            {
+                <p class="text-muted small">…and @(_rows.Count - 200) more.</p>
+            }
+            <button type="button" class="btn btn-primary" @onclick="Apply" data-testid="lifecycle-import-apply"
+                    disabled="@(_applying || Count(ImportRowPlan.Create) + Count(ImportRowPlan.Update) == 0)">
+                <i class="bi bi-upload" aria-hidden="true"></i> @(_applying ? "Importing…" : $"Apply {Count(ImportRowPlan.Create)} create / {Count(ImportRowPlan.Update)} update")
+            </button>
+        }
+    </div>
+}
+
+@code {
+    private enum ImportKind { Catalogue, Advisories, VersionMetadata }
+
+    private record PreviewRow(int RowNumber, ImportRowPlan Plan, string Label, string? Detail);
+
+    private ImportKind _kind = ImportKind.Catalogue;
+    private string? _fileName, _fileError;
+    private bool _parsing, _applying;
+    private List<PreviewRow>? _rows;
+    private IReadOnlyList<ImportRowError> _errors = [];
+    private LifecycleImportPreview<ReleaseCatalogEntry>? _catalogPreview;
+    private LifecycleImportPreview<AdvisoryRecord>? _advisoryPreview;
+    private LifecycleImportPreview<VersionObservation>? _observationPreview;
+    private const long MaxFileBytes = 2 * 1024 * 1024;
+
+    private void SelectKind(ImportKind kind)
+    {
+        _kind = kind;
+        Reset();
+    }
+
+    private void Reset()
+    {
+        _rows = null;
+        _errors = [];
+        _fileError = null;
+        _catalogPreview = null;
+        _advisoryPreview = null;
+        _observationPreview = null;
+    }
+
+    private int Count(ImportRowPlan plan) => _rows?.Count(r => r.Plan == plan) ?? 0;
+
+    private async Task OnFileSelected(InputFileChangeEventArgs e)
+    {
+        Reset();
+        _fileName = e.File.Name;
+        if (e.File.Size > MaxFileBytes)
+        {
+            _fileError = $"{e.File.Name} is larger than 2 MB. Split it into smaller files and import each one.";
+            return;
+        }
+
+        _parsing = true;
+        try
+        {
+            using var stream = e.File.OpenReadStream(maxAllowedSize: MaxFileBytes);
+            using var reader = new StreamReader(stream);
+            var content = await reader.ReadToEndAsync();
+
+            switch (_kind)
+            {
+                case ImportKind.Catalogue:
+                    _catalogPreview = ReleaseCatalogCsvImporter.ParseForImport(content, await Catalog.ListAsync(), DateTime.UtcNow);
+                    _rows = _catalogPreview.Rows.Select(r => new PreviewRow(r.RowNumber, r.Plan, r.Label, r.Detail)).ToList();
+                    _errors = _catalogPreview.Errors;
+                    break;
+                case ImportKind.Advisories:
+                    _advisoryPreview = AdvisoryCsvImporter.ParseForImport(content, await Advisories.ListAsync());
+                    _rows = _advisoryPreview.Rows.Select(r => new PreviewRow(r.RowNumber, r.Plan, r.Label, r.Detail)).ToList();
+                    _errors = _advisoryPreview.Errors;
+                    break;
+                default:
+                    _observationPreview = await Observations.PreviewImportAsync(content);
+                    _rows = _observationPreview.Rows.Select(r => new PreviewRow(r.RowNumber, r.Plan, r.Label, r.Detail)).ToList();
+                    _errors = _observationPreview.Errors;
+                    break;
+            }
+        }
+        catch (Exception)
+        {
+            _fileError = $"Couldn't read {e.File.Name}. Check that it is a UTF-8 CSV file and try again.";
+        }
+        finally
+        {
+            _parsing = false;
+        }
+    }
+
+    private async Task Apply()
+    {
+        var state = await AuthProvider.GetAuthenticationStateAsync();
+        if (!Roles.CanEditPolicy.Split(',').Any(state.User.IsInRole))
+        {
+            _fileError = "Only an Admin or DBA can import lifecycle facts.";
+            return;
+        }
+
+        var userId = state.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? "";
+        var userName = state.User.Identity?.Name ?? "unknown";
+        _applying = true;
+        try
+        {
+            string summary;
+            switch (_kind)
+            {
+                case ImportKind.Catalogue when _catalogPreview is not null:
+                {
+                    var (created, updated, skipped) = await Catalog.ApplyImportAsync(_catalogPreview.Rows, userName);
+                    summary = $"{created} created, {updated} updated" + (skipped > 0 ? $", {skipped} skipped because they changed since the preview" : "");
+                    break;
+                }
+                case ImportKind.Advisories when _advisoryPreview is not null:
+                {
+                    var (created, updated, skipped) = await Advisories.ApplyImportAsync(_advisoryPreview.Rows, userName);
+                    summary = $"{created} created, {updated} updated" + (skipped > 0 ? $", {skipped} skipped because they already exist" : "");
+                    break;
+                }
+                case ImportKind.VersionMetadata when _observationPreview is not null:
+                {
+                    var (created, skipped) = await Observations.ApplyImportAsync(_observationPreview.Rows, userName);
+                    summary = $"{created} observation(s) recorded" + (skipped > 0 ? $", {skipped} skipped because they are already recorded" : "");
+                    break;
+                }
+                default:
+                    return;
+            }
+
+            await Audit.RecordUserActionAsync(userId, userName, $"Lifecycle{_kind}CsvImported", "CsvImport", "", _fileName ?? "",
+                reason: $"{summary}; {Count(ImportRowPlan.Skip)} unchanged, {Count(ImportRowPlan.Ambiguous)} not imported, {_errors.Count} error row(s)");
+            Toasts.Success($"Import complete: {summary}.");
+            Reset();
+        }
+        catch (Exception)
+        {
+            _fileError = "The import failed. Reload the file to rebuild the preview, then try again.";
+        }
+        finally
+        {
+            _applying = false;
+        }
+    }
+
+    private async Task DownloadTemplate()
+    {
+        var (name, csv) = _kind switch
+        {
+            ImportKind.Catalogue => ("dbtracker-release-catalogue-template.csv", ReleaseCatalogCsvImporter.TemplateCsv()),
+            ImportKind.Advisories => ("dbtracker-advisories-template.csv", AdvisoryCsvImporter.TemplateCsv()),
+            _ => ("dbtracker-version-metadata-template.csv", VersionObservationCsvImporter.TemplateCsv())
+        };
+        await JS.InvokeVoidAsync("dbtracker.downloadCsv", name, csv);
+    }
+
+    private static IReadOnlyList<ImportColumnHelp> Guide(ImportKind kind) => kind switch
+    {
+        ImportKind.Catalogue => ReleaseCatalogCsvImporter.ColumnGuide,
+        ImportKind.Advisories => AdvisoryCsvImporter.ColumnGuide,
+        _ => VersionObservationCsvImporter.ColumnGuide
+    };
+
+    private static string KindLabel(ImportKind kind) => kind switch
+    {
+        ImportKind.Catalogue => "Release catalogue",
+        ImportKind.Advisories => "Advisories",
+        _ => "Version metadata"
+    };
+
+    private static string KindHelp(ImportKind kind) => kind switch
+    {
+        ImportKind.Catalogue => "Vendor release and support facts. Rows match an entry by Engine, Family and ReleaseLabel. An entry under an active manual override is not overwritten.",
+        ImportKind.Advisories => "Vendor security advisories. Rows match by Engine, Family and VendorAdvisoryId. Importing doesn't classify instances; evaluate them on each instance's Lifecycle page.",
+        _ => "Versions read by a script or provider export, one observation per row, including failed reads. Rows match an instance by Name. A row already recorded is skipped. The declared identity never changes."
+    };
+
+    private static string PlanClass(ImportRowPlan plan) => plan switch
+    {
+        ImportRowPlan.Create => "OnTrack",
+        ImportRowPlan.Update => "Overdue",
+        ImportRowPlan.Skip => "NeverBackedUp",
+        _ => "Failed"
+    };
+}

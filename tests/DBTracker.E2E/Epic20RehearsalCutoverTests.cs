@@ -126,12 +126,34 @@ public class Epic20RehearsalCutoverTests
         await WaitForCircuitAsync();
 
         await TransitionToAsync("Assessing", "Begin assessment");
+
+        // Ready needs a current, passing rehearsal (performance included); Scheduled also needs an approval.
+        await GotoAsync($"/campaigns/{campaignId}/rehearsals");
+        await WaitForCircuitAsync();
+        await _page.Locator("[data-testid=rehearsal-instance-select]").SelectOptionAsync(new SelectOptionValue { Label = "AVALOKH-SALES-SQL" });
+        await _page.FillAsync("input[placeholder='Source label']", "SQL Server 2019");
+        await _page.FillAsync("input[placeholder='Target label']", "SQL Server 2022");
+        await _page.Locator("[data-testid=backup-restore-outcome]").SelectOptionAsync("Passed");
+        await _page.Locator("[data-testid=correctness-outcome]").SelectOptionAsync("Passed");
+        await _page.Locator("[data-testid=performance-outcome]").SelectOptionAsync("Passed");
+        await _page.Locator("[data-testid=write-disposition]").SelectOptionAsync("NotApplicable");
+        await _page.Locator("[data-testid=record-rehearsal-button]").ClickAsync();
+        await _page.WaitForTimeoutAsync(500);
+
+        await GotoAsync($"/campaigns/{campaignId}");
+        await WaitForCircuitAsync();
+        var approvalCard = _page.Locator(".dbt-card", new PageLocatorOptions { HasText = "Approval history" });
+        await approvalCard.Locator("input[placeholder='Scope (e.g. DBA technical)']").FillAsync("DBA technical");
+        await approvalCard.Locator("input[placeholder='Approver name']").FillAsync("Priya Nair");
+        await approvalCard.GetByRole(AriaRole.Button, new LocatorGetByRoleOptions { Name = "Record approval" }).ClickAsync();
+        await _page.WaitForTimeoutAsync(500);
+
         await TransitionToAsync("Ready", "Assessment complete");
         await TransitionToAsync("Scheduled", "Window scheduled");
         await TransitionToAsync("InProgress", "Cutover underway");
         await TransitionToAsync("Validating", "Cutover done, validating");
 
-        // Blocked: no rehearsal, no validation, no sign-offs yet.
+        // Blocked: no validation and no sign-offs yet.
         await GotoAsync($"/campaigns/{campaignId}");
         await WaitForCircuitAsync();
         await Assertions.Expect(_page.Locator("[data-testid=completion-gate-banner]")).ToContainTextAsync("blocked");
@@ -143,18 +165,6 @@ public class Epic20RehearsalCutoverTests
         await _page.WaitForTimeoutAsync(500);
         await Assertions.Expect(_page.Locator(".dbt-toast").First).ToContainTextAsync("rejected");
         await Assertions.Expect(_page.Locator("[data-testid=campaign-detail-state]")).ToContainTextAsync("Validating");
-
-        // Supply a passing rehearsal.
-        await GotoAsync($"/campaigns/{campaignId}/rehearsals");
-        await WaitForCircuitAsync();
-        await _page.Locator("[data-testid=rehearsal-instance-select]").SelectOptionAsync(new SelectOptionValue { Label = "AVALOKH-SALES-SQL" });
-        await _page.FillAsync("input[placeholder='Source label']", "SQL Server 2019");
-        await _page.FillAsync("input[placeholder='Target label']", "SQL Server 2022");
-        await _page.Locator("[data-testid=backup-restore-outcome]").SelectOptionAsync("Passed");
-        await _page.Locator("[data-testid=correctness-outcome]").SelectOptionAsync("Passed");
-        await _page.Locator("[data-testid=write-disposition]").SelectOptionAsync("NotApplicable");
-        await _page.Locator("[data-testid=record-rehearsal-button]").ClickAsync();
-        await _page.WaitForTimeoutAsync(500);
 
         // Supply a fully-passing validation and both required sign-offs.
         await GotoAsync($"/campaigns/{campaignId}/validation");

@@ -28,7 +28,7 @@ public class PatchBaselineService(IDbContextFactory<DBTrackerDbContext> factory,
             .FirstOrDefaultAsync();
     }
 
-    public async Task UpsertAsync(DatabaseEngine engine, string family, int targetReleaseCatalogEntryId, string reviewedBy, DateTime? expiresUtc, string notes)
+    public async Task UpsertAsync(DatabaseEngine engine, string family, int targetReleaseCatalogEntryId, string reviewedBy, DateTime? expiresUtc, string notes, DateTime? requiredByUtc = null, string actorName = "")
     {
         using var db = await factory.CreateDbContextAsync();
 
@@ -48,12 +48,13 @@ public class PatchBaselineService(IDbContextFactory<DBTrackerDbContext> factory,
             ReviewedBy = reviewedBy,
             ReviewedAtUtc = DateTime.UtcNow,
             ExpiresAtUtc = expiresUtc,
+            RequiredByUtc = requiredByUtc,
             Notes = notes
         };
         db.ApprovedPatchBaselines.Add(baseline);
         await db.SaveChangesAsync();
 
-        await audit.RecordUserActionAsync("", reviewedBy, "ApprovedPatchBaselineSet", "ApprovedPatchBaseline", baseline.Id.ToString(), $"{engine}/{family}", reason: notes);
+        await audit.RecordUserActionAsync("", string.IsNullOrWhiteSpace(actorName) ? reviewedBy : actorName, "ApprovedPatchBaselineSet", "ApprovedPatchBaseline", baseline.Id.ToString(), $"{engine}/{family}", reason: $"Reviewed by {reviewedBy}" + (requiredByUtc is { } due ? $", required by {due:yyyy-MM-dd}" : "") + (string.IsNullOrWhiteSpace(notes) ? "" : $". {notes}"));
     }
 
     public async Task<PatchBaselineResult?> ComputeForInstanceAsync(int instanceId)

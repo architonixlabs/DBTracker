@@ -429,6 +429,7 @@ public class DBTrackerDbContext : IdentityDbContext<ApplicationUser>
             entity.Property(e => e.HostingEngineVersion).HasMaxLength(100);
             entity.Property(e => e.DatabaseCompatibilityLevel).HasMaxLength(100);
             entity.Property(e => e.AttestedBy).HasMaxLength(320);
+            entity.Property(e => e.LastRunwayNoticeKind).HasMaxLength(50);
             entity.Property(e => e.UpdatedBy).HasMaxLength(320);
 
             entity.HasOne(e => e.DatabaseInstance)
@@ -475,6 +476,7 @@ public class DBTrackerDbContext : IdentityDbContext<ApplicationUser>
             entity.Property(e => e.DateTimezone).HasMaxLength(50);
             entity.Property(e => e.SourceUrl).HasMaxLength(500);
             entity.Property(e => e.SourceReference).HasMaxLength(500);
+            entity.Property(e => e.ReleaseNotesUrl).HasMaxLength(500);
             entity.Property(e => e.ReviewedBy).HasMaxLength(320);
             entity.Property(e => e.OverrideReason).HasMaxLength(1000);
             entity.Property(e => e.OverrideReviewedBy).HasMaxLength(320);
@@ -576,6 +578,8 @@ public class DBTrackerDbContext : IdentityDbContext<ApplicationUser>
         {
             entity.Property(e => e.RawVersionText).HasMaxLength(200);
             entity.Property(e => e.FailureDetail).HasMaxLength(500);
+            entity.Property(e => e.ObservedEdition).HasMaxLength(100);
+            entity.Property(e => e.ObservedCompatibilityLevel).HasMaxLength(100);
             entity.Property(e => e.ObservedBy).HasMaxLength(320);
             entity.Property(e => e.DriftDetail).HasMaxLength(500);
             entity.Property(e => e.Notes).HasMaxLength(1000);

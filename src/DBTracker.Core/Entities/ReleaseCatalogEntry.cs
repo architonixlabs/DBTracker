@@ -47,6 +47,7 @@ public class ReleaseCatalogEntry
 
     public string SourceUrl { get; set; } = string.Empty;
     public string SourceReference { get; set; } = string.Empty;
+    public string ReleaseNotesUrl { get; set; } = string.Empty;
     public DateTime? RetrievedAtUtc { get; set; }
     public DateTime? ReviewedAtUtc { get; set; }
     public string ReviewedBy { get; set; } = string.Empty;

@@ -57,6 +57,23 @@ public static class PathSupportClassifier
     private static bool BuildInRange(string actual, string min, string max) =>
         string.IsNullOrWhiteSpace(actual) || VersionBuildComparer.IsInRange(actual, min, max);
 
+    /// <summary>Combines what the assessor entered with the matched rule's reviewed text. Neither is dropped: when both are
+    /// present and differ, the rule's text follows in brackets.</summary>
+    public static string MergeGuidance(string? entered, string? fromRule)
+    {
+        var e = (entered ?? "").Trim();
+        var r = (fromRule ?? "").Trim();
+        if (e.Length == 0)
+        {
+            return r;
+        }
+        if (r.Length == 0 || string.Equals(e, r, StringComparison.OrdinalIgnoreCase))
+        {
+            return e;
+        }
+        return $"{e} (matched rule: {r})";
+    }
+
     private static int Specificity(PathSupportRule r) =>
         new[] { r.SourceEdition, r.SourcePlatform, r.SourceTopology, r.TargetEdition, r.TargetPlatform, r.TargetTopology, r.SourceBuildMin + r.SourceBuildMax, r.TargetBuildMin + r.TargetBuildMax }
             .Count(s => !string.IsNullOrWhiteSpace(s));
