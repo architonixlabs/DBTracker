@@ -135,6 +135,30 @@ public class Epic22EntitlementAndRetirementTests
         await Assertions.Expect(_page.Locator("body")).Not.ToContainTextAsync("123,456.78");
         // A Viewer also can't record a new estimate — the commercial-evidence form is gone entirely.
         await Assertions.Expect(_page.Locator("[data-testid=add-cost-estimate]")).Not.ToBeVisibleAsync();
+
+        // G06: the auditor sees that an estimate was recorded, but not the figure, and can't find it by searching for it.
+        await LoginAsync("angela.price@contoso.com"); // Auditor
+        await GotoAsync("/audit");
+        await _page.WaitForSelectorAsync("tbody tr");
+        await Assertions.Expect(_page.Locator("tbody tr", new PageLocatorOptions { HasText = "EditionCostEstimateRecorded" }).First).ToBeVisibleAsync();
+        await Assertions.Expect(_page.Locator("body")).Not.ToContainTextAsync("123,456.78");
+        await WaitForCircuitAsync();
+        await _page.FillAsync("#audit-search", "123,456.78");
+        await _page.WaitForTimeoutAsync(900);
+        await Assertions.Expect(_page.Locator("tbody tr", new PageLocatorOptions { HasText = "EditionCostEstimateRecorded" })).ToHaveCountAsync(0);
+    }
+
+    /// <summary>G06: a DBA records contract facts (vendor, coverage, dates), which carry no money; cost estimates stay Admin/IT Manager.</summary>
+    [Test]
+    public async Task Dba_CanLinkASupportContract_ButNotRecordACostEstimate()
+    {
+        await LoginAsync("priya.nair@architonixlabs.com"); // DBA
+        var instanceId = await CreateInstanceAsync($"E2E-CONTRACT-{Guid.NewGuid():N}"[..24].ToUpperInvariant());
+        await GotoAsync($"/instances/{instanceId}/entitlement");
+        await WaitForCircuitAsync();
+
+        await Assertions.Expect(_page.Locator("#contract-vendor")).ToBeVisibleAsync();
+        await Assertions.Expect(_page.Locator("[data-testid=add-cost-estimate]")).Not.ToBeVisibleAsync();
     }
 
     [Test]
@@ -154,9 +178,10 @@ public class Epic22EntitlementAndRetirementTests
         await depCard.GetByRole(AriaRole.Button, new LocatorGetByRoleOptions { Name = "Record dependency" }).ClickAsync();
         await _page.WaitForTimeoutAsync(600);
 
-        // Checklist starts blocked on that unresolved consumer.
+        // Viewing doesn't create a checklist; starting one is explicit. It starts blocked on that unresolved consumer.
         await GotoAsync($"/instances/{instanceId}/retirement");
         await WaitForCircuitAsync();
+        await _page.Locator("[data-testid=start-retirement-checklist]").ClickAsync();
         var consumerRow = _page.Locator("[data-testid=retirement-gate-row]", new PageLocatorOptions { HasText = "Downstream consumers" });
         await Assertions.Expect(consumerRow.Locator("[data-testid=retirement-gate-status]")).ToContainTextAsync("Blocked");
         await Assertions.Expect(_page.Locator("[data-testid=retirement-overall-status]")).ToContainTextAsync("Blocked");
@@ -225,5 +250,55 @@ public class Epic22EntitlementAndRetirementTests
         await GotoAsync("/instances/archived");
         await WaitForCircuitAsync();
         await Assertions.Expect(_page.Locator("tbody tr", new PageLocatorOptions { HasText = instanceName }).First).ToBeVisibleAsync();
+    }
+
+    /// <summary>G01: while a retirement checklist is open, a plain archive is refused, so the checklist's gates can't be
+    /// skipped. Cancelling the checklist (with a reason) restores the plain archive for a genuine duplicate.</summary>
+    [Test]
+    public async Task PlainArchive_RefusedWhileChecklistOpen_AllowedAfterCancel()
+    {
+        await LoginAsync("admin@architonixlabs.com");
+        var instanceName = $"E2E-G01-{Guid.NewGuid():N}"[..24].ToUpperInvariant();
+        var instanceId = await CreateInstanceAsync(instanceName);
+
+        // Just viewing the retirement page leaves no checklist behind.
+        await GotoAsync($"/instances/{instanceId}/retirement");
+        await WaitForCircuitAsync();
+        await Assertions.Expect(_page.Locator("[data-testid=start-retirement-checklist]")).ToBeVisibleAsync();
+        await _page.Locator("[data-testid=start-retirement-checklist]").ClickAsync();
+        await Assertions.Expect(_page.Locator("[data-testid=retirement-gate-table]")).ToBeVisibleAsync();
+
+        // Plain archive is refused with the checklist named.
+        await GotoAsync($"/instances/{instanceId}");
+        await WaitForCircuitAsync();
+        await _page.ClickAsync("button:has-text('Archive')");
+        await _page.ClickAsync("[data-testid=archive-kind-mistake]");
+        await _page.FillAsync("#archive-reason", "E2E duplicate entry");
+        await _page.ClickAsync("button:has-text('Archive this instance')");
+        await Assertions.Expect(_page.Locator("[role=alert]", new PageLocatorOptions { HasText = "Retirement checklist" })).ToBeVisibleAsync();
+        Assert.That(_page.Url, Does.Contain($"/instances/{instanceId}"), "A refused archive must stay on the instance page.");
+
+        // Cancel the checklist; the instance stays active and the page offers a fresh start.
+        await GotoAsync($"/instances/{instanceId}/retirement");
+        await WaitForCircuitAsync();
+        await _page.Locator("[data-testid=cancel-checklist-reason]").FillAsync("Started by mistake (E2E)");
+        await _page.Locator("[data-testid=cancel-checklist-button]").ClickAsync();
+        await Assertions.Expect(_page.Locator("[data-testid=start-retirement-checklist]")).ToBeVisibleAsync();
+
+        // Now the duplicate can be archived directly.
+        await GotoAsync($"/instances/{instanceId}");
+        await WaitForCircuitAsync();
+        await _page.ClickAsync("button:has-text('Archive')");
+        await _page.ClickAsync("[data-testid=archive-kind-mistake]");
+        await _page.FillAsync("#archive-reason", "E2E duplicate entry");
+        await _page.ClickAsync("button:has-text('Archive this instance')");
+        await _page.WaitForURLAsync(url => url.EndsWith("/instances") || url.Contains("/instances?"));
+
+        // The audit trail says which kind of archive it was.
+        await GotoAsync("/audit");
+        await WaitForCircuitAsync();
+        var auditBody = await _page.Locator("body").InnerTextAsync();
+        Assert.That(auditBody, Does.Contain("Not a retirement"));
+        Assert.That(auditBody, Does.Contain("RetirementChecklistCancelled"));
     }
 }

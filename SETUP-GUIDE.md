@@ -20,10 +20,12 @@ From the [Releases page](https://github.com/architonixlabs/DBTracker/releases), 
 **DBTracker-Setup.exe** (recommended) and **SHA256SUMS.txt**. Check the download in PowerShell:
 
 ```powershell
-Get-FileHash .\DBTracker-Setup.exe -Algorithm SHA256
+$expected = (Select-String -Path .\SHA256SUMS.txt -Pattern 'DBTracker-Setup.exe').Line.Split(' ')[0]
+(Get-FileHash .\DBTracker-Setup.exe -Algorithm SHA256).Hash -eq $expected
 ```
 
-The hash must match the line for `DBTracker-Setup.exe` in SHA256SUMS.txt.
+It must print `True`. SHA256SUMS.txt is written by `installer\build.ps1` next to the installers, and
+lists `DBTracker-Setup.exe` and `DBTracker.msi`.
 
 ## 3. Run Setup.exe
 

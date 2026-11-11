@@ -107,7 +107,11 @@ else
                         </div>
                     }
 
-                    <button class="btn btn-primary btn-sm" @onclick="CreateWindow" disabled="@(string.IsNullOrWhiteSpace(_title) || _start == default || _end == default)" data-testid="create-window-button">Plan window</button>
+                    <button class="btn btn-primary btn-sm" @onclick="CreateWindow" disabled="@(string.IsNullOrWhiteSpace(_title) || _start == default || _end == default || _selectedScopes.Count == 0)" data-testid="create-window-button">Plan window</button>
+                    @if (_selectedScopes.Count == 0)
+                    {
+                        <p class="small text-muted mt-1 mb-0" role="status">Pick at least one required approval. A window with no approvers could start unchecked.</p>
+                    }
                 </div>
             </div>
         </AuthorizeView>

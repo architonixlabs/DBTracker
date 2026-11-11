@@ -24,8 +24,26 @@
     <p class="text-muted small mb-3" id="import-file-help">
         The first row must be a header. Only the <strong>Name</strong> and <strong>Engine</strong> columns are required.
         Rows are matched to the existing inventory by Name, ignoring case: a matching name updates that instance,
-        a new name creates one. Quoted fields may contain commas and line breaks. Maximum file size is 2 MB.
+        a new name creates one. An update changes only the columns in your file; leave a column out to keep what is
+        stored. Lines starting with <code>#</code> are ignored, so the template's example row and notes can stay.
+        Quoted fields may contain commas and line breaks. Maximum file size is 2 MB.
     </p>
+    <details class="mb-3">
+        <summary class="small">Column guide: what each column accepts</summary>
+        <table class="table table-sm dbt-table mt-2 mb-0" aria-label="Import columns and the values they accept">
+            <thead><tr><th scope="col">Column</th><th scope="col">Required</th><th scope="col">Accepts</th></tr></thead>
+            <tbody>
+                @foreach (var column in InstanceCsvImporter.ColumnGuide)
+                {
+                    <tr>
+                        <td class="small"><code>@column.Name</code></td>
+                        <td class="small">@(column.Required ? "Yes" : "")</td>
+                        <td class="small">@column.Help</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </details>
     <label class="form-label small" for="import-file">CSV file</label>
     <InputFile id="import-file" OnChange="OnFileSelected" class="form-control" accept=".csv" aria-describedby="import-file-help" disabled="@_parsing" />
 
@@ -143,11 +161,25 @@
             using var reader = new StreamReader(stream);
             var content = await reader.ReadToEndAsync();
 
-            var existingByName = await Db.DatabaseInstances
-                .AsNoTracking()
-                .ToDictionaryAsync(i => i.Name, i => i, StringComparer.OrdinalIgnoreCase);
+            var all = await Db.DatabaseInstances.AsNoTracking().ToListAsync();
+            var byName = all.GroupBy(i => i.Name, StringComparer.OrdinalIgnoreCase).ToList();
+            var existingByName = byName
+                .Where(g => g.Count() == 1 && !g.First().IsArchived)
+                .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+            var blockedNames = byName
+                .Where(g => g.Count() > 1 || g.First().IsArchived)
+                .ToDictionary(
+                    g => g.Key,
+                    g => g.Count() > 1
+                        ? $"Name '{g.Key}' matches {g.Count()} existing instances (including archived ones). Rename one before importing."
+                        : $"'{g.Key}' is archived. Unarchive it first if it should be updated, or use a different name for a new instance.",
+                    StringComparer.OrdinalIgnoreCase);
 
-            _preview = InstanceCsvImporter.ParseForImport(content, existingByName);
+            var teamIdsByName = (await Db.Teams.AsNoTracking().Select(t => new { t.Name, t.Id }).ToListAsync())
+                .GroupBy(t => t.Name, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(g => g.Key, g => g.First().Id, StringComparer.OrdinalIgnoreCase);
+
+            _preview = InstanceCsvImporter.ParseForImport(content, existingByName, blockedNames, teamIdsByName);
         }
         catch (Exception)
         {
@@ -185,10 +217,18 @@
                 Db.DatabaseInstances.Add(row.Instance);
                 creates++;
             }
-            else if (row.Plan == ImportRowPlan.Update)
+            else if (row.Plan == ImportRowPlan.Update && row.MatchedExistingId is { } existingId)
             {
-                row.Instance.UpdatedAtUtc = now;
-                Db.DatabaseInstances.Update(row.Instance);
+                // Update the stored record in place: only the file's columns change, and its preview-time version makes a
+                // concurrent edit fail the save instead of being overwritten.
+                var stored = await Db.DatabaseInstances.FindAsync(existingId);
+                if (stored is null || stored.IsArchived)
+                {
+                    continue;
+                }
+                Db.Entry(stored).Property(i => i.RowVersion).OriginalValue = row.Instance.RowVersion;
+                InstanceCsvImporter.ApplyImportedFields(stored, row.Instance);
+                stored.UpdatedAtUtc = now;
                 updates++;
             }
             // Skip and Ambiguous rows are never written.
@@ -197,6 +237,13 @@
         try
         {
             await Db.SaveChangesAsync();
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            Db.ChangeTracker.Clear();
+            _importing = false;
+            _importError = "Someone changed one of these instances after the preview, so nothing was saved. Reload the file to rebuild the preview, then try again.";
+            return;
         }
         catch (Exception)
         {

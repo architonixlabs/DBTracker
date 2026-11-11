@@ -9,7 +9,7 @@ public record NotificationInboxItem(int Id, int? DatabaseInstanceId, string Inst
 public record NotificationInboxPage(IReadOnlyList<NotificationInboxItem> Items, int TotalCount, int UnreadCount);
 
 /// <summary>Uses a short-lived DbContext per call because NotificationBell renders beside every page's own scoped context, and sharing one would race.</summary>
-/// <remarks>Notifications are broadcast; read state is per user. On a user's first visit, every existing notification is marked read, so nobody starts with a backlog of unread alerts.</remarks>
+/// <remarks>Notifications are broadcast; read state is per user. On a user's first visit, the notifications that already exist are marked read once, so nobody starts with a backlog of old alerts; later ones arrive unread.</remarks>
 public class NotificationService(IDbContextFactory<DBTrackerDbContext> factory)
 {
     public async Task<NotificationInboxPage> GetInboxAsync(string userId, int page = 1, int pageSize = 20)
@@ -91,22 +91,34 @@ public class NotificationService(IDbContextFactory<DBTrackerDbContext> factory)
         return notification;
     }
 
+    /// <summary>Runs once per user, recorded in NotificationInboxStarts even when there is nothing to mark, so alerts
+    /// raised after the first visit are never pre-marked read.</summary>
     private static async Task EnsureBackfilledAsync(DBTrackerDbContext db, string userId)
     {
-        var hasAnyReadState = await db.NotificationReadStates.AnyAsync(s => s.UserId == userId);
-        if (hasAnyReadState)
-        {
-            return;
-        }
-
-        var existingIds = await db.Notifications.Select(n => n.Id).ToListAsync();
-        if (existingIds.Count == 0)
+        if (await db.NotificationInboxStarts.AnyAsync(s => s.UserId == userId))
         {
             return;
         }
 
         var now = DateTime.UtcNow;
-        db.NotificationReadStates.AddRange(existingIds.Select(id => new NotificationReadState { NotificationId = id, UserId = userId, ReadAtUtc = now }));
-        await db.SaveChangesAsync();
+        db.NotificationInboxStarts.Add(new NotificationInboxStart { UserId = userId, StartedAtUtc = now });
+
+        // A user with read state from before this marker existed has already been backfilled; only record the marker.
+        var hasAnyReadState = await db.NotificationReadStates.AnyAsync(s => s.UserId == userId);
+        if (!hasAnyReadState)
+        {
+            var existingIds = await db.Notifications.Where(n => n.CreatedAtUtc <= now).Select(n => n.Id).ToListAsync();
+            db.NotificationReadStates.AddRange(existingIds.Select(id => new NotificationReadState { NotificationId = id, UserId = userId, ReadAtUtc = now }));
+        }
+
+        try
+        {
+            await db.SaveChangesAsync();
+        }
+        catch (DbUpdateException)
+        {
+            // The bell and the inbox page can start the same user's first visit at once; the other call already recorded it.
+            db.ChangeTracker.Clear();
+        }
     }
 }

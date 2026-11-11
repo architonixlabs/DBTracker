@@ -37,8 +37,13 @@ the app) and `DBTracker.msi` (the app only) into `installer\out`.
 ## Project layout
 - `src/DBTracker.Core` — domain entities and backup-health logic
 - `src/DBTracker.Infrastructure` — EF Core DbContext, migrations, queries
-- `src/DBTracker.Web` — Blazor UI
+- `src/DBTracker.Web` — Blazor UI, the `/install` setup wizard and the tray API
+- `src/DBTracker.Tray` — DBTracker Tray, the Windows notification-area app (.NET Framework 4.6.2)
+- `src/DBTracker.Tray.Core` — the tray's testable logic (netstandard2.0)
+- `installer/` — `DBTracker.Msi` (WiX 5), `DBTracker.Bundle` (Setup.exe), MSI custom actions,
+  `build.ps1` and the Sandbox / Hyper-V install tests under `test/`
 - `tests/DBTracker.UnitTests` — unit tests
+- `tests/DBTracker.Tray.Tests` — tray logic tests
 - `tests/DBTracker.E2E` — Playwright end-to-end tests
 
 See [BACKLOG.md](BACKLOG.md) for the persona-driven product backlog.

@@ -16,9 +16,11 @@ public enum ScanOutcome
 public record ScanResult(ScanOutcome Outcome, int FilesDiscovered, string? ErrorMessage = null);
 
 /// <summary>A file seen at a backup location, with the eligibility decision the scan or preview made.</summary>
-public record FilePreview(string FileName, long SizeBytes, DateTime LastWriteUtc, FileEligibility Eligibility, string Reason, bool AlreadyKnown);
+public record FilePreview(string FileName, long SizeBytes, DateTime LastWriteUtc, FileEligibility Eligibility, string Reason, bool AlreadyKnown, BackupType RecordedAs);
 
-/// <summary>Scans an instance's backup location and records eligible files not already known as Discovered records. Matching is by name and exact size, so a changed file reusing a name counts as new evidence.</summary>
+/// <summary>Scans an instance's backup location and records eligible files not already known as Discovered records. Matching is by
+/// name, exact size and last-write time, so a file rewritten under the same name counts as new evidence even at the same size.
+/// The backup type comes from the file name (BackupFileTypeClassifier), so a .trn log backup isn't recorded as a full one.</summary>
 /// <remarks>A unique index plus the per-row catch below stops concurrent scans double-inserting the same file.</remarks>
 public class BackupFileScanner(DBTrackerDbContext db)
 {
@@ -54,7 +56,7 @@ public class BackupFileScanner(DBTrackerDbContext db)
                     continue; // legacy Discovered record for this name — grandfathered, not re-recorded.
                 }
 
-                if (known.Signatures.Contains((file.FileName, file.SizeBytes)))
+                if (known.Signatures.Contains((file.FileName, file.SizeBytes, file.LastWriteUtc)))
                 {
                     continue; // unchanged — already recorded, never duplicated.
                 }
@@ -63,7 +65,7 @@ public class BackupFileScanner(DBTrackerDbContext db)
                 {
                     DatabaseInstanceId = instanceId,
                     TimestampUtc = file.LastWriteUtc,
-                    Type = BackupType.Full,
+                    Type = BackupFileTypeClassifier.Classify(file.FileName),
                     Status = BackupStatus.Success,
                     SizeMb = Math.Round(file.SizeBytes / 1024.0 / 1024.0, 1),
                     ObservedFileBytes = file.SizeBytes,
@@ -80,7 +82,7 @@ public class BackupFileScanner(DBTrackerDbContext db)
                 }
                 catch (DbUpdateException)
                 {
-                    // A concurrent scan already recorded this exact (name, size) signature.
+                    // A concurrent scan already recorded this exact (name, size, write time) signature.
                     db.Entry(record).State = EntityState.Detached;
                 }
             }
@@ -108,12 +110,12 @@ public class BackupFileScanner(DBTrackerDbContext db)
     {
         var evaluations = await EvaluateFilesAsync(backupFileLocation, backupFileNamePatterns, ct);
 
-        var knownNames = instanceId is null
-            ? new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-            : (await LoadKnownSignaturesAsync(instanceId.Value, ct)).AllKnownNames;
+        var known = instanceId is null ? null : await LoadKnownSignaturesAsync(instanceId.Value, ct);
 
         return evaluations
-            .Select(f => new FilePreview(f.FileName, f.SizeBytes, f.LastWriteUtc, f.Eligibility, f.Reason, knownNames.Contains(f.FileName)))
+            .Select(f => new FilePreview(f.FileName, f.SizeBytes, f.LastWriteUtc, f.Eligibility, f.Reason,
+                known is not null && (known.Signatures.Contains((f.FileName, f.SizeBytes, f.LastWriteUtc)) || known.NamesWithUnknownSignature.Contains(f.FileName)),
+                BackupFileTypeClassifier.Classify(f.FileName)))
             .ToList();
     }
 
@@ -155,22 +157,21 @@ public class BackupFileScanner(DBTrackerDbContext db)
     {
         var rows = await db.BackupRecords
             .Where(r => r.DatabaseInstanceId == instanceId && r.Source == BackupSource.Discovered)
-            .Select(r => new { r.SourceFile, r.ObservedFileBytes })
+            .Select(r => new { r.SourceFile, r.ObservedFileBytes, r.TimestampUtc })
             .ToListAsync(ct);
 
         var namesWithUnknownSignature = new HashSet<string>(
             rows.Where(r => r.ObservedFileBytes is null).Select(r => r.SourceFile),
             StringComparer.OrdinalIgnoreCase);
 
-        var signatures = new HashSet<(string Name, long Bytes)>(
-            rows.Where(r => r.ObservedFileBytes is not null).Select(r => (r.SourceFile, r.ObservedFileBytes!.Value)));
+        // Discovered records store the file's last-write time as TimestampUtc, so records from before this signature included it still match.
+        var signatures = new HashSet<(string Name, long Bytes, DateTime LastWriteUtc)>(
+            rows.Where(r => r.ObservedFileBytes is not null).Select(r => (r.SourceFile, r.ObservedFileBytes!.Value, r.TimestampUtc)));
 
-        var allKnownNames = new HashSet<string>(rows.Select(r => r.SourceFile), StringComparer.OrdinalIgnoreCase);
-
-        return new KnownSignatures(namesWithUnknownSignature, signatures, allKnownNames);
+        return new KnownSignatures(namesWithUnknownSignature, signatures);
     }
 
-    private sealed record KnownSignatures(HashSet<string> NamesWithUnknownSignature, HashSet<(string Name, long Bytes)> Signatures, HashSet<string> AllKnownNames);
+    private sealed record KnownSignatures(HashSet<string> NamesWithUnknownSignature, HashSet<(string Name, long Bytes, DateTime LastWriteUtc)> Signatures);
 
     /// <summary>Name-only matching, still used for older Discovered records with no byte signature.</summary>
     public static IEnumerable<string> FindNewFiles(IEnumerable<string> alreadyKnownFileNames, IEnumerable<string> fileNamesOnDisk)

@@ -80,9 +80,13 @@ else
                 <AuthorizeView Roles="@Roles.CanEditPolicy" Context="statusAuth">
                 <Authorized>
                 <div class="d-flex gap-2 flex-wrap">
-                    @foreach (var s in Enum.GetValues<ChangeWindowStatus>().Where(s => s != _window.Status))
+                    @foreach (var s in ChangeWindowStatusTransitionValidator.AllowedNextStatuses(_window.Status))
                     {
                         <button class="btn btn-outline-secondary btn-sm" @onclick="() => SetStatus(s)" data-testid="@($"status-{s}")">Set to @s</button>
+                    }
+                    @if (ChangeWindowStatusTransitionValidator.AllowedNextStatuses(_window.Status).Count == 0)
+                    {
+                        <span class="small text-muted">@_window.Status is final. Plan a new change window for further work.</span>
                     }
                 </div>
                 <div class="mt-2">

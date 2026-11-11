@@ -5,6 +5,7 @@ using DBTracker.Core.Enums;
 namespace DBTracker.Core.Services;
 
 public record ImportRowError(int RowNumber, string Message);
+public record ImportColumnHelp(string Name, bool Required, string Help);
 public record ImportResult(IReadOnlyList<DatabaseInstance> Valid, IReadOnlyList<ImportRowError> Errors);
 
 /// <summary>How a parsed CSV row relates to the inventory, matched by Name (case-insensitive).</summary>
@@ -40,10 +41,64 @@ public static class InstanceCsvImporter
         "Name", "Engine", "Version", "Application", "Company", "Department", "ContactName",
         "ContactEmail", "ContactPhone", "Role", "Environment", "DatabaseIp", "ServerIp",
         "ExpectedBackupIntervalHours", "BackupFileLocation", "RetentionPolicyDays", "Tags",
-        "RunbookUrl", "Notes"
+        "RunbookUrl", "Notes",
+        "Region", "Cluster", "ReplicaSet", "Criticality", "OwnerTeam",
+        "BackupContactName", "BackupContactEmail", "BackupContactPhone",
+        "BackupFileNamePatterns", "ConnectivityHost", "ConnectivityPort", "RestoreTestIntervalDays"
     ];
 
-    public static string TemplateCsv() => string.Join(",", Columns) + "\n";
+    /// <summary>One line per column for the template's comment rows and the import page's column guide, so the two can't drift.</summary>
+    public static IReadOnlyList<ImportColumnHelp> ColumnGuide { get; } =
+    [
+        new("Name", true, "Unique instance name. Matches an existing instance (ignoring case) to update it."),
+        new("Engine", true, string.Join(" | ", Enum.GetNames<DatabaseEngine>())),
+        new("Version", false, "Free text, e.g. 2022 or 16.4."),
+        new("Application", false, "Application the database serves."),
+        new("Company", false, "Owning company."),
+        new("Department", false, "Owning department."),
+        new("ContactName", false, "Primary contact."),
+        new("ContactEmail", false, "Primary contact email."),
+        new("ContactPhone", false, "Primary contact phone."),
+        new("Role", false, "Active | Passive. Default Active."),
+        new("Environment", false, string.Join(" | ", Enum.GetNames<EnvironmentTier>()) + ". Default Production."),
+        new("DatabaseIp", false, "Database IP or host name."),
+        new("ServerIp", false, "Server IP or host name."),
+        new("ExpectedBackupIntervalHours", false, "Whole number of hours, more than 0. Default 24."),
+        new("BackupFileLocation", false, @"Folder or UNC path the scanner reads, e.g. \\fileserver\backups\arxmail."),
+        new("RetentionPolicyDays", false, "Whole number of days, 0 or more."),
+        new("Tags", false, "Separated by semicolons, or by commas inside a quoted cell."),
+        new("RunbookUrl", false, "http:// or https:// link."),
+        new("Notes", false, "Free text. Quote the cell to include commas or line breaks."),
+        new("Region", false, "e.g. eu-west."),
+        new("Cluster", false, "Cluster or availability group name."),
+        new("ReplicaSet", false, "Replica set name."),
+        new("Criticality", false, string.Join(" | ", Enum.GetNames<InstanceCriticality>()) + ". Default Unknown."),
+        new("OwnerTeam", false, "Name of an existing team (create teams on the Ownership page first)."),
+        new("BackupContactName", false, "Second contact."),
+        new("BackupContactEmail", false, "Second contact email."),
+        new("BackupContactPhone", false, "Second contact phone."),
+        new("BackupFileNamePatterns", false, "Which files count as backups, e.g. *.bak;*.trn. Empty means every file."),
+        new("ConnectivityHost", false, "Host for the connection check, if not the database IP."),
+        new("ConnectivityPort", false, "Port for the connection check, 1 to 65535. Empty uses the engine's default."),
+        new("RestoreTestIntervalDays", false, "Days between restore tests for this instance, more than 0. Empty uses the policy."),
+    ];
+
+    /// <summary>Header, an example row and the allowed values. Lines starting with # are ignored on import, so the
+    /// example can be kept for reference or turned into a real row by deleting its #.</summary>
+    public static string TemplateCsv()
+    {
+        var sb = new StringBuilder();
+        sb.Append(string.Join(",", Columns)).Append('\n');
+        sb.Append("# Lines starting with # are ignored. Only Name and Engine are required; leave other cells empty if unknown.\n");
+        sb.Append(@"#EXAMPLE-SQL-01,SqlServer,2022,ArxMail,Architonix Labs,Platform,Priya Nair,priya.nair@example.com,555-0101,Active,Production,10.0.0.10,10.0.0.11,24,")
+          .Append(@"\\fileserver\backups\arxmail,30,prod;email,https://wiki.example.com/runbooks/arxmail,Nightly full plus hourly logs,")
+          .Append("eu-west,sql-cluster-1,,High,Platform Team,Sam Okoro,sam.okoro@example.com,555-0102,*.bak;*.trn,,1433,90\n");
+        foreach (var column in ColumnGuide)
+        {
+            sb.Append("# ").Append(column.Name).Append(column.Required ? " (required): " : ": ").Append(column.Help.Replace(',', ';')).Append('\n');
+        }
+        return sb.ToString();
+    }
 
     /// <summary>Parse without matching against existing inventory; every clean row comes back as Create.</summary>
     public static ImportResult Parse(string csvContent)
@@ -54,7 +109,11 @@ public static class InstanceCsvImporter
     }
 
     /// <summary>Parses the CSV and classifies each row as Create/Update/Skip/Ambiguous against existing instances by Name. A name repeated within the file is Ambiguous, so one import can't update the same instance twice.</summary>
-    public static ImportPreviewResult ParseForImport(string csvContent, IReadOnlyDictionary<string, DatabaseInstance> existingByName)
+    /// <param name="blockedNames">Names that must not be imported into, with the reason shown on the row: a name shared by several
+    /// instances, or one belonging to an archived instance (updating it would silently bring it back).</param>
+    /// <param name="teamIdsByName">Existing teams for the OwnerTeam column. An unknown team name is a row error.</param>
+    public static ImportPreviewResult ParseForImport(string csvContent, IReadOnlyDictionary<string, DatabaseInstance> existingByName,
+        IReadOnlyDictionary<string, string>? blockedNames = null, IReadOnlyDictionary<string, int>? teamIdsByName = null)
     {
         var rows = new List<ImportRowPreview>();
         var errors = new List<ImportRowError>();
@@ -84,6 +143,11 @@ public static class InstanceCsvImporter
                 continue; // blank line — not a malformed row, just skip it
             }
 
+            if (cells.Count > 0 && cells[0].TrimStart().StartsWith('#'))
+            {
+                continue; // comment line, e.g. the template's example row and allowed values
+            }
+
             string Get(string column)
             {
                 var idx = indexOf[column];
@@ -103,6 +167,33 @@ public static class InstanceCsvImporter
 
             string GetOrKeep(string column, string existingValue) =>
                 indexOf[column] >= 0 ? Get(column) : existingValue;
+
+            // Missing column keeps the stored value; present but empty clears it; anything else must be a whole number.
+            bool TryOptionalInt(string column, int? existingValue, out int? value, out string? error)
+            {
+                error = null;
+                value = existingValue;
+                if (indexOf[column] < 0)
+                {
+                    return true;
+                }
+
+                var raw = Get(column);
+                if (string.IsNullOrWhiteSpace(raw))
+                {
+                    value = null;
+                    return true;
+                }
+
+                if (int.TryParse(raw, out var parsed))
+                {
+                    value = parsed;
+                    return true;
+                }
+
+                error = $"{column} '{raw}' is not a whole number.";
+                return false;
+            }
 
             var engineRaw = GetOrKeep("Engine", existing?.Engine.ToString() ?? "");
             if (!Enum.TryParse<DatabaseEngine>(engineRaw, true, out var engine))
@@ -151,6 +242,40 @@ public static class InstanceCsvImporter
                 retention = null; // column present but blank — an explicit clear, not "keep existing"
             }
 
+            var criticality = existing?.Criticality ?? InstanceCriticality.Unknown;
+            var criticalityRaw = GetOrKeep("Criticality", "");
+            if (!string.IsNullOrWhiteSpace(criticalityRaw) && !Enum.TryParse(criticalityRaw, true, out criticality))
+            {
+                errors.Add(new ImportRowError(rowNumber, $"Unrecognized criticality '{criticalityRaw}'. Expected one of: {string.Join(", ", Enum.GetNames<InstanceCriticality>())}."));
+                continue;
+            }
+
+            if (!TryOptionalInt("ConnectivityPort", existing?.ConnectivityPortOverride, out var port, out var intError)
+                || !TryOptionalInt("RestoreTestIntervalDays", existing?.RestoreTestIntervalDaysOverride, out var restoreInterval, out intError))
+            {
+                errors.Add(new ImportRowError(rowNumber, intError!));
+                continue;
+            }
+
+            var ownerTeamId = existing?.OwnerTeamId;
+            if (indexOf["OwnerTeam"] >= 0)
+            {
+                var teamName = Get("OwnerTeam");
+                if (string.IsNullOrWhiteSpace(teamName))
+                {
+                    ownerTeamId = null;
+                }
+                else if (teamIdsByName is not null && teamIdsByName.TryGetValue(teamName, out var teamId))
+                {
+                    ownerTeamId = teamId;
+                }
+                else
+                {
+                    errors.Add(new ImportRowError(rowNumber, $"Team '{teamName}' doesn't exist. Create it on the Ownership page first, or leave OwnerTeam empty."));
+                    continue;
+                }
+            }
+
             var candidate = new DatabaseInstance
             {
                 Name = name,
@@ -172,6 +297,18 @@ public static class InstanceCsvImporter
                 Tags = GetOrKeep("Tags", existing?.Tags ?? ""),
                 RunbookUrl = GetOrKeep("RunbookUrl", existing?.RunbookUrl ?? ""),
                 Notes = GetOrKeep("Notes", existing?.Notes ?? ""),
+                Region = GetOrKeep("Region", existing?.Region ?? ""),
+                Cluster = GetOrKeep("Cluster", existing?.Cluster ?? ""),
+                ReplicaSet = GetOrKeep("ReplicaSet", existing?.ReplicaSet ?? ""),
+                Criticality = criticality,
+                OwnerTeamId = ownerTeamId,
+                BackupContactName = GetOrKeep("BackupContactName", existing?.BackupContactName ?? ""),
+                BackupContactEmail = GetOrKeep("BackupContactEmail", existing?.BackupContactEmail ?? ""),
+                BackupContactPhone = GetOrKeep("BackupContactPhone", existing?.BackupContactPhone ?? ""),
+                BackupFileNamePatterns = GetOrKeep("BackupFileNamePatterns", existing?.BackupFileNamePatterns ?? ""),
+                ConnectivityHostOverride = GetOrKeep("ConnectivityHost", existing?.ConnectivityHostOverride ?? ""),
+                ConnectivityPortOverride = port,
+                RestoreTestIntervalDaysOverride = restoreInterval,
             };
 
             var validationErrors = InstanceValidator.Validate(candidate);
@@ -184,6 +321,12 @@ public static class InstanceCsvImporter
             if (!namesSeenInFile.Add(name))
             {
                 rows.Add(new ImportRowPreview(rowNumber, ImportRowPlan.Ambiguous, null, null, $"Name '{name}' appears more than once in this file."));
+                continue;
+            }
+
+            if (blockedNames is not null && blockedNames.TryGetValue(name, out var blockedReason))
+            {
+                rows.Add(new ImportRowPreview(rowNumber, ImportRowPlan.Ambiguous, null, null, blockedReason));
                 continue;
             }
 
@@ -204,6 +347,42 @@ public static class InstanceCsvImporter
         return new ImportPreviewResult(rows, errors);
     }
 
+    /// <summary>Copies only the columns this importer owns from a parsed row onto a stored instance. Everything else (owner team,
+    /// facets, scan status, policy, archive state, creation time) is left as it is.</summary>
+    public static void ApplyImportedFields(DatabaseInstance target, DatabaseInstance imported)
+    {
+        target.Engine = imported.Engine;
+        target.Version = imported.Version;
+        target.Application = imported.Application;
+        target.Company = imported.Company;
+        target.Department = imported.Department;
+        target.ContactName = imported.ContactName;
+        target.ContactEmail = imported.ContactEmail;
+        target.ContactPhone = imported.ContactPhone;
+        target.Role = imported.Role;
+        target.Environment = imported.Environment;
+        target.DatabaseIp = imported.DatabaseIp;
+        target.ServerIp = imported.ServerIp;
+        target.ExpectedBackupIntervalHours = imported.ExpectedBackupIntervalHours;
+        target.BackupFileLocation = imported.BackupFileLocation;
+        target.RetentionPolicyDays = imported.RetentionPolicyDays;
+        target.Tags = imported.Tags;
+        target.RunbookUrl = imported.RunbookUrl;
+        target.Notes = imported.Notes;
+        target.Region = imported.Region;
+        target.Cluster = imported.Cluster;
+        target.ReplicaSet = imported.ReplicaSet;
+        target.Criticality = imported.Criticality;
+        target.OwnerTeamId = imported.OwnerTeamId;
+        target.BackupContactName = imported.BackupContactName;
+        target.BackupContactEmail = imported.BackupContactEmail;
+        target.BackupContactPhone = imported.BackupContactPhone;
+        target.BackupFileNamePatterns = imported.BackupFileNamePatterns;
+        target.ConnectivityHostOverride = imported.ConnectivityHostOverride;
+        target.ConnectivityPortOverride = imported.ConnectivityPortOverride;
+        target.RestoreTestIntervalDaysOverride = imported.RestoreTestIntervalDaysOverride;
+    }
+
     private static bool IsUnchanged(DatabaseInstance existing, DatabaseInstance candidate) =>
         existing.Engine == candidate.Engine &&
         existing.Version == candidate.Version &&
@@ -222,7 +401,19 @@ public static class InstanceCsvImporter
         existing.RetentionPolicyDays == candidate.RetentionPolicyDays &&
         existing.Tags == candidate.Tags &&
         existing.RunbookUrl == candidate.RunbookUrl &&
-        existing.Notes == candidate.Notes;
+        existing.Notes == candidate.Notes &&
+        existing.Region == candidate.Region &&
+        existing.Cluster == candidate.Cluster &&
+        existing.ReplicaSet == candidate.ReplicaSet &&
+        existing.Criticality == candidate.Criticality &&
+        existing.OwnerTeamId == candidate.OwnerTeamId &&
+        existing.BackupContactName == candidate.BackupContactName &&
+        existing.BackupContactEmail == candidate.BackupContactEmail &&
+        existing.BackupContactPhone == candidate.BackupContactPhone &&
+        existing.BackupFileNamePatterns == candidate.BackupFileNamePatterns &&
+        existing.ConnectivityHostOverride == candidate.ConnectivityHostOverride &&
+        existing.ConnectivityPortOverride == candidate.ConnectivityPortOverride &&
+        existing.RestoreTestIntervalDaysOverride == candidate.RestoreTestIntervalDaysOverride;
 
     /// <summary>Splits CSV text into records with RFC 4180 quoting: quoted fields may contain commas and newlines, and "" is a literal quote.</summary>
     private static List<List<string>> SplitCsvRecords(string content)

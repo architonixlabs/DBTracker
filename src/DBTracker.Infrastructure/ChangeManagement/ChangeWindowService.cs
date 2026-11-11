@@ -59,15 +59,22 @@ public class ChangeWindowService(IDbContextFactory<DBTrackerDbContext> factory, 
         return ChangeWindowConflictDetector.Detect(startUtc, endUtc, otherWindows, maintenance);
     }
 
+    /// <summary>Plans a window. At least one required approval is mandatory, since a window with none would pass the approval gate unchecked.</summary>
     public async Task<ChangeWindow> CreateAsync(ChangeWindow window, IEnumerable<string> requiredApprovalScopes, string actorName)
     {
+        var scopes = requiredApprovalScopes.Where(s => !string.IsNullOrWhiteSpace(s)).ToList();
+        if (scopes.Count == 0)
+        {
+            throw new ArgumentException("A change window needs at least one required approval.", nameof(requiredApprovalScopes));
+        }
+
         using var db = await factory.CreateDbContextAsync();
         window.CreatedAtUtc = DateTime.UtcNow;
         window.UpdatedAtUtc = DateTime.UtcNow;
         window.CreatedBy = actorName;
         window.Status = ChangeWindowStatus.Planned;
 
-        foreach (var scope in requiredApprovalScopes.Where(s => !string.IsNullOrWhiteSpace(s)))
+        foreach (var scope in scopes)
         {
             window.Approvals.Add(new ChangeWindowApproval { RequiredScope = scope.Trim() });
         }
@@ -147,7 +154,7 @@ public class ChangeWindowService(IDbContextFactory<DBTrackerDbContext> factory, 
         return (true, "");
     }
 
-    /// <summary>The only path that changes ChangeWindow.Status. Approved requires ChangeWindowApprovalGate to pass; otherwise it refuses with the outstanding approvals.</summary>
+    /// <summary>The only path that changes ChangeWindow.Status. Refuses moves outside ChangeWindowStatusTransitionValidator, and Approved/InProgress without the approval gate (or an active emergency exception).</summary>
     public async Task<(bool Ok, string Reason)> SetStatusAsync(int windowId, ChangeWindowStatus toStatus, string actorName)
     {
         using var db = await factory.CreateDbContextAsync();
@@ -155,6 +162,11 @@ public class ChangeWindowService(IDbContextFactory<DBTrackerDbContext> factory, 
         if (window is null)
         {
             return (false, "Change window not found.");
+        }
+
+        if (!ChangeWindowStatusTransitionValidator.IsValidTransition(window.Status, toStatus))
+        {
+            return (false, ChangeWindowStatusTransitionValidator.DescribeInvalidReason(window.Status, toStatus));
         }
 
         if (toStatus == ChangeWindowStatus.Approved || toStatus == ChangeWindowStatus.InProgress)

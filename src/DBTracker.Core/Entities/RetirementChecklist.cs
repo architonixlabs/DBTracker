@@ -34,6 +34,11 @@ public class RetirementChecklist
     public DateTime? RetiredAtUtc { get; set; }
     public string RetiredBy { get; set; } = string.Empty;
 
+    /// <summary>Set when a checklist is abandoned (started by mistake, or the database is staying). Kept for history; a cancelled checklist no longer blocks a plain archive.</summary>
+    public DateTime? CancelledAtUtc { get; set; }
+    public string CancelledBy { get; set; } = string.Empty;
+    public string CancelReason { get; set; } = string.Empty;
+
     public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
     public string CreatedBy { get; set; } = string.Empty;
     public DateTime UpdatedAtUtc { get; set; } = DateTime.UtcNow;

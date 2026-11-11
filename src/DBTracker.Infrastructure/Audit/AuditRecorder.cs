@@ -22,7 +22,9 @@ public class AuditRecorder(IDbContextFactory<DBTrackerDbContext> factory)
     public Task RecordSystemActionAsync(string workerName, string action, string targetType, string targetId, string targetName, string reason = "", CancellationToken ct = default) =>
         RecordAsync(AuditEventFactory.ForSystem(workerName, action, targetType, targetId, targetName, DateTime.UtcNow, reason), ct);
 
-    public async Task<IReadOnlyList<AuditEvent>> SearchAsync(string? search, AuditActorType? actorType, string? targetType, int take = 200, CancellationToken ct = default)
+    /// <param name="includeCommercialReasons">False for roles outside the commercial-evidence policy: search then ignores the reason text of
+    /// cost-estimate events, so searching for an amount can't reveal a row whose figures are hidden.</param>
+    public async Task<IReadOnlyList<AuditEvent>> SearchAsync(string? search, AuditActorType? actorType, string? targetType, int take = 200, bool includeCommercialReasons = true, CancellationToken ct = default)
     {
         using var db = await factory.CreateDbContextAsync(ct);
         var query = db.AuditEvents.AsNoTracking().OrderByDescending(e => e.TimestampUtc).AsQueryable();
@@ -42,7 +44,7 @@ public class AuditRecorder(IDbContextFactory<DBTrackerDbContext> factory)
                 e.ActorName.Contains(s) ||
                 e.Action.Contains(s) ||
                 e.TargetName.Contains(s) ||
-                e.Reason.Contains(s));
+                (e.Reason.Contains(s) && (includeCommercialReasons || e.Action != "EditionCostEstimateRecorded")));
         }
 
         return await query.Take(take).ToListAsync(ct);

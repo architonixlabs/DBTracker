@@ -19,6 +19,7 @@ public class DBTrackerDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<InstanceChangeLog> InstanceChangeLogs => Set<InstanceChangeLog>();
     public DbSet<SavedView> SavedViews => Set<SavedView>();
     public DbSet<NotificationReadState> NotificationReadStates => Set<NotificationReadState>();
+    public DbSet<NotificationInboxStart> NotificationInboxStarts => Set<NotificationInboxStart>();
     public DbSet<NotificationSubscription> NotificationSubscriptions => Set<NotificationSubscription>();
     public DbSet<Incident> Incidents => Set<Incident>();
     public DbSet<BackupRecordCorrection> BackupRecordCorrections => Set<BackupRecordCorrection>();
@@ -152,7 +153,7 @@ public class DBTrackerDbContext : IdentityDbContext<ApplicationUser>
             entity.HasIndex(e => new { e.DatabaseInstanceId, e.TimestampUtc });
 
             // Stops two concurrent scans inserting the same Discovered evidence. Rows with no byte signature (older records) are not constrained.
-            entity.HasIndex(e => new { e.DatabaseInstanceId, e.SourceFile, e.ObservedFileBytes })
+            entity.HasIndex(e => new { e.DatabaseInstanceId, e.SourceFile, e.ObservedFileBytes, e.TimestampUtc })
                 .IsUnique()
                 .HasFilter("[Source] = 1 AND [ObservedFileBytes] IS NOT NULL");
         });
@@ -285,6 +286,12 @@ public class DBTrackerDbContext : IdentityDbContext<ApplicationUser>
 
             entity.HasIndex(e => e.TokenHash).IsUnique();
             entity.HasIndex(e => e.UserId);
+        });
+
+        modelBuilder.Entity<NotificationInboxStart>(entity =>
+        {
+            entity.HasKey(e => e.UserId);
+            entity.Property(e => e.UserId).HasMaxLength(450);
         });
 
         modelBuilder.Entity<NotificationReadState>(entity =>
@@ -1235,6 +1242,8 @@ public class DBTrackerDbContext : IdentityDbContext<ApplicationUser>
             entity.Property(e => e.CostContractReviewNotes).HasMaxLength(2000);
             entity.Property(e => e.FinalBackupEvidenceNotes).HasMaxLength(2000);
             entity.Property(e => e.RetiredBy).HasMaxLength(320);
+            entity.Property(e => e.CancelledBy).HasMaxLength(320);
+            entity.Property(e => e.CancelReason).HasMaxLength(1000);
             entity.Property(e => e.CreatedBy).HasMaxLength(320);
             entity.Property(e => e.UpdatedBy).HasMaxLength(320);
 

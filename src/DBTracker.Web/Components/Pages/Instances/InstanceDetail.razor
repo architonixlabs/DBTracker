@@ -141,14 +141,46 @@ else
                     <li>@line.Text</li>
                 }
             </ul>
-            <div class="mb-2">
-                <label class="form-label small" for="archive-reason">Reason (required)</label>
-                <input id="archive-reason" class="form-control form-control-sm" @bind="_archiveReason" @bind:event="oninput" placeholder="Decommissioned, replaced by…, duplicate entry, …" />
-            </div>
-            <div class="d-flex gap-2">
-                <button type="button" class="btn btn-danger btn-sm" @onclick="ConfirmArchive" disabled="@string.IsNullOrWhiteSpace(_archiveReason)">Archive this instance</button>
+            <fieldset class="mb-3">
+                <legend class="form-label small mb-1">Why is it being archived?</legend>
+                <div class="form-check">
+                    <input class="form-check-input" type="radio" name="archive-kind" id="archive-kind-mistake" data-testid="archive-kind-mistake"
+                           checked="@(_archiveKind == ArchiveKind.Mistake)" @onchange="() => _archiveKind = ArchiveKind.Mistake" />
+                    <label class="form-check-label small" for="archive-kind-mistake">Duplicate, or entered by mistake</label>
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input" type="radio" name="archive-kind" id="archive-kind-retire" data-testid="archive-kind-retire"
+                           checked="@(_archiveKind == ArchiveKind.Retirement)" @onchange="() => _archiveKind = ArchiveKind.Retirement" />
+                    <label class="form-check-label small" for="archive-kind-retire">The database is being decommissioned or replaced</label>
+                </div>
+            </fieldset>
+            @if (_archiveKind == ArchiveKind.Retirement)
+            {
+                <p class="small mb-3" role="status">
+                    A decommissioned database is archived through its retirement checklist, so consumers, jobs, final backups and
+                    sign-offs are checked first. <a href="/instances/@Id/retirement">Open the retirement checklist</a>.
+                </p>
                 <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="() => _showArchiveConfirm = false">Cancel</button>
-            </div>
+            }
+            else if (_archiveKind == ArchiveKind.Mistake)
+            {
+                <div class="mb-2">
+                    <label class="form-label small" for="archive-reason">Reason (required)</label>
+                    <input id="archive-reason" class="form-control form-control-sm" @bind="_archiveReason" @bind:event="oninput" placeholder="Duplicate of …, test entry, …" />
+                </div>
+                @if (_archiveError is not null)
+                {
+                    <p class="small mb-2" role="alert" style="color:var(--dbt-failed)">@_archiveError</p>
+                }
+                <div class="d-flex gap-2">
+                    <button type="button" class="btn btn-danger btn-sm" @onclick="ConfirmArchive" disabled="@string.IsNullOrWhiteSpace(_archiveReason)">Archive this instance</button>
+                    <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="() => _showArchiveConfirm = false">Cancel</button>
+                </div>
+            }
+            else
+            {
+                <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="() => _showArchiveConfirm = false">Cancel</button>
+            }
         </div>
     }
 
@@ -908,6 +940,9 @@ else
     private bool _showArchiveConfirm;
     private IReadOnlyList<ArchiveImpactLine>? _archivePreview;
     private string _archiveReason = "";
+    private string? _archiveError;
+    private enum ArchiveKind { None, Mistake, Retirement }
+    private ArchiveKind _archiveKind;
 
     // Ownership status and contact-correction requests.
     private OwnershipStatus _ownershipStatus;
@@ -1225,22 +1260,27 @@ else
     {
         _archivePreview = ArchivePreviewBuilder.Build(await ArchiveService.PreviewAsync(Id));
         _archiveReason = "";
+        _archiveError = null;
+        _archiveKind = ArchiveKind.None;
         _showArchiveConfirm = true;
     }
 
     private async Task ConfirmArchive()
     {
-        if (string.IsNullOrWhiteSpace(_archiveReason))
+        if (_archiveKind != ArchiveKind.Mistake || string.IsNullOrWhiteSpace(_archiveReason))
         {
             return;
         }
 
-        var ok = await ArchiveService.ArchiveAsync(Id, _archiveReason, _userId ?? "", _userDisplayName ?? "unknown");
+        var outcome = await ArchiveService.ArchiveAsync(Id, _archiveReason, _userId ?? "", _userDisplayName ?? "unknown");
         Db.ChangeTracker.Clear();
-        if (ok)
+        if (!outcome.Ok)
         {
-            Toasts.Success($"{_overview?.Instance.Name} archived.");
+            _archiveError = outcome.Message;
+            return;
         }
+
+        Toasts.Success($"{_overview?.Instance.Name} archived.");
         Nav.NavigateTo("/instances");
     }
 

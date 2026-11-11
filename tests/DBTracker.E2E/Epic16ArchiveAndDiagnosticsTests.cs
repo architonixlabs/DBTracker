@@ -31,11 +31,17 @@ public class Epic16ArchiveAndDiagnosticsTests
         await Assertions.Expect(_page.Locator("text=Confirm archive")).ToBeVisibleAsync();
         await Assertions.Expect(_page.Locator("text=scan")).ToBeVisibleAsync();
 
-        // Confirming is blocked without a reason.
+        // No archive button until the kind is chosen; "decommissioned" points to the retirement checklist instead.
         var confirmButton = _page.Locator("button:has-text('Archive this instance')");
-        await Assertions.Expect(confirmButton).ToBeDisabledAsync();
+        await Assertions.Expect(confirmButton).ToHaveCountAsync(0);
+        await _page.ClickAsync("[data-testid=archive-kind-retire]");
+        await Assertions.Expect(_page.Locator("a:has-text('Open the retirement checklist')")).ToBeVisibleAsync();
+        await Assertions.Expect(confirmButton).ToHaveCountAsync(0);
 
-        await _page.FillAsync("input[placeholder*='Decommissioned']", "E2E test archive — superseded by migration");
+        // A duplicate can be archived directly, but not without a reason.
+        await _page.ClickAsync("[data-testid=archive-kind-mistake]");
+        await Assertions.Expect(confirmButton).ToBeDisabledAsync();
+        await _page.FillAsync("#archive-reason", "E2E test archive — superseded by migration");
         await Assertions.Expect(confirmButton).ToBeEnabledAsync();
         await confirmButton.ClickAsync();
         await _page.WaitForURLAsync(url => url.Contains("/instances") && !url.Contains("DIFY"));

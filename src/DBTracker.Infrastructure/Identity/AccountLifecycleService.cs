@@ -11,6 +11,7 @@ namespace DBTracker.Infrastructure.Identity;
 public record RoleChangeResult(bool Succeeded, string? Error);
 public record DeactivateResult(bool Succeeded, string? Error);
 public record ResetLinkOutcome(bool AccountExists, EmailSendResult? EmailResult);
+public record CreateUserResult(bool Succeeded, string? Error, ApplicationUser? User);
 
 /// <summary>Admin account operations: role changes, deactivate/reactivate, and reset/invite links. Every change is audited and guarded against removing the last active Admin.</summary>
 /// <remarks>Reset links use Identity's own token provider; a successful reset rotates the security stamp, so a link can't be replayed.</remarks>
@@ -25,6 +26,34 @@ public class AccountLifecycleService(
     {
         var admins = await userManager.GetUsersInRoleAsync(Roles.Admin);
         return admins.Count(u => u.IsActive && u.Id != excludingUserId);
+    }
+
+    /// <summary>Creates an account that must change its temporary password at first sign-in. Always audited, whether or not an invite is sent.</summary>
+    public async Task<CreateUserResult> CreateUserAsync(string displayName, string email, string temporaryPassword, string role, string actorId, string actorName)
+    {
+        if (!Roles.All.Contains(role))
+        {
+            return new CreateUserResult(false, $"'{role}' is not a recognized role.", null);
+        }
+
+        var user = new ApplicationUser
+        {
+            UserName = email,
+            Email = email,
+            DisplayName = displayName,
+            EmailConfirmed = true,
+            MustChangePassword = true
+        };
+
+        var result = await userManager.CreateAsync(user, temporaryPassword);
+        if (!result.Succeeded)
+        {
+            return new CreateUserResult(false, string.Join(" ", result.Errors.Select(e => e.Description)), null);
+        }
+
+        await userManager.AddToRoleAsync(user, role);
+        await audit.RecordUserActionAsync(actorId, actorName, "UserCreated", "User", user.Id, email, reason: $"Role {role}; must change temporary password");
+        return new CreateUserResult(true, null, user);
     }
 
     public async Task<RoleChangeResult> ChangeRoleAsync(string userId, string newRole, string actorId, string actorName)
@@ -58,11 +87,10 @@ public class AccountLifecycleService(
         await userManager.RemoveFromRolesAsync(user, currentRoles);
         await userManager.AddToRoleAsync(user, newRole);
 
-        // Rotate the security stamp so active sessions pick up the reduced role within the 30-minute revalidation window.
-        if (currentRoles.Contains(Roles.Admin) && newRole != Roles.Admin)
-        {
-            await userManager.UpdateSecurityStampAsync(user);
-        }
+        // Any role change can remove rights (DBA -> Viewer as much as Admin -> anything), so every change rotates the stamp:
+        // open sessions pick up the new role within the revalidation window, and approved device links can't sign in a new device.
+        await userManager.UpdateSecurityStampAsync(user);
+        await RevokeApprovedDeviceLinksAsync(userId);
 
         await audit.RecordUserActionAsync(actorId, actorName, "UserRoleChanged", "User", userId, user.Email ?? user.UserName ?? userId,
             reason: $"{string.Join(",", currentRoles)} -> {newRole}");
@@ -99,17 +127,7 @@ public class AccountLifecycleService(
             // Rotating the stamp ends cookie sessions within the revalidation window; pending device-link tokens must also be revoked,
             // or a deactivated account could still sign in a new device.
             await userManager.UpdateSecurityStampAsync(user);
-            var pendingApprovedLinks = await db.DeviceLinkTokens
-                .Where(t => t.ApprovedByUserId == userId && t.Status == DeviceLinkStatus.Approved)
-                .ToListAsync();
-            foreach (var link in pendingApprovedLinks)
-            {
-                link.Status = DeviceLinkStatus.Denied;
-            }
-            if (pendingApprovedLinks.Count > 0)
-            {
-                await db.SaveChangesAsync();
-            }
+            await RevokeApprovedDeviceLinksAsync(userId);
 
             // Token validation also checks IsActive; revoking keeps them dead if the account is reactivated later.
             await accessTokens.RevokeAllForUserAsync(userId, actorId, actorName, "account deactivated");
@@ -117,6 +135,21 @@ public class AccountLifecycleService(
 
         await audit.RecordUserActionAsync(actorId, actorName, isActive ? "UserReactivated" : "UserDeactivated", "User", userId, user.Email ?? user.UserName ?? userId);
         return new DeactivateResult(true, null);
+    }
+
+    private async Task RevokeApprovedDeviceLinksAsync(string userId)
+    {
+        var pendingApprovedLinks = await db.DeviceLinkTokens
+            .Where(t => t.ApprovedByUserId == userId && t.Status == DeviceLinkStatus.Approved)
+            .ToListAsync();
+        foreach (var link in pendingApprovedLinks)
+        {
+            link.Status = DeviceLinkStatus.Denied;
+        }
+        if (pendingApprovedLinks.Count > 0)
+        {
+            await db.SaveChangesAsync();
+        }
     }
 
     public async Task<bool> ChangeOwnPasswordAsync(string userId, string currentPassword, string newPassword)
@@ -165,14 +198,17 @@ public class AccountLifecycleService(
         return new ResetLinkOutcome(true, result);
     }
 
-    public async Task<EmailSendResult> SendInviteAsync(ApplicationUser user, string temporaryPassword, string baseUri, string actorId, string actorName)
+    /// <summary>Emails a single-use link to set a password. The temporary password is never emailed; if mail isn't sent, the admin shares it in person.</summary>
+    public async Task<EmailSendResult> SendInviteAsync(ApplicationUser user, string baseUri, string actorId, string actorName)
     {
-        var body = $"An account was created for you on DBTracker.\n\n" +
-                   $"Sign in at {baseUri.TrimEnd('/')}/Account/Login with:\nEmail: {user.Email}\nTemporary password: {temporaryPassword}\n\n" +
-                   "You'll be asked to set your own password on first sign-in.";
-        var result = await emailSender.SendAsync(user.Email!, "Your DBTracker account", body);
+        var token = await userManager.GeneratePasswordResetTokenAsync(user);
+        var encoded = WebEncoders.Base64UrlEncode(Encoding.UTF8.GetBytes(token));
+        var link = $"{baseUri.TrimEnd('/')}/Account/ResetPassword?userId={Uri.EscapeDataString(user.Id)}&code={encoded}&invite=true";
+
+        var body = DBTracker.Core.Services.AccountEmailText.InviteBody(link, user.Email!);
+        var result = await emailSender.SendAsync(user.Email!, DBTracker.Core.Services.AccountEmailText.InviteSubject, body);
         await audit.RecordUserActionAsync(actorId, actorName, "UserInviteSent", "User", user.Id, user.Email ?? user.UserName ?? user.Id,
-            reason: $"Delivery: {result.Outcome}");
+            reason: $"Set-password link. Delivery: {result.Outcome}");
         return result;
     }
 }

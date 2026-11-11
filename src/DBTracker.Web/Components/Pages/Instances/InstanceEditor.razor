@@ -207,7 +207,7 @@ else
                 <div class="col-md-6">
                     <label class="form-label" for="ed-conn-port">Port override (optional)</label>
                     <InputNumber id="ed-conn-port" class="form-control" @bind-Value="_model.ConnectivityPortOverride" placeholder="Defaults to the engine's conventional port" aria-describedby="ed-conn-port-help" />
-                    <div class="form-text" id="ed-conn-port-help">A port outside 1-65535 is ignored and the engine's default port is used instead.</div>
+                    <div class="form-text" id="ed-conn-port-help">1 to 65535. Leave empty to use the engine's conventional port.</div>
                 </div>
             </div>
 
@@ -282,7 +282,7 @@ else
                                                 }
                                                 else if (f.Eligibility == FileEligibility.Eligible)
                                                 {
-                                                    <span class="badge-health dot OnTrack">Would be recorded</span>
+                                                    <span class="badge-health dot OnTrack">Would be recorded as @BackupTypeLabel(f.RecordedAs)</span>
                                                 }
                                                 else
                                                 {
@@ -339,6 +339,13 @@ else
     private string? _previewError;
     private string? _saveError;
     private IReadOnlyList<FilePreview>? _preview;
+
+    private static string BackupTypeLabel(BackupType type) => type switch
+    {
+        BackupType.TransactionLog => "a log backup",
+        BackupType.Differential => "a differential",
+        _ => "a full backup"
+    };
     private IReadOnlyList<FieldError> _fieldErrors = [];
     private byte[] _loadedRowVersion = [];
     private IDisposable? _navigationLock;

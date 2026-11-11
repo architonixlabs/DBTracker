@@ -68,6 +68,38 @@ public class NotificationPersonalInboxTests
         await Assertions.Expect(_page.Locator(".notif-item", new PageLocatorOptions { HasText = marker })).Not.ToHaveClassAsync(new System.Text.RegularExpressions.Regex("unread"));
     }
 
+    /// <summary>G02: the first visit is recorded once, whether or not anything existed to mark. Older alerts start read;
+    /// alerts raised after the first visit always arrive unread.</summary>
+    [Test]
+    public async Task FirstVisit_IsRecordedOnce_AndLaterAlertsArriveUnread()
+    {
+        _page = await GlobalSetup.Server.Browser.NewPageAsync();
+        var before = $"E2E-OLD-{Guid.NewGuid():N}";
+        await InsertFreshNotificationAsync(before);
+
+        var user = await CreateFreshViewerAsync("e2e-inbox-first");
+        await LoginAsync(user);
+        await OpenBellAsync();
+
+        var options = new DbContextOptionsBuilder<DBTrackerDbContext>().UseSqlServer(TestConnectionString).Options;
+        using (var db = new DBTrackerDbContext(options))
+        {
+            var userId = await db.Users.Where(u => u.Email == user.Email).Select(u => u.Id).SingleAsync();
+            Assert.That(await db.NotificationInboxStarts.CountAsync(s => s.UserId == userId), Is.EqualTo(1),
+                "The first inbox visit must be recorded exactly once.");
+        }
+
+        var after = $"E2E-NEW-{Guid.NewGuid():N}";
+        await InsertFreshNotificationAsync(after);
+
+        await GotoAsync("/notifications");
+        await _page.WaitForSelectorAsync(".notif-item");
+        await Assertions.Expect(_page.Locator(".notif-item", new PageLocatorOptions { HasText = after }))
+            .ToHaveClassAsync(new System.Text.RegularExpressions.Regex("unread"));
+        await Assertions.Expect(_page.Locator(".notif-item", new PageLocatorOptions { HasText = before }))
+            .Not.ToHaveClassAsync(new System.Text.RegularExpressions.Regex("unread"));
+    }
+
     private async Task<(string Email, string Password)> CreateFreshViewerAsync(string prefix)
     {
         var email = $"{prefix}-{Guid.NewGuid():N}@architonixlabs.com";
@@ -82,6 +114,11 @@ public class NotificationPersonalInboxTests
         await SelectByLabel("Role", "Viewer");
         await _page.ClickAsync("button[type=submit]:text('Create user')");
         await _page.WaitForTimeoutAsync(600);
+
+        // These tests are about the inbox, not first sign-in; skip the forced password change (covered in Epic16AccountLifecycleTests).
+        var options = new DbContextOptionsBuilder<DBTrackerDbContext>().UseSqlServer(TestConnectionString).Options;
+        using var db = new DBTrackerDbContext(options);
+        await db.Users.Where(u => u.Email == email).ExecuteUpdateAsync(u => u.SetProperty(x => x.MustChangePassword, false));
 
         return (email, password);
     }

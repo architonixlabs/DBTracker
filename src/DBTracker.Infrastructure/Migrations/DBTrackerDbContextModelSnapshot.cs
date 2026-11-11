@@ -523,7 +523,7 @@ namespace DBTracker.Infrastructure.Migrations
 
                     b.HasIndex("DatabaseInstanceId", "TimestampUtc");
 
-                    b.HasIndex("DatabaseInstanceId", "SourceFile", "ObservedFileBytes")
+                    b.HasIndex("DatabaseInstanceId", "SourceFile", "ObservedFileBytes", "TimestampUtc")
                         .IsUnique()
                         .HasFilter("[Source] = 1 AND [ObservedFileBytes] IS NOT NULL");
 
@@ -2205,6 +2205,20 @@ namespace DBTracker.Infrastructure.Migrations
                     b.ToTable("Notifications");
                 });
 
+            modelBuilder.Entity("DBTracker.Core.Entities.NotificationInboxStart", b =>
+                {
+                    b.Property<string>("UserId")
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<DateTime>("StartedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("UserId");
+
+                    b.ToTable("NotificationInboxStarts");
+                });
+
             modelBuilder.Entity("DBTracker.Core.Entities.NotificationReadState", b =>
                 {
                     b.Property<int>("Id")
@@ -3345,6 +3359,19 @@ namespace DBTracker.Infrastructure.Migrations
                         .HasColumnType("datetime2");
 
                     b.Property<string>("AppOwnerSignoffBy")
+                        .IsRequired()
+                        .HasMaxLength(320)
+                        .HasColumnType("nvarchar(320)");
+
+                    b.Property<string>("CancelReason")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<DateTime?>("CancelledAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("CancelledBy")
                         .IsRequired()
                         .HasMaxLength(320)
                         .HasColumnType("nvarchar(320)");

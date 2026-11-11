@@ -60,6 +60,56 @@ public class ScanningAndRestoreTests
         }
     }
 
+    /// <summary>G07: a file rewritten under the same name and size is new evidence, an unchanged file is not re-recorded,
+    /// and a .trn log backup is recorded as a log backup rather than a full one.</summary>
+    [Test]
+    public async Task RewrittenSameSizeFile_IsNewEvidence_AndLogBackupsAreTypedAsLogs()
+    {
+        var shareDir = Path.Combine(Path.GetTempPath(), $"dbtracker-e2e-rewrite-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(shareDir);
+        try
+        {
+            var nightly = Path.Combine(shareDir, "nightly.bak");
+            await File.WriteAllTextAsync(nightly, "night one contents");
+            File.SetLastWriteTimeUtc(nightly, DateTime.UtcNow.AddHours(-26));
+            var log = Path.Combine(shareDir, "nightly_0215.trn");
+            await File.WriteAllTextAsync(log, "log backup bytes");
+            File.SetLastWriteTimeUtc(log, DateTime.UtcNow.AddHours(-25));
+
+            var instanceName = $"E2E-REWRITE-{Guid.NewGuid():N}".Substring(0, 18).ToUpperInvariant();
+            await GotoAsync("/instances/new");
+            await _page.WaitForSelectorAsync("button[type=submit]");
+            await WaitForCircuitAsync();
+            await FillByLabel("Instance name", instanceName);
+            await FillByLabel("Backup file location", shareDir);
+            await _page.ClickAsync("button[type=submit]:text('Save')");
+            await _page.WaitForURLAsync(url => url.Contains("/instances/"));
+            await WaitForCircuitAsync();
+
+            await _page.ClickAsync("button:has-text('Scan now')");
+            await _page.WaitForTimeoutAsync(1500);
+            var historyRows = _page.Locator("table.table-sm tbody tr");
+            await Assertions.Expect(historyRows).ToHaveCountAsync(2);
+            await Assertions.Expect(historyRows.Filter(new LocatorFilterOptions { HasText = "nightly_0215.trn" })).ToContainTextAsync("TransactionLog");
+
+            // Scanning again with nothing changed records nothing new.
+            await _page.ClickAsync("button:has-text('Scan now')");
+            await _page.WaitForTimeoutAsync(1500);
+            await Assertions.Expect(historyRows).ToHaveCountAsync(2);
+
+            // The next night's job overwrites the file: same name, same size, new write time.
+            await File.WriteAllTextAsync(nightly, "night two contents");
+            File.SetLastWriteTimeUtc(nightly, DateTime.UtcNow.AddHours(-2));
+            await _page.ClickAsync("button:has-text('Scan now')");
+            await _page.WaitForTimeoutAsync(1500);
+            await Assertions.Expect(historyRows).ToHaveCountAsync(3);
+        }
+        finally
+        {
+            Directory.Delete(shareDir, recursive: true);
+        }
+    }
+
     [Test]
     public async Task LoggingARestore_ShowsInHistory_AndFlagsAsTestedOnCompliance()
     {

@@ -11,7 +11,9 @@ public record RetirementChecklistEvaluation(
     IReadOnlyList<string> BlockingReasons);
 
 /// <summary>Retirement gates computed from evidence the caller gathers (dependencies, chain coverage, copies, certificates, rollback deadline, cost review) plus the checklist's manual facts.</summary>
-/// <remarks>Unknown and NotApplicable count as unsatisfied, like Blocked, so proceeding past them needs a scoped exception.</remarks>
+/// <remarks>Blocked and Unknown are unsatisfied, so proceeding past them needs a scoped exception. NotApplicable counts as
+/// satisfied, so a gate returns it only when the absence is proven (the rollback gate: no change was ever validated on
+/// this instance), never as a stand-in for "nothing recorded".</remarks>
 public static class RetirementChecklistGateEvaluator
 {
     private static RetirementGateStatus Worse(RetirementGateStatus a, RetirementGateStatus b)
@@ -36,14 +38,15 @@ public static class RetirementChecklistGateEvaluator
         bool hasAnyCopyLocationsRecorded,
         bool? certificateAccessVerified,
         DateTime? rollbackRetentionDeadlineUtc,
-        DateTime nowUtc)
+        DateTime nowUtc,
+        bool hasChangeValidationHistory = false)
     {
         var gates = new List<RetirementGateResult>
         {
             ConsumersResolvedGate(dependencies),
             JobsReplicasResolvedGate(dependencies),
             FinalRecoverableEvidenceGate(chainCoverageStatus, hasAccessibleVerifiedCopy, hasAnyCopyLocationsRecorded, certificateAccessVerified),
-            RollbackWindowClosedGate(rollbackRetentionDeadlineUtc, nowUtc),
+            RollbackWindowClosedGate(rollbackRetentionDeadlineUtc, hasChangeValidationHistory, nowUtc),
             LegalHoldReviewedGate(checklist),
             SignoffGate(checklist),
             CostContractReviewGate(checklist)
@@ -131,12 +134,15 @@ public static class RetirementChecklistGateEvaluator
         return new RetirementGateResult("FinalRecoverableEvidence", "Final recoverable backup/key-access evidence retained", status, string.Join(" ", details));
     }
 
-    private static RetirementGateResult RollbackWindowClosedGate(DateTime? rollbackRetentionDeadlineUtc, DateTime nowUtc)
+    private static RetirementGateResult RollbackWindowClosedGate(DateTime? rollbackRetentionDeadlineUtc, bool hasChangeValidationHistory, DateTime nowUtc)
     {
         if (rollbackRetentionDeadlineUtc is null)
         {
-            return new RetirementGateResult("RollbackWindowClosed", "Change rollback window closed", RetirementGateStatus.NotApplicable,
-                "No rollback-retention deadline recorded for this instance, so there's no active change to close out.");
+            return hasChangeValidationHistory
+                ? new RetirementGateResult("RollbackWindowClosed", "Change rollback window closed", RetirementGateStatus.Unknown,
+                    "A change was validated on this instance but no rollback-retention deadline was recorded. Record it on the campaign's validation page.")
+                : new RetirementGateResult("RollbackWindowClosed", "Change rollback window closed", RetirementGateStatus.NotApplicable,
+                    "No change has been validated on this instance, so there's no rollback window to close.");
         }
 
         return nowUtc >= rollbackRetentionDeadlineUtc

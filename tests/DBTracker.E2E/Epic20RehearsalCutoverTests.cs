@@ -86,6 +86,36 @@ public class Epic20RehearsalCutoverTests
         await Assertions.Expect(_page.Locator("[data-testid=change-window-row]")).ToHaveCountAsync(1);
     }
 
+    /// <summary>G03: a Planned window offers no way to Completed or RolledBack, and starting it still needs approvals.</summary>
+    [Test]
+    public async Task APlannedChangeWindow_CannotBeFinishedWithoutStarting_AndStartingNeedsApproval()
+    {
+        await LoginAsync("priya.nair@architonixlabs.com");
+        var campaignId = await CreateCampaignAsync($"G03 window campaign {Guid.NewGuid():N}"[..50], "AVALOKH-SALES-SQL");
+
+        await GotoAsync($"/campaigns/{campaignId}/change-windows");
+        await WaitForCircuitAsync();
+        var start = DateTime.UtcNow.AddDays(9).Date.AddHours(2);
+        await _page.FillAsync("input[placeholder='Title']", "G03 window");
+        await _page.Locator("input[type=datetime-local]").First.FillAsync(start.ToString("yyyy-MM-ddTHH:mm"));
+        await _page.Locator("input[type=datetime-local]").Nth(1).FillAsync(start.AddHours(1).ToString("yyyy-MM-ddTHH:mm"));
+        await _page.Locator("[data-testid=create-window-button]").ClickAsync();
+        await _page.WaitForTimeoutAsync(500);
+
+        await _page.Locator("[data-testid=change-window-row]").First.Locator("a:has-text('Open')").ClickAsync();
+        await _page.WaitForURLAsync(url => url.Contains("/change-windows/"));
+        await WaitForCircuitAsync();
+
+        await Assertions.Expect(_page.Locator("[data-testid=status-Completed]")).ToHaveCountAsync(0);
+        await Assertions.Expect(_page.Locator("[data-testid=status-RolledBack]")).ToHaveCountAsync(0);
+        await Assertions.Expect(_page.Locator("[data-testid=status-Approved]")).ToBeVisibleAsync();
+
+        // Starting without approvals or an emergency exception is refused, and the status is unchanged.
+        await _page.Locator("[data-testid=status-InProgress]").ClickAsync();
+        await _page.WaitForTimeoutAsync(500);
+        await Assertions.Expect(_page.Locator("[data-testid=change-window-detail-status]")).ToHaveTextAsync("Planned");
+    }
+
     [Test]
     public async Task CompletingACampaign_IsBlockedWithoutEvidence_ThenAllowedOnceValidationSignoffsAndRehearsalPass()
     {

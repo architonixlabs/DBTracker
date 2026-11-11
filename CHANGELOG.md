@@ -2,6 +2,40 @@
 
 All notable changes to DBTracker are recorded here. Versions follow [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- **Archive and retirement.** A plain archive now asks whether the record is a duplicate or being
+  decommissioned. It is refused while a retirement checklist is open, so a decommission can't skip
+  the checklist. Opening the retirement page no longer starts a checklist, and a checklist can be
+  cancelled with a reason. The rollback gate no longer passes when a change was validated without a
+  rollback deadline.
+- **Notifications.** A new user's first alerts no longer arrive already marked read.
+- **Change windows.** A window can only be completed or rolled back after it was in progress, and
+  needs at least one required approval.
+- **Bulk edit.** Bulk edit is all or nothing:
+  - It checks the values and saves nothing if any instance would end up invalid.
+  - It skips instances changed since the preview.
+  - It rechecks the user's role, and applies exactly the previewed values.
+  - Audit entries share a batch id and are saved with the changes.
+- **Accounts.**
+  - Invitations email a link to set a password and no longer contain the temporary password.
+  - A user with a temporary password is returned to the change-password page from every page.
+  - Any role change ends the old role's sessions and pending device links.
+  - Creating a user is always audited.
+- **Cost figures.** Cost estimate amounts no longer appear in the audit trail or its export, or
+  through its search, for roles that can't see them. DBAs can record support contracts, which carry
+  no amounts.
+- **Backup scanning.** A backup file rewritten under the same name and size is recorded as a new
+  backup. Log backups (`.trn`, or a `log` part in the name) and differentials are recorded as such
+  instead of as full backups, and the scan preview shows the type.
+- **Documentation.**
+  - The 1.0.0 notes below say the tray restarts the site; it starts and stops the site and restarts
+    the app pool.
+  - `installer\build.ps1` now writes `SHA256SUMS.txt`, which the setup guide refers to.
+  - DEPLOYMENT.md explains that tray access tokens survive uninstall and how to revoke them.
+
 ## [1.0.0] - 2026-11-11
 
 First public release (pre-release). DBTracker keeps an inventory of your database instances and shows,

@@ -20,6 +20,10 @@ public static class Roles
     /// <summary>Roles allowed to view the general audit trail.</summary>
     public const string AuditViewPolicy = $"{Admin},{Auditor}";
 
-    /// <summary>Roles allowed to see cost figures. Narrower than CanEditPolicy: a DBA can record a contract, but amounts are Admin/ITManager only.</summary>
+    /// <summary>Roles allowed to record support-contract facts (vendor, coverage, dates; no amounts): the DBA who knows the
+    /// product and the IT manager who owns the vendor relationship.</summary>
+    public const string ContractEvidencePolicy = $"{Admin},{Dba},{ItManager}";
+
+    /// <summary>Roles allowed to see cost figures. Narrower than ContractEvidencePolicy: a DBA can record a contract, but amounts are Admin/ITManager only.</summary>
     public const string CommercialEvidencePolicy = $"{Admin},{ItManager}";
 }

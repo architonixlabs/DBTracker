@@ -6,6 +6,8 @@ using Microsoft.EntityFrameworkCore;
 
 namespace DBTracker.Infrastructure.Lifecycle;
 
+public record ArchiveOutcome(bool Ok, string Message);
+
 public record ArchivedInstanceRow(int Id, string Name, string Application, string Company, DateTime? ArchivedAtUtc, string ArchivedBy, string ArchiveReason);
 
 /// <summary>Archive and unarchive with preview, attribution and audit. Nothing is deleted; sweeps skip archived instances and pick them up again after unarchive.</summary>
@@ -35,7 +37,31 @@ public class InstanceArchiveService(IDbContextFactory<DBTrackerDbContext> factor
             IncludedInScheduledReports: true);
     }
 
-    public async Task<bool> ArchiveAsync(int instanceId, string reason, string actorId, string actorName)
+    /// <summary>Archives a record that is not being retired (a duplicate or one entered by mistake). Refused while a
+    /// retirement checklist is open for the instance, so a real decommission can't skip the checklist's gates.</summary>
+    public async Task<ArchiveOutcome> ArchiveAsync(int instanceId, string reason, string actorId, string actorName)
+    {
+        using (var db = await factory.CreateDbContextAsync())
+        {
+            var openChecklistId = await db.RetirementChecklists
+                .Where(c => c.DatabaseInstanceId == instanceId && c.RetiredAtUtc == null && c.CancelledAtUtc == null)
+                .Select(c => (int?)c.Id)
+                .FirstOrDefaultAsync();
+            if (openChecklistId is { } checklistId)
+            {
+                return new ArchiveOutcome(false,
+                    $"Retirement checklist #{checklistId} is open for this instance. Finish the retirement there, or cancel the checklist, instead of archiving directly.");
+            }
+        }
+
+        return await ArchiveCoreAsync(instanceId, reason, actorId, actorName, $"Not a retirement (duplicate or entered by mistake): {reason}");
+    }
+
+    /// <summary>Archives an instance whose retirement checklist has passed. Only RetirementChecklistService calls this.</summary>
+    public Task<ArchiveOutcome> ArchiveForRetirementAsync(int instanceId, int checklistId, string reason, string actorId, string actorName) =>
+        ArchiveCoreAsync(instanceId, reason, actorId, actorName, $"Retired through checklist #{checklistId}: {reason}");
+
+    private async Task<ArchiveOutcome> ArchiveCoreAsync(int instanceId, string reason, string actorId, string actorName, string auditReason)
     {
         if (string.IsNullOrWhiteSpace(reason))
         {
@@ -46,7 +72,7 @@ public class InstanceArchiveService(IDbContextFactory<DBTrackerDbContext> factor
         var instance = await db.DatabaseInstances.FirstOrDefaultAsync(i => i.Id == instanceId);
         if (instance is null || instance.IsArchived)
         {
-            return false;
+            return new ArchiveOutcome(false, "The instance could not be archived (it may already be archived).");
         }
 
         var now = DateTime.UtcNow;
@@ -57,8 +83,8 @@ public class InstanceArchiveService(IDbContextFactory<DBTrackerDbContext> factor
         instance.UpdatedAtUtc = now;
         await db.SaveChangesAsync();
 
-        await audit.RecordUserActionAsync(actorId, actorName, "InstanceArchived", "DatabaseInstance", instanceId.ToString(), instance.Name, reason);
-        return true;
+        await audit.RecordUserActionAsync(actorId, actorName, "InstanceArchived", "DatabaseInstance", instanceId.ToString(), instance.Name, auditReason);
+        return new ArchiveOutcome(true, "");
     }
 
     public async Task<bool> UnarchiveAsync(int instanceId, string actorId, string actorName)

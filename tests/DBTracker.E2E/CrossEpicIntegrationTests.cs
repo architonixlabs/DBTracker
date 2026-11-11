@@ -88,7 +88,8 @@ public class CrossEpicIntegrationTests
         await WaitForCircuitAsync();
         await _page.ClickAsync("button:has-text('Archive')");
         await _page.WaitForTimeoutAsync(400);
-        await _page.FillAsync("input[placeholder*='Decommissioned']", "E2E cross-epic archive-visibility check");
+        await _page.ClickAsync("[data-testid=archive-kind-mistake]");
+        await _page.FillAsync("#archive-reason", "E2E cross-epic archive-visibility check");
         await _page.ClickAsync("button:has-text('Archive this instance')");
         await _page.WaitForURLAsync(url => url.Contains("/instances") && !url.Contains(instanceId.ToString()));
         await WaitForCircuitAsync();
@@ -256,7 +257,8 @@ public class CrossEpicIntegrationTests
             await WaitForCircuitAsync();
             await _page.ClickAsync("button:has-text('Archive')");
             await _page.WaitForTimeoutAsync(400);
-            await _page.FillAsync("input[placeholder*='Decommissioned']", "E2E — archived after snapshot was saved");
+            await _page.ClickAsync("[data-testid=archive-kind-mistake]");
+            await _page.FillAsync("#archive-reason", "E2E — archived after snapshot was saved");
             await _page.ClickAsync("button:has-text('Archive this instance')");
             await _page.WaitForTimeoutAsync(600);
 

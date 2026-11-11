@@ -3,6 +3,7 @@
 @implements IDisposable
 @inject AuditRecorder AuditService
 @inject IJSRuntime JS
+@inject AuthenticationStateProvider AuthProvider
 
 <PageTitle>Audit trail · DBTracker</PageTitle>
 
@@ -51,7 +52,7 @@ else
                         </td>
                         <td class="small">@e.Action</td>
                         <td class="small">@e.TargetType@(string.IsNullOrEmpty(e.TargetName) ? "" : $": {e.TargetName}")</td>
-                        <td class="small text-muted">@e.Reason</td>
+                        <td class="small text-muted">@CommercialAuditMasker.Reason(e.Action, e.Reason, _canSeeCommercial)</td>
                     </tr>
                 }
             </tbody>
@@ -62,12 +63,18 @@ else
 
 @code {
     private List<AuditEvent>? _rows;
+    private bool _canSeeCommercial;
     private string _search = "";
     private string _actorType = "";
     private string _targetType = "";
     private Timer? _debounce;
 
-    protected override async Task OnInitializedAsync() => await Load();
+    protected override async Task OnInitializedAsync()
+    {
+        var state = await AuthProvider.GetAuthenticationStateAsync();
+        _canSeeCommercial = Roles.CommercialEvidencePolicy.Split(',').Any(state.User.IsInRole);
+        await Load();
+    }
 
     private async Task Load()
     {
@@ -77,7 +84,7 @@ else
             "System" => AuditActorType.System,
             _ => null
         };
-        _rows = (await AuditService.SearchAsync(_search, actorType, _targetType.Length > 0 ? _targetType : null)).ToList();
+        _rows = (await AuditService.SearchAsync(_search, actorType, _targetType.Length > 0 ? _targetType : null, includeCommercialReasons: _canSeeCommercial)).ToList();
     }
 
     private async Task OnSearch(ChangeEventArgs e)
@@ -108,7 +115,7 @@ else
             csv.AppendLine(string.Join(",", new[]
             {
                 e.TimestampUtc.ToString("O"), e.ActorType.ToString(), Csv(e.ActorName), Csv(e.Action),
-                Csv(e.TargetType), Csv(e.TargetId), Csv(e.TargetName), Csv(e.Reason)
+                Csv(e.TargetType), Csv(e.TargetId), Csv(e.TargetName), Csv(CommercialAuditMasker.Reason(e.Action, e.Reason, _canSeeCommercial))
             }));
         }
         await JS.InvokeVoidAsync("dbtracker.downloadCsv", "dbtracker-audit-trail.csv", csv.ToString());
