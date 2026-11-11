@@ -1503,7 +1503,7 @@ warning. Found while scoping: a Production deploy today seeds no users at all, s
   already have a connection string and an Admin are treated as installed; Development and Testing keep
   today's behavior.
 
-- [ ] **2026-11-11 | I02 | NEW | P1 | S - IIS packaging and deployment guide.**
+- [x] **2026-11-11 | I02 | NEW | P1 | S - IIS packaging and deployment guide.**
   **Acceptance:** a project `web.config` for the ASP.NET Core Module (in-process, Production), a folder
   publish profile, and `DEPLOYMENT.md` covering prerequisites (.NET 10 Hosting Bundle, IIS WebSocket
   Protocol for Blazor Server, SQL Server), app pool and site setup, App_Data write permission, SQL access
