@@ -114,42 +114,52 @@ else
         </div>
 
         <div class="col-lg-7">
-            @if (_action is not null)
-            {
-                <div class="dbt-card mb-3" data-testid="exception-action-panel">
-                    @if (_action.Value.Kind == "revoke")
-                    {
-                        <h2 class="h6 text-muted mb-2">Revoke exception #@_action.Value.Id</h2>
-                        <p class="small text-muted">The waived check is blocked again straight away, and the accountable owner is told.</p>
-                        <label class="form-label small mb-1" for="exceptions-revoke-reason">Why revoke it</label>
-                        <input id="exceptions-revoke-reason" class="form-control form-control-sm mb-2" @bind="_actionReason" @bind:event="oninput" data-testid="revoke-reason-input" />
-                        <button class="btn btn-danger btn-sm" @onclick="ConfirmRevoke" disabled="@string.IsNullOrWhiteSpace(_actionReason)" data-testid="confirm-revoke-button">Revoke</button>
-                    }
-                    else
-                    {
-                        <h2 class="h6 text-muted mb-2">Renew exception #@_action.Value.Id</h2>
-                        <p class="small text-muted">Creates a new exception, pending approval, linked to this one. The original and its history are kept.</p>
-                        <div class="row g-2 mb-2">
-                            <div class="col-6">
-                                <label class="form-label small mb-1" for="exceptions-renew-expires">New expiry</label>
-                                <input id="exceptions-renew-expires" type="date" class="form-control form-control-sm" @bind="_renewExpiresAt" data-testid="renew-expires-input" />
+            @* G29: revoke and renew are confirmed in a native modal dialog with the same fields as before. *@
+            <ModalDialog Title="@ActionTitle" Open="_action is not null" OpenChanged="OnActionDialogChanged"
+                         CssClass="@(_action?.Kind == "revoke" ? "is-danger" : null)" FallbackFocusSelector="[data-testid=exception-table]">
+                @if (_action is { } action)
+                {
+                    <div data-testid="exception-action-panel">
+                        @if (action.Kind == "revoke")
+                        {
+                            <p class="small text-muted">The waived check is blocked again straight away, and the accountable owner is told.</p>
+                            <label class="form-label small mb-1" for="exceptions-revoke-reason">Why revoke it</label>
+                            <input id="exceptions-revoke-reason" class="form-control form-control-sm" @bind="_actionReason" @bind:event="oninput" data-testid="revoke-reason-input" />
+                        }
+                        else
+                        {
+                            <p class="small text-muted">Creates a new exception, pending approval, linked to this one. The original and its history are kept.</p>
+                            <div class="row g-2 mb-2">
+                                <div class="col-sm-6">
+                                    <label class="form-label small mb-1" for="exceptions-renew-expires">New expiry</label>
+                                    <input id="exceptions-renew-expires" type="date" class="form-control form-control-sm" @bind="_renewExpiresAt" data-testid="renew-expires-input" />
+                                </div>
+                                <div class="col-sm-6">
+                                    <label class="form-label small mb-1" for="exceptions-renew-review">Review date</label>
+                                    <input id="exceptions-renew-review" type="date" class="form-control form-control-sm" @bind="_renewReviewDate" />
+                                </div>
                             </div>
-                            <div class="col-6">
-                                <label class="form-label small mb-1" for="exceptions-renew-review">Review date</label>
-                                <input id="exceptions-renew-review" type="date" class="form-control form-control-sm" @bind="_renewReviewDate" />
-                            </div>
+                            <label class="form-label small mb-1" for="exceptions-renew-reason">Why it is still needed</label>
+                            <textarea id="exceptions-renew-reason" class="form-control form-control-sm" rows="2" @bind="_actionReason"></textarea>
+                        }
+                        @if (_actionError is not null)
+                        {
+                            <p class="small mt-2 mb-0" role="alert" style="color:var(--dbt-failed);" data-testid="exception-action-error">@_actionError</p>
+                        }
+                        <div class="dbt-dialog-actions">
+                            @if (action.Kind == "revoke")
+                            {
+                                <button type="button" class="btn btn-danger btn-sm" @onclick="ConfirmRevoke" disabled="@string.IsNullOrWhiteSpace(_actionReason)" data-testid="confirm-revoke-button">Revoke</button>
+                            }
+                            else
+                            {
+                                <button type="button" class="btn btn-primary btn-sm" @onclick="ConfirmRenew" disabled="@(_renewExpiresAt == default)" data-testid="confirm-renew-button">Request renewal</button>
+                            }
+                            <button type="button" class="btn btn-outline-secondary btn-sm" autofocus @onclick="CancelAction">Cancel</button>
                         </div>
-                        <label class="form-label small mb-1" for="exceptions-renew-reason">Why it is still needed</label>
-                        <textarea id="exceptions-renew-reason" class="form-control form-control-sm mb-2" rows="2" @bind="_actionReason"></textarea>
-                        <button class="btn btn-primary btn-sm" @onclick="ConfirmRenew" disabled="@(_renewExpiresAt == default)" data-testid="confirm-renew-button">Request renewal</button>
-                    }
-                    <button class="btn btn-link btn-sm" @onclick="CancelAction">Cancel</button>
-                    @if (_actionError is not null)
-                    {
-                        <p class="small mt-2 mb-0" role="alert" style="color:var(--dbt-failed);" data-testid="exception-action-error">@_actionError</p>
-                    }
-                </div>
-            }
+                    </div>
+                }
+            </ModalDialog>
 
             @if (_exceptions.Count == 0)
             {
@@ -336,6 +346,18 @@ else
         _actionError = null;
         _renewExpiresAt = default;
         _renewReviewDate = null;
+    }
+
+    private string ActionTitle => _action is { } a
+        ? (a.Kind == "revoke" ? $"Revoke exception #{a.Id}" : $"Renew exception #{a.Id}")
+        : "";
+
+    private void OnActionDialogChanged(bool open)
+    {
+        if (!open)
+        {
+            CancelAction();
+        }
     }
 
     private void CancelAction()

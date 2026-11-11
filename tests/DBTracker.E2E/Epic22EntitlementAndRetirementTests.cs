@@ -283,6 +283,9 @@ public class Epic22EntitlementAndRetirementTests
         // Cancel the checklist; the instance stays active and the page offers a fresh start.
         await GotoAsync($"/instances/{instanceId}/retirement");
         await WaitForCircuitAsync();
+        // G29: cancelling is confirmed in a modal dialog that holds the reason.
+        await _page.Locator("[data-testid=open-cancel-checklist]").ClickAsync();
+        await Assertions.Expect(_page.GetByRole(AriaRole.Dialog, new() { Name = "Cancel this retirement checklist?" })).ToBeVisibleAsync();
         await _page.Locator("[data-testid=cancel-checklist-reason]").FillAsync("Started by mistake (E2E)");
         await _page.Locator("[data-testid=cancel-checklist-button]").ClickAsync();
         await Assertions.Expect(_page.Locator("[data-testid=start-retirement-checklist]")).ToBeVisibleAsync();

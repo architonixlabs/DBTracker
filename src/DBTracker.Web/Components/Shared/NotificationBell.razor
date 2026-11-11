@@ -3,9 +3,15 @@
 @inject AuthenticationStateProvider AuthProvider
 @inject NavigationManager Nav
 @inject ILogger<NotificationBell> Logger
+@inject IJSRuntime JS
 
+@* G30: the menu is a popover="auto" placed right after its trigger: the browser gives it the top layer,
+   light dismiss (click elsewhere or Esc) and focus return to the bell. It is a short list of buttons and
+   links that Tab moves through, so it is not an ARIA menu and needs no arrow-key handling. Content renders
+   only while open, so its buttons are not duplicated on the /notifications page. *@
 <div class="notif-bell-wrap" @onkeydown="OnKeyDown">
-    <button type="button" class="notif-bell-btn" @ref="_bellButtonRef" @onclick="Toggle" aria-expanded="@(_open ? "true" : "false")" aria-controls="notif-dropdown" aria-label="@BellLabel">
+    <button type="button" class="notif-bell-btn" @ref="_bellButtonRef" @onclick="OnBellClick" popovertarget="notif-dropdown"
+            aria-expanded="@(_open ? "true" : "false")" aria-controls="notif-dropdown" aria-label="@BellLabel">
         <i class="bi @(_refreshError is not null ? "bi-bell-slash" : "bi-bell")" aria-hidden="true"></i>
         @if (_unreadCount > 0)
         {
@@ -13,9 +19,10 @@
         }
     </button>
 
-    @if (_open)
-    {
-        <div class="notif-dropdown" id="notif-dropdown" role="region" aria-label="Recent notifications">
+    <div class="notif-dropdown dbt-anchored @(_open ? "is-open" : "")" id="notif-dropdown" popover="auto" @ref="_dropdownRef"
+         role="region" aria-label="Recent notifications" data-loaded="@_open">
+        @if (_open)
+        {
             <div class="notif-dropdown-header">
                 <span>Notifications</span>
                 @if (_unreadCount > 0)
@@ -26,7 +33,7 @@
             <div class="notif-dropdown-meta d-flex justify-content-between align-items-center px-3 py-1 small text-muted">
                 <span role="status" data-testid="notif-updated">@UpdatedLabel</span>
                 <span class="d-flex gap-1">
-                    <button type="button" class="btn btn-link btn-sm p-1" data-testid="notif-pause" @onclick="TogglePause" aria-pressed="@(_paused ? "true" : "false")" aria-label="@(_paused ? "Resume auto-refresh" : "Pause auto-refresh")" title="@(_paused ? "Resume auto-refresh (every 30s)" : "Pause auto-refresh")">
+                    <button type="button" class="btn btn-link btn-sm p-1" data-testid="notif-pause" @onclick="TogglePause" aria-pressed="@(_paused ? "true" : "false")" aria-label="@(_paused ? "Resume auto-refresh" : "Pause auto-refresh")" title="@(_paused ? "Resume auto-refresh" : "Pause auto-refresh")">
                         <i class="bi @(_paused ? "bi-play-fill" : "bi-pause-fill")" aria-hidden="true"></i>
                     </button>
                     <button type="button" class="btn btn-link btn-sm p-1" @onclick="RefreshNow" aria-busy="@(_refreshing ? "true" : "false")" aria-label="Refresh notifications" title="Refresh notifications">
@@ -61,8 +68,8 @@
             <div class="notif-dropdown-footer">
                 <a href="/notifications">View all notifications and subscriptions</a>
             </div>
-        </div>
-    }
+        }
+    </div>
 </div>
 
 @code {
@@ -76,6 +83,11 @@
     private Timer? _autoRefreshTimer;
     private string? _userId;
     private ElementReference _bellButtonRef;
+    private ElementReference _dropdownRef;
+    private DotNetObjectReference<NotificationBell>? _jsRef;
+    // Assumed until the browser says otherwise; without the Popover API the bell falls back to toggling here.
+    private bool _popoverSupported = true;
+    private bool _repositionPending;
 
     private static readonly TimeSpan AutoRefreshInterval = TimeSpan.FromSeconds(30);
 
@@ -88,6 +100,82 @@
         // Keeps the unread badge current even while the dropdown is closed, so a new alert shows
         // up without the user having to open and close it to force a reload.
         _autoRefreshTimer = new Timer(async _ => await AutoRefreshTickAsync(), null, AutoRefreshInterval, AutoRefreshInterval);
+        Nav.LocationChanged += OnLocationChanged;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        try
+        {
+            if (firstRender)
+            {
+                _popoverSupported = await JS.InvokeAsync<bool>("dbtracker.popover.supported");
+                _jsRef = DotNetObjectReference.Create(this);
+                await JS.InvokeVoidAsync("dbtracker.popover.watch", _dropdownRef, _jsRef);
+            }
+            if (_repositionPending)
+            {
+                _repositionPending = false;
+                await JS.InvokeVoidAsync("dbtracker.popover.reposition", _dropdownRef);
+            }
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+    }
+
+    // The popover opens natively from popovertarget; this keeps the rendered content and aria-expanded in
+    // step with it, including light dismiss and Esc, which close it without a click on the bell.
+    [JSInvokable]
+    public async Task OnPopoverToggle(bool open)
+    {
+        if (open == _open)
+        {
+            return;
+        }
+
+        _open = open;
+        if (open)
+        {
+            _repositionPending = true;
+            StateHasChanged();
+            await Refresh();
+            _repositionPending = true;
+        }
+        StateHasChanged();
+    }
+
+    private async Task HidePopoverAsync()
+    {
+        if (_popoverSupported)
+        {
+            await JS.InvokeVoidAsync("dbtracker.popover.hide", _dropdownRef);
+        }
+        else
+        {
+            _open = false;
+        }
+    }
+
+    // The bell lives in the layout, so it outlives page navigation: close it when the user follows a link.
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+    {
+        if (!_open)
+        {
+            return;
+        }
+
+        _ = InvokeAsync(async () =>
+        {
+            try
+            {
+                await HidePopoverAsync();
+                StateHasChanged();
+            }
+            catch (JSDisconnectedException)
+            {
+            }
+        });
     }
 
     private async Task Refresh()
@@ -167,8 +255,14 @@
         _refreshing = false;
     }
 
-    private async Task Toggle()
+    // Only the no-popover fallback toggles here; elsewhere popovertarget does it and OnPopoverToggle follows.
+    private async Task OnBellClick()
     {
+        if (_popoverSupported)
+        {
+            return;
+        }
+
         _open = !_open;
         if (_open)
         {
@@ -197,14 +291,16 @@
 
         if (n.DatabaseInstanceId is { } id)
         {
+            await HidePopoverAsync();
             Nav.NavigateTo($"/instances/{id}");
         }
     }
 
-    // Escape closes the dropdown and returns focus to the bell, so a keyboard user keeps their place.
+    // No-popover fallback only (the popover handles Esc natively): Escape closes the dropdown and returns
+    // focus to the bell, so a keyboard user keeps their place.
     private async Task OnKeyDown(KeyboardEventArgs e)
     {
-        if (_open && e.Key == "Escape")
+        if (!_popoverSupported && _open && e.Key == "Escape")
         {
             _open = false;
             await _bellButtonRef.FocusAsync();
@@ -225,5 +321,10 @@
         _ => "Info"
     };
 
-    public void Dispose() => _autoRefreshTimer?.Dispose();
+    public void Dispose()
+    {
+        Nav.LocationChanged -= OnLocationChanged;
+        _autoRefreshTimer?.Dispose();
+        _jsRef?.Dispose();
+    }
 }

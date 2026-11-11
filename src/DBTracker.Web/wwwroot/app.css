@@ -491,7 +491,9 @@ h2.h6.text-muted.text-uppercase {
     margin-top: 24px;
 }
 
+/* G31: detail cards sit side by side only when the row itself has room for two. */
 .kv-row {
+    container: kv-row / inline-size;
     border-top: 1px solid var(--dbt-line);
     padding-top: 28px;
 }
@@ -513,7 +515,29 @@ h2.h6.text-muted.text-uppercase {
     padding-left: 36px;
 }
 
-@media (max-width: 767px) {
+/* Fallback where container queries are missing: stack by the window's width, as before. */
+@supports not (container-type: inline-size) {
+    @media (max-width: 767px) {
+        .kv-row > [class*="col-"]:first-child {
+            border-right: none;
+            border-bottom: 1px solid var(--dbt-line);
+            padding-right: calc(var(--bs-gutter-x) * .5);
+            padding-bottom: 20px;
+            margin-bottom: 20px;
+        }
+        .kv-row > [class*="col-"]:last-child {
+            padding-left: calc(var(--bs-gutter-x) * .5);
+        }
+    }
+}
+
+/* Two cards of about 360px each is the narrowest that still reads; below that, stack them. */
+@container kv-row (max-width: 720px) {
+    .kv-row > [class*="col-"] {
+        flex: 0 0 100%;
+        width: 100%;
+        max-width: 100%;
+    }
     .kv-row > [class*="col-"]:first-child {
         border-right: none;
         border-bottom: 1px solid var(--dbt-line);
@@ -526,8 +550,28 @@ h2.h6.text-muted.text-uppercase {
     }
 }
 
+/* G31: key-value lists put the label above its value when the list itself is narrow, instead of
+   squeezing long values (emails, paths, hostnames) into a sliver beside the label. */
 dl.row {
+    container: kv-list / inline-size;
     margin: 0;
+}
+
+@container kv-list (max-width: 20rem) {
+    dl.row > dt,
+    dl.row > dd {
+        flex: 0 0 100%;
+        width: 100%;
+        max-width: 100%;
+    }
+    dl.row > dt {
+        padding-bottom: 0;
+        border-bottom: none;
+    }
+    dl.row > dd {
+        padding-top: 2px;
+        text-align: left;
+    }
 }
 
 dl.row > dt, dl.row > dd {
@@ -557,7 +601,10 @@ dl.row > dd {
 }
 
 /* ---------- Stat strip (dashboard counts, divided rather than boxed) ---------- */
+/* G31: a size container, so the cells reflow by the strip's own width (zoom, the sidebar, a narrow
+   column), not only the window's. The 480px media query at the end is the fallback. */
 .stat-strip {
+    container: stat-strip / inline-size;
     display: flex;
     flex-wrap: wrap;
     border-top: 1px solid var(--dbt-line);
@@ -1558,20 +1605,180 @@ dl.row > dd {
     text-align: center;
 }
 
+/* G30: a popover="auto" in the top layer, so no z-index or sidebar-overflow juggling is needed.
+   Placement is in "Anchored popovers" below. */
 .notif-dropdown {
-    position: absolute;
-    top: calc(100% + 8px);
-    left: 0;
     width: 320px;
     max-width: calc(100vw - 24px);
-    max-height: 420px;
+    max-height: min(420px, calc(100dvh - 24px));
     overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 0;
     background: var(--dbt-bg-raised);
     color: var(--dbt-text);
     border: 1px solid var(--dbt-border-bright);
     border-radius: var(--dbt-radius-panel);
     box-shadow: 0 12px 32px rgba(0,0,0,0.55);
+}
+
+/* The list renders a moment after the popover opens; don't flash an empty frame. */
+.notif-dropdown:not([data-loaded]) {
+    visibility: hidden;
+}
+
+/* Without the Popover API: the old Blazor-toggled dropdown, hanging below the bell. */
+html.no-popover .notif-dropdown {
+    position: absolute;
+    top: calc(100% + 8px);
+    left: 0;
     z-index: 50;
+}
+
+html.no-popover .notif-dropdown:not(.is-open) {
+    display: none;
+}
+
+/* ---------- Anchored popovers (notification menu, toggletips) ---------- */
+/* CSS anchor positioning is an enhancement: popovertarget makes the trigger the implicit anchor.
+   Elsewhere dbtracker.js sets top/left from the trigger (below it, flipped above near the bottom edge,
+   kept inside the viewport). Both blocks are gated so neither keeps the UA's centered placement. */
+@supports (position-area: block-end) {
+    .dbt-anchored {
+        inset: auto;
+        margin: 6px 0;
+        position-area: block-end span-inline-end;
+        position-try-fallbacks: flip-block, flip-inline, flip-block flip-inline;
+    }
+}
+
+@supports not (position-area: block-end) {
+    .dbt-anchored {
+        position: fixed;
+        inset: auto;
+        margin: 0;
+    }
+}
+
+/* ---------- Toggletip (G30: replaces title-only explanations) ---------- */
+.toggletip-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-inline-size: 24px;
+    min-block-size: 24px;
+    padding: 0;
+    margin-inline-start: 2px;
+    background: none;
+    border: none;
+    border-radius: var(--dbt-radius);
+    color: var(--dbt-muted);
+    font-size: 13px;
+    line-height: 1;
+    vertical-align: middle;
+    cursor: pointer;
+}
+
+.toggletip-btn:hover,
+.toggletip-btn[aria-expanded="true"] {
+    color: var(--dbt-text-strong);
+    background: var(--dbt-bg-alt);
+}
+
+.toggletip {
+    max-inline-size: min(22rem, calc(100vw - 16px));
+    padding: 10px 12px;
+    background: var(--dbt-bg-alt);
+    color: var(--dbt-text);
+    border: 1px solid var(--dbt-border-bright);
+    border-radius: var(--dbt-radius-panel);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+    /* It can sit in a table header or a heading row: don't inherit their type treatment. */
+    font-family: var(--dbt-sans);
+    font-size: 12.5px;
+    font-weight: 400;
+    line-height: 1.45;
+    letter-spacing: normal;
+    text-transform: none;
+    text-align: start;
+    white-space: normal;
+}
+
+.toggletip-list {
+    margin: 0;
+}
+
+.toggletip-list dt {
+    color: var(--dbt-text-strong);
+    font-weight: 600;
+}
+
+.toggletip-list dd {
+    margin: 0 0 6px;
+    color: var(--dbt-text);
+}
+
+.toggletip-list dd:last-child {
+    margin-bottom: 0;
+}
+
+/* Without the Popover API the explanation is shown inline, and the button has nothing to do. */
+html.no-popover .toggletip-btn {
+    display: none;
+}
+
+html.no-popover .toggletip {
+    position: static;
+    display: block;
+    padding: 2px 0 0;
+    background: none;
+    border: none;
+    box-shadow: none;
+    color: var(--dbt-muted);
+}
+
+/* ---------- Modal dialog (G29: native <dialog> + showModal()) ---------- */
+/* No display rule on the dialog itself: it would override the closed state. */
+.dbt-dialog {
+    width: min(36rem, calc(100% - 32px));
+    max-height: calc(100dvh - 32px);
+    overflow-y: auto;
+    padding: 20px 22px;
+    background: var(--dbt-bg-raised);
+    color: var(--dbt-text);
+    border: 1px solid var(--dbt-border-bright);
+    border-radius: var(--dbt-radius-panel);
+    box-shadow: 0 16px 48px rgba(0,0,0,0.6);
+}
+
+.dbt-dialog.is-danger {
+    border-top: 2px solid var(--dbt-failed);
+}
+
+/* Both rules: without them a scroll gesture over the backdrop or inside the dialog scrolls the page. */
+.dbt-dialog:modal {
+    overscroll-behavior: contain;
+}
+
+.dbt-dialog::backdrop {
+    background: rgba(5, 6, 8, 0.72);
+    overflow: hidden;
+    overscroll-behavior: contain;
+}
+
+.dbt-dialog-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--dbt-text-strong);
+    margin: 0 0 12px;
+}
+
+/* The safe action is last, at the end edge, so a destructive button appearing beside it never moves it. */
+.dbt-dialog-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 18px;
 }
 
 .notif-dropdown-header {
@@ -1809,30 +2016,6 @@ button.notif-item:active {
         max-width: 100% !important;
         width: 100%;
     }
-    /* Total across the top, then the four health counts as a 2 x 2 grid. */
-    .stat-strip {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-    }
-    .stat-cell {
-        border-right: none;
-        border-bottom: 1px solid var(--dbt-line);
-        padding: 14px 12px;
-    }
-    .stat-cell:first-child {
-        grid-column: 1 / -1;
-        padding-left: 0;
-    }
-    .stat-cell:nth-child(2n) {
-        border-right: 1px solid var(--dbt-line);
-        padding-left: 0;
-    }
-    .stat-cell:nth-last-child(-n+2):not(:first-child) {
-        border-bottom: none;
-    }
-    .stat-cell .stat-value {
-        font-size: 26px;
-    }
     .skeleton-stats {
         grid-template-columns: 1fr 1fr;
     }
@@ -1847,5 +2030,62 @@ button.notif-item:active {
     }
     .auth-panel {
         padding: 22px 18px 20px;
+    }
+}
+
+/* G31 fallback where container queries are missing: the 2 x 2 stat grid by the window's width. */
+@supports not (container-type: inline-size) {
+    @media (max-width: 480px) {
+        /* Total across the top, then the four health counts as a 2 x 2 grid. */
+        .stat-strip {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+        }
+        .stat-cell {
+            border-right: none;
+            border-bottom: 1px solid var(--dbt-line);
+            padding: 14px 12px;
+        }
+        .stat-cell:first-child {
+            grid-column: 1 / -1;
+            padding-left: 0;
+        }
+        .stat-cell:nth-child(2n) {
+            border-right: 1px solid var(--dbt-line);
+            padding-left: 0;
+        }
+        .stat-cell:nth-last-child(-n+2):not(:first-child) {
+            border-bottom: none;
+        }
+        .stat-cell .stat-value {
+            font-size: 26px;
+        }
+    }
+}
+
+/* G31: the same layout, chosen by the strip's own width. Five cells need about 160px each; below
+   that the Total spans the top and the counts pair up. The strip is the container, so its cells
+   reflow with flex-basis rather than a grid on the strip itself. */
+@container stat-strip (max-width: 600px) {
+    .stat-cell {
+        flex: 1 1 50%;
+        min-width: 0;
+        border-right: none;
+        border-bottom: 1px solid var(--dbt-line);
+        padding: 14px 12px;
+    }
+    .stat-cell:first-child {
+        flex-basis: 100%;
+        padding-left: 0;
+    }
+    .stat-cell:nth-child(2n) {
+        border-right: 1px solid var(--dbt-line);
+        padding-left: 0;
+    }
+    .stat-cell:nth-last-child(-n+2):not(:first-child) {
+        border-bottom: none;
+    }
+    .stat-cell .stat-value {
+        font-size: 26px;
     }
 }

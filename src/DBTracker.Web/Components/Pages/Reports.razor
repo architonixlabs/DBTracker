@@ -94,7 +94,7 @@ else
             {
                 <div class="dbt-table">
                     <table aria-label="Backup runs in range" class="table">
-                        <thead><tr><th>When</th><th>Instance</th><th>Company / Dept</th><th>Engine</th><th>Type</th><th>Status</th><th>Size</th><th>Duration</th><th>Source</th><th>Evidence</th></tr></thead>
+                        <thead><tr><th>When</th><th>Instance</th><th>Company / Dept</th><th>Engine</th><th>Type</th><th>Status</th><th>Size</th><th>Duration</th><th>Source</th><th>Evidence <Toggletip Label="About evidence levels" TestId="report-evidence-help"><EvidenceLevelsHelp /></Toggletip></th></tr></thead>
                         <tbody>
                             @foreach (var r in rowsInRange)
                             {
@@ -111,7 +111,7 @@ else
                                     <td>
                                         @if (r.Evidence is { } level)
                                         {
-                                            <span class="badge-health dot @EvidenceClass(level)" title="@EvidenceTooltip(level)">@BackupEvidenceClassifier.Describe(level)</span>
+                                            <span class="badge-health dot @EvidenceClass(level)">@BackupEvidenceClassifier.Describe(level)</span>
                                         }
                                         else
                                         {
@@ -925,15 +925,6 @@ else
         EvidenceLevel.RestoreTested => "OnTrack",
         EvidenceLevel.ReportedSuccess => "Overdue",
         _ => "NeverBackedUp"
-    };
-
-    private static string EvidenceTooltip(EvidenceLevel level) => level switch
-    {
-        EvidenceLevel.Discovered => "A file was found on the shared drive. That shows it exists, not that anyone confirmed it.",
-        EvidenceLevel.ReportedSuccess => "Logged by hand as successful. A report, not file proof.",
-        EvidenceLevel.RestoreTested => "A restore has since succeeded from this instance, proving the chain recoverable.",
-        EvidenceLevel.Imported => "Loaded from a history import. Kept for context and never counted as verified.",
-        _ => ""
     };
 
     private static string ScannerFreshnessClass(ScannerFreshness freshness) => freshness switch
