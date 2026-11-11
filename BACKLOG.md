@@ -69,8 +69,9 @@ Just wants to confirm their app's DB is backed up and update contact info when s
 - [x] Nav reflects current user + role; hide actions the role can't perform rather than just erroring
 - [x] Admin "Users" management page — list users + roles, create a new user with a role (delivered
       under Epic 8, see below)
-- [ ] Deactivate an existing user / change an existing user's role from the Users page — currently
+- [x] Deactivate an existing user / change an existing user's role from the Users page — currently
       create-only; changing a role today means editing seed data or the database directly
+      (delivered by U16: role change, Deactivate/Reactivate on the Users page; see UPDATE-016)
 
 ### Epic 6 — Backup evidence from shared drive
 *Serves Priya (DBA, who shouldn't have to hand-log every backup) and Angela (Auditor, who needs
@@ -95,7 +96,8 @@ needs a record of DR drills and emergency restores, not just backups going out).
 ### Epic 7 — Richer environment & instance detail
 - [x] Retention policy field (days backups should be retained — informational)
 - [x] Tags field and a runbook/monitoring link field
-- [ ] Custom/extensible environment tags beyond the fixed tier (region, cluster, replica set)
+- [x] Custom/extensible environment tags beyond the fixed tier (region, cluster, replica set)
+      (delivered by U21: Region, Cluster and Replica set fields and facets; see UPDATE-016)
 - [x] Audit trail of who changed what on an instance record (Epic 12 — "Change history" on the instance detail page)
 
 ### Epic 8 — Notifications
@@ -1245,6 +1247,7 @@ clarifies, extends, or supersedes the earlier entry. Earlier wording remains his
 - 2026-11-10 | UPDATE-009 | Tracking correction: the review log above describes corrections/refinements from the usability review. Their authoritative clarification is now recorded in these separate update entries; original backlog wording has been restored and preserved.
 - 2026-11-10 | NEW-001 | Added U01-U22 under Epics 13-17 as separate proposed features/refinements, with priorities, effort, persona rationale and acceptance criteria. These remain unimplemented; see USABILITY_REVIEW.md for supporting evidence.
 - 2026-11-11 | UPDATE-015 | Supersedes the Design section's "dark ops-console theme" and "Motion" entries: the antislop pass replaced the terminal login card, grid-paper background, monospace headings and `//` labels. The old entries are kept struck through; the new "Current (2026-11-11)" entry and the dated Progress log entry describe what shipped. The open "Further polish" item stays open (no light-theme toggle).
+- 2026-11-11 | UPDATE-016 | Closes two original open items now delivered by their roadmap refinements (UPDATE-003, UPDATE-004): Epic 5 "deactivate / change role" by U16 (Users page role select plus Deactivate/Reactivate, covered by Epic16AccountLifecycleTests) and Epic 7 "region, cluster, replica set" by U21 (instance editor fields and facets, covered by Epic17OwnershipTests). Verified in the code before closing.
 - 2026-11-10 | UPDATE-015 | Epics 13 and 14 (U01-U08) are now implemented — see the Progress log entries dated 2026-11-10 for what shipped and any scope notes. This supersedes UPDATE-005 (U07 delivered, so Epic 8's preference item above is now marked done) and partially supersedes UPDATE-001/UPDATE-002/UPDATE-007 (U05's facets/shared filtering/sort and U02's staleness detection are delivered; U05's report/filter deep-linking and U06's full remaining scope are covered in the Epic 14 entry). U03/U04's items are also delivered per Epic 13. Earlier wording is preserved as history; U09-U22 remain open.
 
 ## DBA lifecycle roadmap - 2026-11-10
