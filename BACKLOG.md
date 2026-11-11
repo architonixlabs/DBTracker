@@ -1032,6 +1032,23 @@ authenticated role already, same as the rest of the app, so no separate "my apps
   `DBTracker_InstallTest_*` database, dropped on teardown. Screenshots at 1280px and 360px checked: no
   horizontal overflow, visible focus, no console errors from the app (the only 404 is the
   `hot-reload-settings.json` dev-tooling request seen in any unpublished run).
+- 2026-11-11 · First real install of `DBTracker-Setup.exe` (I03/I04), in a clean Windows Server 2025
+  evaluation VM on Hyper-V. Windows Sandbox was tried first and cannot host IIS: its image has no IIS
+  features, so DISM rejects every name (0x800f0831) and Setup stopped cleanly before installing
+  anything; the setup helper now logs that plainly and DEPLOYMENT.md lists it under troubleshooting.
+  `installer\test\Start-HyperVTest.ps1` builds the VM from a differencing disk (the downloaded VHD is
+  never modified), turns on automatic sign-in, runs Setup on the VM desktop with its progress window
+  visible, and streams the logs back. **First VM run:** IIS with WebSockets, the .NET 10.0.15 Hosting
+  Bundle and SQL Server 2025 Express all installed (the Express silent arguments, previously taken
+  from third-party guides, are now verified), but `DBTracker.msi` failed with 1603. **Real bug:** the
+  managed custom actions threw BadImageFormatException because DTF picks the native SfxCA host from
+  `$(Platform)`, not `PlatformTarget`, and fell back to x86, wrapping the x64 assembly in an x86 host;
+  the custom-action project now pins the x64 SfxCA. Earlier verification had only called that code
+  directly from PowerShell, never through Windows Installer, which is why it was missed. **Second VM
+  run:** Setup exit 0, MSI "Installation completed successfully", site Started, app pool No Managed
+  Code, `/install` returned HTTP 200, setup key file created, Edge opened the wizard. **Not yet
+  covered:** clicking through the bundle's Options page (the VM runs used `/passive`), uninstall, and
+  an upgrade from one version to the next.
 
 ## Out of scope (future)
 - Automated backup execution/orchestration (this tracks status, doesn't run backups)

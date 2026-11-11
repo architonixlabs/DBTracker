@@ -6,7 +6,8 @@ param(
     [string]$Results = 'C:\Results',
     [int]$Port = 8150,
     [switch]$SkipSqlExpress,
-    [switch]$NoUi
+    [switch]$NoUi,
+    [switch]$Passive
 )
 
 $ErrorActionPreference = 'Continue'
@@ -18,8 +19,9 @@ $summary = [ordered]@{ StartedAt = (Get-Date).ToString('o') }
 $sqlExpress = if ($SkipSqlExpress) { '0' } else { '1' }
 Write-Host "Running $Installer quietly (SQL Server Express: $sqlExpress)..."
 $setupLog = Join-Path $Results 'DBTracker-Setup.log'
+$uiMode = if ($Passive) { '/passive' } else { '/quiet' }
 $proc = Start-Process -FilePath $Installer -Wait -PassThru -ArgumentList @(
-    '/quiet', '/norestart', '/log', "`"$setupLog`"",
+    $uiMode, '/norestart', '/log', "`"$setupLog`"",
     "InstallSqlExpress=$sqlExpress", 'LaunchWizard=0', "SitePort=$Port")
 $summary.SetupExitCode = $proc.ExitCode
 $summary.FinishedAt = (Get-Date).ToString('o')

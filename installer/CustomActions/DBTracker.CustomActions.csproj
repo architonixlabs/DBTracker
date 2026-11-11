@@ -10,6 +10,10 @@
     <ImplicitUsings>disable</ImplicitUsings>
     <AssemblyName>DBTracker.CustomActions</AssemblyName>
     <RootNamespace>DBTracker.CustomActions</RootNamespace>
+    <!-- DTF picks the native SfxCA host from $(Platform), not PlatformTarget, and falls back to x86.
+         An x86 host cannot load this x64 assembly (BadImageFormatException at install time), so pin
+         the x64 host explicitly. -->
+    <SfxCADll>$(NuGetPackageRoot)wixtoolset.dtf.customaction\5.0.2\tools\x64\SfxCA.dll</SfxCADll>
   </PropertyGroup>
 
   <ItemGroup>
