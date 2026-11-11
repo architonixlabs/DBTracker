@@ -359,6 +359,9 @@ namespace DBTracker.Infrastructure.Migrations
                     b.Property<int>("DatabaseInstanceId")
                         .HasColumnType("int");
 
+                    b.Property<bool?>("EncryptionConfirmed")
+                        .HasColumnType("bit");
+
                     b.Property<bool>("EncryptionExpected")
                         .HasColumnType("bit");
 
@@ -849,6 +852,11 @@ namespace DBTracker.Infrastructure.Migrations
                         .HasMaxLength(2000)
                         .HasColumnType("nvarchar(2000)");
 
+                    b.Property<string>("OwnerEmail")
+                        .IsRequired()
+                        .HasMaxLength(320)
+                        .HasColumnType("nvarchar(320)");
+
                     b.Property<string>("OwnerName")
                         .IsRequired()
                         .HasMaxLength(320)
@@ -890,6 +898,104 @@ namespace DBTracker.Infrastructure.Migrations
                     b.HasIndex("DatabaseInstanceId", "Kind");
 
                     b.ToTable("CertificateDependencies");
+                });
+
+            modelBuilder.Entity("DBTracker.Core.Entities.CertificateRenewalEvent", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("CertificateDependencyId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("EventType")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Evidence")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<DateTime?>("NewExpiresAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime>("OccurredAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("PreviousExpiresAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime>("RecordedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("RecordedBy")
+                        .IsRequired()
+                        .HasMaxLength(320)
+                        .HasColumnType("nvarchar(320)");
+
+                    b.Property<string>("ReplicasOrClientsUpdated")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CertificateDependencyId", "OccurredAtUtc");
+
+                    b.ToTable("CertificateRenewalEvents");
+                });
+
+            modelBuilder.Entity("DBTracker.Core.Entities.ChangeFreezePeriod", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int?>("AppliesToEnvironment")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("CancelledAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("CancelledBy")
+                        .IsRequired()
+                        .HasMaxLength(320)
+                        .HasColumnType("nvarchar(320)");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasMaxLength(320)
+                        .HasColumnType("nvarchar(320)");
+
+                    b.Property<DateTime>("EndUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<DateTime>("StartUtc")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("StartUtc", "EndUtc");
+
+                    b.ToTable("ChangeFreezePeriods");
                 });
 
             modelBuilder.Entity("DBTracker.Core.Entities.ChangeValidation", b =>
@@ -1016,6 +1122,11 @@ namespace DBTracker.Infrastructure.Migrations
                         .IsRequired()
                         .HasMaxLength(200)
                         .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("ReviewerUserId")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
 
                     b.Property<DateTime>("SignedAtUtc")
                         .HasColumnType("datetime2");
@@ -1871,6 +1982,41 @@ namespace DBTracker.Infrastructure.Migrations
                     b.ToTable("Incidents");
                 });
 
+            modelBuilder.Entity("DBTracker.Core.Entities.InstanceCapacityLimit", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<double>("CapacityLimitGb")
+                        .HasColumnType("float");
+
+                    b.Property<int>("DatabaseInstanceId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("nvarchar(300)");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("UpdatedBy")
+                        .IsRequired()
+                        .HasMaxLength(320)
+                        .HasColumnType("nvarchar(320)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DatabaseInstanceId")
+                        .IsUnique();
+
+                    b.ToTable("InstanceCapacityLimits");
+                });
+
             modelBuilder.Entity("DBTracker.Core.Entities.InstanceChangeLog", b =>
                 {
                     b.Property<int>("Id")
@@ -2006,6 +2152,49 @@ namespace DBTracker.Infrastructure.Migrations
                     b.HasIndex("DatabaseInstanceId", "IsResolved");
 
                     b.ToTable("InstanceDependencies");
+                });
+
+            modelBuilder.Entity("DBTracker.Core.Entities.MaintenanceCheckRequirement", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("CheckType")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasMaxLength(320)
+                        .HasColumnType("nvarchar(320)");
+
+                    b.Property<int>("DatabaseInstanceId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("ExpectedIntervalHours")
+                        .HasColumnType("int");
+
+                    b.Property<string>("NodeOrDeploymentLabel")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("Notes")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DatabaseInstanceId", "CheckType", "NodeOrDeploymentLabel")
+                        .IsUnique();
+
+                    b.ToTable("MaintenanceCheckRequirements");
                 });
 
             modelBuilder.Entity("DBTracker.Core.Entities.MaintenanceEvidenceRecord", b =>
@@ -2822,6 +3011,11 @@ namespace DBTracker.Infrastructure.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
+                    b.Property<string>("AccountableOwnerEmail")
+                        .IsRequired()
+                        .HasMaxLength(320)
+                        .HasColumnType("nvarchar(320)");
+
                     b.Property<string>("AccountableOwnerName")
                         .IsRequired()
                         .HasMaxLength(320)
@@ -2981,6 +3175,15 @@ namespace DBTracker.Infrastructure.Migrations
                         .IsRequired()
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
+
+                    b.Property<bool?>("RequiresEncryptedCopies")
+                        .HasColumnType("bit");
+
+                    b.Property<bool?>("RequiresImmutableCopy")
+                        .HasColumnType("bit");
+
+                    b.Property<bool?>("RequiresOffsiteCopy")
+                        .HasColumnType("bit");
 
                     b.Property<int?>("RpoTargetMinutes")
                         .HasColumnType("int");
@@ -4445,6 +4648,17 @@ namespace DBTracker.Infrastructure.Migrations
                     b.Navigation("OwnerTeam");
                 });
 
+            modelBuilder.Entity("DBTracker.Core.Entities.CertificateRenewalEvent", b =>
+                {
+                    b.HasOne("DBTracker.Core.Entities.CertificateDependency", "CertificateDependency")
+                        .WithMany("History")
+                        .HasForeignKey("CertificateDependencyId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("CertificateDependency");
+                });
+
             modelBuilder.Entity("DBTracker.Core.Entities.ChangeValidation", b =>
                 {
                     b.HasOne("DBTracker.Core.Entities.DatabaseInstance", "DatabaseInstance")
@@ -4622,6 +4836,17 @@ namespace DBTracker.Infrastructure.Migrations
                     b.Navigation("DatabaseInstance");
                 });
 
+            modelBuilder.Entity("DBTracker.Core.Entities.InstanceCapacityLimit", b =>
+                {
+                    b.HasOne("DBTracker.Core.Entities.DatabaseInstance", "DatabaseInstance")
+                        .WithMany()
+                        .HasForeignKey("DatabaseInstanceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("DatabaseInstance");
+                });
+
             modelBuilder.Entity("DBTracker.Core.Entities.InstanceChangeLog", b =>
                 {
                     b.HasOne("DBTracker.Core.Entities.DatabaseInstance", "DatabaseInstance")
@@ -4649,6 +4874,17 @@ namespace DBTracker.Infrastructure.Migrations
                     b.Navigation("DatabaseInstance");
 
                     b.Navigation("OwnerTeam");
+                });
+
+            modelBuilder.Entity("DBTracker.Core.Entities.MaintenanceCheckRequirement", b =>
+                {
+                    b.HasOne("DBTracker.Core.Entities.DatabaseInstance", "DatabaseInstance")
+                        .WithMany()
+                        .HasForeignKey("DatabaseInstanceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("DatabaseInstance");
                 });
 
             modelBuilder.Entity("DBTracker.Core.Entities.MaintenanceEvidenceRecord", b =>
@@ -5104,6 +5340,11 @@ namespace DBTracker.Infrastructure.Migrations
             modelBuilder.Entity("DBTracker.Core.Entities.BackupRecord", b =>
                 {
                     b.Navigation("Corrections");
+                });
+
+            modelBuilder.Entity("DBTracker.Core.Entities.CertificateDependency", b =>
+                {
+                    b.Navigation("History");
                 });
 
             modelBuilder.Entity("DBTracker.Core.Entities.ChangeValidation", b =>
