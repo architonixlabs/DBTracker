@@ -4,7 +4,7 @@
 @inject NavigationManager Nav
 
 <div class="notif-bell-wrap" @onkeydown="OnKeyDown">
-    <button type="button" class="notif-bell-btn" @ref="_bellButtonRef" @onclick="Toggle" aria-haspopup="true" aria-expanded="@_open" aria-label="Notifications@(_unreadCount > 0 ? $", {_unreadCount} unread" : "")">
+    <button type="button" class="notif-bell-btn" @ref="_bellButtonRef" @onclick="Toggle" aria-expanded="@(_open ? "true" : "false")" aria-controls="notif-dropdown" aria-label="Notifications@(_unreadCount > 0 ? $", {_unreadCount} unread" : "")">
         <i class="bi bi-bell" aria-hidden="true"></i>
         @if (_unreadCount > 0)
         {
@@ -14,7 +14,7 @@
 
     @if (_open)
     {
-        <div class="notif-dropdown" role="menu" aria-label="Notifications">
+        <div class="notif-dropdown" id="notif-dropdown" role="region" aria-label="Recent notifications">
             <div class="notif-dropdown-header">
                 <span>Notifications</span>
                 @if (_unreadCount > 0)
@@ -22,10 +22,10 @@
                     <button type="button" class="notif-mark-read" @onclick="MarkAllRead">Mark all read</button>
                 }
             </div>
-            <div class="notif-dropdown-meta d-flex justify-content-between align-items-center px-2 py-1 small text-muted">
+            <div class="notif-dropdown-meta d-flex justify-content-between align-items-center px-3 py-1 small text-muted">
                 <span>Updated @_lastUpdatedUtc.ToLocalTime().ToString("h:mm:ss tt")</span>
-                <button type="button" class="btn btn-link btn-sm p-0" @onclick="RefreshNow" disabled="@_refreshing" title="Refresh now">
-                    <i class="bi bi-arrow-clockwise"></i>
+                <button type="button" class="btn btn-link btn-sm p-1" @onclick="RefreshNow" aria-busy="@(_refreshing ? "true" : "false")" aria-label="Refresh notifications" title="Refresh notifications">
+                    <i class="bi bi-arrow-clockwise" aria-hidden="true"></i>
                 </button>
             </div>
             @if (_recent.Count == 0)
@@ -36,17 +36,18 @@
             {
                 @foreach (var n in _recent)
                 {
-                    <div class="notif-item @(n.IsRead ? "" : "unread")" @onclick="() => OpenItem(n)" style="cursor:pointer">
-                        <span class="dot" style="background:@SeverityColor(n.Severity)"></span>
-                        <div>
-                            <div class="notif-message">@n.Message</div>
-                            <div class="notif-time">@n.CreatedAtUtc.ToLocalTime().ToString("MMM d, h:mm tt")</div>
-                        </div>
-                    </div>
+                    <button type="button" class="notif-item @(n.IsRead ? "" : "unread")" @onclick="() => OpenItem(n)">
+                        <span class="dot" style="background:@SeverityColor(n.Severity)" aria-hidden="true"></span>
+                        <span>
+                            <span class="visually-hidden-text">@SeverityLabel(n.Severity)@(n.IsRead ? "" : ", unread"): </span>
+                            <span class="notif-message d-block">@n.Message</span>
+                            <span class="notif-time d-block">@n.CreatedAtUtc.ToLocalTime().ToString("MMM d, h:mm tt")</span>
+                        </span>
+                    </button>
                 }
             }
-            <div class="notif-dropdown-header" style="border-top:1px solid var(--dbt-line);border-bottom:none;">
-                <a href="/notifications" class="small">View all &amp; manage subscriptions &rarr;</a>
+            <div class="notif-dropdown-footer">
+                <a href="/notifications">View all notifications and subscriptions</a>
             </div>
         </div>
     }
@@ -96,8 +97,14 @@
         });
     }
 
+    // Not disabled while busy: disabling the focused button would drop keyboard focus to <body>.
     private async Task RefreshNow()
     {
+        if (_refreshing)
+        {
+            return;
+        }
+
         _refreshing = true;
         await Refresh();
         _refreshing = false;
@@ -137,9 +144,7 @@
         }
     }
 
-    // U20: Escape closes the dropdown and returns focus to the toggle button — without this, a
-    // keyboard user who opens the dropdown has no way to dismiss it other than tabbing all the way
-    // through its contents, and loses their place on the page.
+    // Escape closes the dropdown and returns focus to the bell, so a keyboard user keeps their place.
     private async Task OnKeyDown(KeyboardEventArgs e)
     {
         if (_open && e.Key == "Escape")
@@ -154,6 +159,13 @@
         NotificationSeverity.Critical => "var(--dbt-failed)",
         NotificationSeverity.Warning => "var(--dbt-overdue)",
         _ => "var(--dbt-never)"
+    };
+
+    private static string SeverityLabel(NotificationSeverity severity) => severity switch
+    {
+        NotificationSeverity.Critical => "Critical",
+        NotificationSeverity.Warning => "Warning",
+        _ => "Info"
     };
 
     public void Dispose() => _autoRefreshTimer?.Dispose();

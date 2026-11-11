@@ -1,13 +1,7 @@
 @implements IDisposable
 @inject ToastService Toasts
 
-<!--
-    U20: toasts are the app's main "save succeeded / failed" feedback, but were purely visual —
-    a screen-reader user got no announcement at all when one appeared and disappeared. role="status"
-    (polite, non-interrupting) on the error-free stack announces success toasts; the separate
-    role="alert" (assertive) region for error toasts means a failure is announced promptly rather
-    than only when the user happens to be focused elsewhere and polite-queues behind other speech.
--->
+@* Success toasts announce politely; errors use role="alert" so a failure is announced immediately. *@
 <div class="toast-stack">
     @foreach (var (id, toast) in _active.ToList())
     {

@@ -41,7 +41,7 @@
             }
             const data = await response.json();
             if (data.status === "Approved") {
-                status.textContent = "Approved — signing you in…";
+                status.textContent = "Approved. Logging you in…";
                 const redeemed = await fetch("/device-link/redeem/" + encodeURIComponent(token), { method: "POST" });
                 if (redeemed.ok) {
                     window.location.href = "/";
@@ -66,6 +66,7 @@
 
     toggle.addEventListener("click", function () {
         const isHidden = panel.hasAttribute("hidden");
+        toggle.setAttribute("aria-expanded", isHidden ? "true" : "false");
         if (isHidden) {
             panel.removeAttribute("hidden");
             startSession();

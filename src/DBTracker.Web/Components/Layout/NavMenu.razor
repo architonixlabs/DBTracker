@@ -1,71 +1,71 @@
-<div class="app-sidebar">
+<aside class="app-sidebar" aria-label="Application">
     <div class="brand">
-        <span class="brand-dot"></span>
-        <span class="brand-word">DBTracker</span>
+        <a class="brand-link" href="/" aria-label="DBTracker dashboard">
+            <span class="brand-dot" aria-hidden="true"></span>
+            <span class="brand-word">DBTracker</span>
+        </a>
         <AuthorizeView>
             <Authorized>
-                <div class="ms-auto">
-                    <NotificationBell />
-                </div>
+                <NotificationBell />
             </Authorized>
         </AuthorizeView>
     </div>
-    <nav>
+    <nav class="app-nav" aria-label="Main">
         <NavLink class="app-nav-link" href="" Match="NavLinkMatch.All">
-            <i class="bi bi-speedometer2"></i>
+            <i class="bi bi-speedometer2" aria-hidden="true"></i>
             <span>Dashboard</span>
         </NavLink>
         <NavLink class="app-nav-link" href="instances">
-            <i class="bi bi-hdd-stack"></i>
+            <i class="bi bi-hdd-stack" aria-hidden="true"></i>
             <span>Instances</span>
         </NavLink>
         <NavLink class="app-nav-link" href="compliance">
-            <i class="bi bi-clipboard-check"></i>
+            <i class="bi bi-clipboard-check" aria-hidden="true"></i>
             <span>Compliance</span>
         </NavLink>
         <NavLink class="app-nav-link" href="reports">
-            <i class="bi bi-file-earmark-bar-graph"></i>
+            <i class="bi bi-file-earmark-bar-graph" aria-hidden="true"></i>
             <span>Reports</span>
         </NavLink>
         <NavLink class="app-nav-link" href="notifications">
-            <i class="bi bi-inbox"></i>
+            <i class="bi bi-inbox" aria-hidden="true"></i>
             <span>Notifications</span>
         </NavLink>
         <NavLink class="app-nav-link" href="lifecycle/workspace">
-            <i class="bi bi-clipboard2-pulse"></i>
+            <i class="bi bi-clipboard2-pulse" aria-hidden="true"></i>
             <span>Lifecycle workspace</span>
         </NavLink>
         <NavLink class="app-nav-link" href="exceptions">
-            <i class="bi bi-shield-exclamation"></i>
+            <i class="bi bi-shield-exclamation" aria-hidden="true"></i>
             <span>Exceptions</span>
         </NavLink>
         <AuthorizeView Roles="@Roles.AuditViewPolicy">
             <NavLink class="app-nav-link" href="audit">
-                <i class="bi bi-journal-text"></i>
+                <i class="bi bi-journal-text" aria-hidden="true"></i>
                 <span>Audit</span>
             </NavLink>
         </AuthorizeView>
         <AuthorizeView Roles="@Roles.CanEditPolicy">
             <NavLink class="app-nav-link" href="ownership">
-                <i class="bi bi-diagram-3"></i>
+                <i class="bi bi-diagram-3" aria-hidden="true"></i>
                 <span>Ownership</span>
             </NavLink>
             <NavLink class="app-nav-link" href="lifecycle">
-                <i class="bi bi-signpost-split"></i>
+                <i class="bi bi-signpost-split" aria-hidden="true"></i>
                 <span>Lifecycle</span>
             </NavLink>
             <NavLink class="app-nav-link" href="campaigns">
-                <i class="bi bi-signpost-2"></i>
+                <i class="bi bi-signpost-2" aria-hidden="true"></i>
                 <span>Campaigns</span>
             </NavLink>
         </AuthorizeView>
         <AuthorizeView Roles="@Roles.Admin">
             <NavLink class="app-nav-link" href="users">
-                <i class="bi bi-people"></i>
+                <i class="bi bi-people" aria-hidden="true"></i>
                 <span>Users</span>
             </NavLink>
             <NavLink class="app-nav-link" href="setup">
-                <i class="bi bi-wrench-adjustable"></i>
+                <i class="bi bi-wrench-adjustable" aria-hidden="true"></i>
                 <span>Setup</span>
             </NavLink>
         </AuthorizeView>
@@ -76,13 +76,21 @@
             <div class="user-chip">
                 <span class="name">@context.User.Identity?.Name</span>
                 <span class="role">@string.Join(", ", context.User.Claims.Where(c => c.Type == System.Security.Claims.ClaimTypes.Role).Select(c => c.Value))</span>
-                <a href="/account/change-password" class="d-block small">Change password</a>
-                <form action="Account/Logout" method="post">
-                    <AntiforgeryToken />
-                    <input type="hidden" name="returnUrl" value="@("/Account/Login")" />
-                    <button type="submit"><i class="bi bi-box-arrow-right"></i> Log out</button>
-                </form>
+                <div class="user-chip-actions">
+                    <a href="/account/change-password">
+                        <i class="bi bi-key" aria-hidden="true"></i>
+                        <span class="label">Change password</span>
+                    </a>
+                    <form action="Account/Logout" method="post">
+                        <AntiforgeryToken />
+                        <input type="hidden" name="returnUrl" value="@("/Account/Login")" />
+                        <button type="submit">
+                            <i class="bi bi-box-arrow-right" aria-hidden="true"></i>
+                            <span class="label">Log out</span>
+                        </button>
+                    </form>
+                </div>
             </div>
         </Authorized>
     </AuthorizeView>
-</div>
+</aside>
