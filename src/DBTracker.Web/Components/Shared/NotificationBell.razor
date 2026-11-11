@@ -5,8 +5,8 @@
 @inject ILogger<NotificationBell> Logger
 
 <div class="notif-bell-wrap" @onkeydown="OnKeyDown">
-    <button type="button" class="notif-bell-btn" @ref="_bellButtonRef" @onclick="Toggle" aria-expanded="@(_open ? "true" : "false")" aria-controls="notif-dropdown" aria-label="Notifications@(_unreadCount > 0 ? $", {_unreadCount} unread" : "")">
-        <i class="bi bi-bell" aria-hidden="true"></i>
+    <button type="button" class="notif-bell-btn" @ref="_bellButtonRef" @onclick="Toggle" aria-expanded="@(_open ? "true" : "false")" aria-controls="notif-dropdown" aria-label="@BellLabel">
+        <i class="bi @(_refreshError is not null ? "bi-bell-slash" : "bi-bell")" aria-hidden="true"></i>
         @if (_unreadCount > 0)
         {
             <span class="notif-badge" aria-hidden="true">@(_unreadCount > 9 ? "9+" : _unreadCount.ToString())</span>
@@ -24,11 +24,22 @@
                 }
             </div>
             <div class="notif-dropdown-meta d-flex justify-content-between align-items-center px-3 py-1 small text-muted">
-                <span>Updated @_lastUpdatedUtc.ToLocalTime().ToString("h:mm:ss tt")</span>
-                <button type="button" class="btn btn-link btn-sm p-1" @onclick="RefreshNow" aria-busy="@(_refreshing ? "true" : "false")" aria-label="Refresh notifications" title="Refresh notifications">
-                    <i class="bi bi-arrow-clockwise" aria-hidden="true"></i>
-                </button>
+                <span role="status" data-testid="notif-updated">@UpdatedLabel</span>
+                <span class="d-flex gap-1">
+                    <button type="button" class="btn btn-link btn-sm p-1" data-testid="notif-pause" @onclick="TogglePause" aria-pressed="@(_paused ? "true" : "false")" aria-label="@(_paused ? "Resume auto-refresh" : "Pause auto-refresh")" title="@(_paused ? "Resume auto-refresh (every 30s)" : "Pause auto-refresh")">
+                        <i class="bi @(_paused ? "bi-play-fill" : "bi-pause-fill")" aria-hidden="true"></i>
+                    </button>
+                    <button type="button" class="btn btn-link btn-sm p-1" @onclick="RefreshNow" aria-busy="@(_refreshing ? "true" : "false")" aria-label="Refresh notifications" title="Refresh notifications">
+                        <i class="bi bi-arrow-clockwise" aria-hidden="true"></i>
+                    </button>
+                </span>
             </div>
+            @if (_refreshError is not null)
+            {
+                <div class="px-3 py-2 small" role="alert" data-testid="notif-error" style="color:var(--dbt-failed)">
+                    <i class="bi bi-exclamation-circle" aria-hidden="true"></i> @ErrorLabel
+                </div>
+            }
             @if (_recent.Count == 0)
             {
                 <div class="notif-empty">No notifications yet.</div>
@@ -60,6 +71,8 @@
     private List<NotificationInboxItem> _recent = new();
     private DateTime _lastUpdatedUtc;
     private bool _refreshing;
+    private bool _paused;
+    private string? _refreshError;
     private Timer? _autoRefreshTimer;
     private string? _userId;
     private ElementReference _bellButtonRef;
@@ -84,14 +97,46 @@
             return;
         }
 
-        _unreadCount = await Notifications.UnreadCountAsync(_userId);
-        _recent = await Notifications.GetRecentAsync(_userId);
-        _lastUpdatedUtc = DateTime.UtcNow;
+        // A failed refresh keeps the last good list and says so, rather than showing an empty or stale bell as current.
+        try
+        {
+            _unreadCount = await Notifications.UnreadCountAsync(_userId);
+            _recent = await Notifications.GetRecentAsync(_userId);
+            _lastUpdatedUtc = DateTime.UtcNow;
+            _refreshError = null;
+        }
+        catch (Exception ex) when (ex is not ObjectDisposedException)
+        {
+            _refreshError = ex.Message;
+            Logger.LogWarning(ex, "Notification bell refresh failed.");
+        }
     }
+
+    private void TogglePause() => _paused = !_paused;
+
+    private string BellLabel =>
+        "Notifications" +
+        (_unreadCount > 0 ? $", {_unreadCount} unread" : "") +
+        (_refreshError is not null ? ", last refresh failed" : "") +
+        (_paused ? ", auto-refresh paused" : "");
+
+    private string UpdatedLabel =>
+        (_lastUpdatedUtc == default ? "Not loaded yet" : "Updated " + _lastUpdatedUtc.ToLocalTime().ToString("h:mm:ss tt")) +
+        (_paused ? ". Auto-refresh paused" : "");
+
+    private string ErrorLabel =>
+        "Couldn't refresh notifications. Showing what loaded " +
+        (_lastUpdatedUtc == default ? "earlier" : "at " + _lastUpdatedUtc.ToLocalTime().ToString("h:mm tt")) +
+        ". Use refresh to try again.";
 
     // Runs on a thread-pool timer as async void: an escaping exception would crash the process.
     private async Task AutoRefreshTickAsync()
     {
+        if (_paused)
+        {
+            return;
+        }
+
         try
         {
             await InvokeAsync(async () =>

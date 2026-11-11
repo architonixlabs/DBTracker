@@ -2,6 +2,8 @@
 @attribute [Authorize]
 @inject NotificationService NotificationSvc
 @inject NotificationSubscriptionService Subscriptions
+@inject NotificationPreferenceService Preferences
+@inject TeamService Teams
 @inject InstanceOverviewService OverviewService
 @inject AuthenticationStateProvider AuthProvider
 @inject ToastService Toasts
@@ -33,7 +35,11 @@ else
                     }
                 </div>
 
-                @if (_page.Items.Count == 0)
+                @if (_page.Items.Count == 0 && _page.InboxOptedOut)
+                {
+                    <div class="empty-state py-3" data-testid="inbox-opted-out"><i aria-hidden="true" class="bi bi-envelope"></i>Your subscriptions are all email only, so nothing is shown here. Change one to "In-app + email" to see alerts in this inbox too.</div>
+                }
+                else if (_page.Items.Count == 0)
                 {
                     <div class="empty-state py-3"><i aria-hidden="true" class="bi bi-inbox"></i>No notifications yet.</div>
                 }
@@ -64,7 +70,7 @@ else
         <div class="col-lg-5">
             <div class="dbt-card">
                 <h2 class="h6 text-muted mb-3">Subscriptions</h2>
-                <p class="small text-muted">Narrows which broadcast alerts land in your inbox/email. With no subscriptions you get every alert, which is the default. A subscription can only narrow what you already see. It never grants visibility into an instance your role couldn't already see.</p>
+                <p class="small text-muted">Narrows which broadcast alerts reach you. With no subscriptions, every alert shows in your inbox and none are emailed to you. Once you add any, your inbox shows only alerts matching an "In-app only" or "In-app + email" subscription, and email goes only to "Email only" or "In-app + email" ones. A subscription can only narrow what you already see. It never grants access to an instance your role can't see.</p>
 
                 @if (_subscriptions.Count == 0)
                 {
@@ -77,8 +83,8 @@ else
                         <div class="d-flex justify-content-between align-items-center mb-2 small">
                             <span>
                                 <span class="role-pill">@s.Scope</span>
-                                @(s.Scope == SubscriptionScope.Instance ? s.DatabaseInstance?.Name ?? "(deleted instance)" : s.Scope == SubscriptionScope.Company ? s.Company : "")
-                                <span class="text-muted">· @s.Channel</span>
+                                @SubscriptionTarget(s)
+                                <span class="text-muted">· @ChannelLabel(s.Channel)</span>
                             </span>
                             <button type="button" class="btn btn-link btn-sm text-danger p-0" aria-label="Delete subscription" title="Delete subscription" @onclick="() => DeleteSubscription(s.Id)"><i aria-hidden="true" class="bi bi-trash"></i></button>
                         </div>
@@ -93,8 +99,28 @@ else
                             <option value="@SubscriptionScope.AllInstances">All instances</option>
                             <option value="@SubscriptionScope.Instance">One instance</option>
                             <option value="@SubscriptionScope.Company">Company</option>
+                            <option value="@SubscriptionScope.Team">Owner team</option>
                         </select>
                     </div>
+                    @if (_newScope == SubscriptionScope.Team)
+                    {
+                        <div class="field">
+                            @if (_teams.Count == 0)
+                            {
+                                <div class="small text-muted" role="status">No teams yet. An admin can add them on the Ownership page.</div>
+                            }
+                            else
+                            {
+                                <label for="notifications-team" class="form-label small">Team</label>
+                                <select id="notifications-team" class="form-select form-select-sm" data-testid="subscription-team" @bind="_newTeamId">
+                                    @foreach (var t in _teams)
+                                    {
+                                        <option value="@t.Team.Id">@t.Team.Name</option>
+                                    }
+                                </select>
+                            }
+                        </div>
+                    }
                     @if (_newScope == SubscriptionScope.Instance)
                     {
                         <div class="field">
@@ -127,8 +153,52 @@ else
                             <option value="@NotificationChannel.Both">In-app + email</option>
                         </select>
                     </div>
-                    <button class="btn btn-primary btn-sm" @onclick="AddSubscription">Add subscription</button>
+                    <button class="btn btn-primary btn-sm" data-testid="subscription-add" @onclick="AddSubscription" disabled="@(_newScope == SubscriptionScope.Team && _teams.Count == 0)">Add subscription</button>
                 </div>
+                @if (_subscriptionError is not null)
+                {
+                    <div class="small text-danger mt-2" role="alert">@_subscriptionError</div>
+                }
+            </div>
+
+            <div class="dbt-card mt-4" data-testid="quiet-hours">
+                <h2 class="h6 text-muted mb-2">Quiet hours</h2>
+                <p class="small text-muted">During quiet hours, alert and recovery emails to you are held back and not resent. Alerts still land in your inbox, incidents stay open and escalation reminders keep coming, so the first reminder after quiet hours reaches you by email. The instance's own contact address is not affected.</p>
+                <div class="form-check mb-2">
+                    <input id="quiet-enabled" type="checkbox" class="form-check-input" data-testid="quiet-hours-enabled" @bind="_quietEnabled" />
+                    <label for="quiet-enabled" class="form-check-label small">Hold alert email during quiet hours</label>
+                </div>
+                <div class="d-flex gap-2 flex-wrap align-items-end">
+                    <div class="field">
+                        <label for="quiet-start" class="form-label small">From (24-hour)</label>
+                        <input id="quiet-start" type="time" class="form-control form-control-sm" @bind="_quietStart" disabled="@(!_quietEnabled)" />
+                    </div>
+                    <div class="field">
+                        <label for="quiet-end" class="form-label small">Until (24-hour)</label>
+                        <input id="quiet-end" type="time" class="form-control form-control-sm" @bind="_quietEnd" disabled="@(!_quietEnabled)" />
+                    </div>
+                    <div class="field" style="min-width:220px;max-width:100%;">
+                        <label for="quiet-zone" class="form-label small">Time zone</label>
+                        <select id="quiet-zone" class="form-select form-select-sm" @bind="_quietZone" disabled="@(!_quietEnabled)">
+                            @foreach (var z in TimeZoneInfo.GetSystemTimeZones())
+                            {
+                                <option value="@z.Id">@z.DisplayName</option>
+                            }
+                        </select>
+                    </div>
+                </div>
+                <div class="form-check mt-2">
+                    <input id="quiet-critical" type="checkbox" class="form-check-input" @bind="_quietCriticalBypass" disabled="@(!_quietEnabled)" />
+                    <label for="quiet-critical" class="form-check-label small">Still email me about failed backups during quiet hours</label>
+                </div>
+                <div class="d-flex gap-2 align-items-center mt-3 flex-wrap">
+                    <button class="btn btn-outline-primary btn-sm" data-testid="quiet-hours-save" @onclick="SaveQuietHours" disabled="@_savingQuiet">@(_savingQuiet ? "Saving…" : "Save quiet hours")</button>
+                    <span class="small" role="status" data-testid="quiet-hours-status">@_quietStatus</span>
+                </div>
+                @if (_quietError is not null)
+                {
+                    <div class="small text-danger mt-2" role="alert">@_quietError</div>
+                }
             </div>
         </div>
     </div>
@@ -147,6 +217,18 @@ else
     private int _newInstanceId;
     private string _newCompany = "";
     private NotificationChannel _newChannel = NotificationChannel.InApp;
+    private List<TeamSummary> _teams = new();
+    private int _newTeamId;
+    private string? _subscriptionError;
+
+    private bool _quietEnabled;
+    private TimeOnly _quietStart = new(22, 0);
+    private TimeOnly _quietEnd = new(7, 0);
+    private string _quietZone = TimeZoneInfo.Local.Id;
+    private bool _quietCriticalBypass = true;
+    private bool _savingQuiet;
+    private string _quietStatus = "";
+    private string? _quietError;
 
     protected override async Task OnInitializedAsync()
     {
@@ -157,6 +239,19 @@ else
         _companies = _instances.Select(i => i.Company).Where(c => !string.IsNullOrWhiteSpace(c)).Distinct().OrderBy(c => c).ToList();
         if (_instances.Count > 0) _newInstanceId = _instances[0].Id;
         if (_companies.Count > 0) _newCompany = _companies[0];
+        _teams = await Teams.ListAsync();
+        if (_teams.Count > 0) _newTeamId = _teams[0].Team.Id;
+
+        if (!string.IsNullOrEmpty(_userId))
+        {
+            var pref = await Preferences.GetAsync(_userId);
+            _quietEnabled = pref.QuietHoursEnabled;
+            _quietStart = new TimeOnly(pref.QuietStartMinute / 60, pref.QuietStartMinute % 60);
+            _quietEnd = new TimeOnly(pref.QuietEndMinute / 60, pref.QuietEndMinute % 60);
+            _quietZone = TimeZoneInfo.TryFindSystemTimeZoneById(pref.TimeZoneId, out _) ? pref.TimeZoneId : TimeZoneInfo.Local.Id;
+            _quietCriticalBypass = pref.CriticalBypassesQuietHours;
+            _quietStatus = DescribeQuiet();
+        }
 
         await LoadInbox();
         await LoadSubscriptions();
@@ -204,9 +299,15 @@ else
     private async Task AddSubscription()
     {
         if (string.IsNullOrEmpty(_userId)) return;
-        await Subscriptions.AddAsync(_userId, _newScope, _newScope == SubscriptionScope.Instance ? _newInstanceId : null,
-            _newScope == SubscriptionScope.Company ? _newCompany : "", _newChannel);
+        _subscriptionError = await Subscriptions.AddAsync(_userId, _newScope, _newScope == SubscriptionScope.Instance ? _newInstanceId : null,
+            _newScope == SubscriptionScope.Company ? _newCompany : "", _newChannel,
+            _newScope == SubscriptionScope.Team ? _newTeamId : null);
+        if (_subscriptionError is not null)
+        {
+            return;
+        }
         await LoadSubscriptions();
+        await LoadInbox();
         Toasts.Success("Subscription added.");
     }
 
@@ -215,7 +316,39 @@ else
         if (string.IsNullOrEmpty(_userId)) return;
         await Subscriptions.DeleteAsync(id, _userId);
         await LoadSubscriptions();
+        await LoadInbox();
     }
+
+    private async Task SaveQuietHours()
+    {
+        if (string.IsNullOrEmpty(_userId)) return;
+        _savingQuiet = true;
+        _quietError = await Preferences.SaveAsync(_userId, _quietEnabled,
+            _quietStart.Hour * 60 + _quietStart.Minute, _quietEnd.Hour * 60 + _quietEnd.Minute,
+            _quietZone, _quietCriticalBypass);
+        _savingQuiet = false;
+        _quietStatus = _quietError is null ? "Saved. " + DescribeQuiet() : "";
+    }
+
+    private string DescribeQuiet() =>
+        _quietEnabled
+            ? $"Quiet hours {QuietHoursEvaluator.FormatClock(_quietStart.Hour * 60 + _quietStart.Minute)} to {QuietHoursEvaluator.FormatClock(_quietEnd.Hour * 60 + _quietEnd.Minute)}, {(_quietCriticalBypass ? "failed-backup alerts still emailed" : "no alert email at all")}."
+            : "Quiet hours are off.";
+
+    private static string SubscriptionTarget(NotificationSubscription s) => s.Scope switch
+    {
+        SubscriptionScope.Instance => s.DatabaseInstance?.Name ?? "(deleted instance)",
+        SubscriptionScope.Company => s.Company,
+        SubscriptionScope.Team => s.Team?.Name ?? "(deleted team)",
+        _ => ""
+    };
+
+    private static string ChannelLabel(NotificationChannel channel) => channel switch
+    {
+        NotificationChannel.InApp => "In-app only",
+        NotificationChannel.Email => "Email only",
+        _ => "In-app + email"
+    };
 
     private static string SeverityColor(NotificationSeverity severity) => severity switch
     {

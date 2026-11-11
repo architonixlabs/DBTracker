@@ -1027,8 +1027,9 @@ else
             _explanation = BackupHealthCalculator.Explain(_overview.Instance, _overview.Instance.BackupRecords.ToList(), now);
             _scannerHealth = ScannerStalenessClassifier.Classify(
                 backupFileLocationConfigured: !string.IsNullOrWhiteSpace(_overview.Instance.BackupFileLocation),
-                lastScanUtc: _overview.Instance.LastScanUtc,
+                lastAttemptUtc: _overview.Instance.LastScanUtc,
                 lastScanStatus: _overview.Instance.LastScanStatus,
+                lastSuccessUtc: _overview.Instance.LastScanSuccessUtc,
                 scanIntervalMinutes: Configuration.GetValue("BackupScan:IntervalMinutes", 15),
                 staleAfterMultiplier: Configuration.GetValue("BackupScan:StaleAfterMultiplier", 3),
                 nowUtc: now);
@@ -1082,18 +1083,39 @@ else
 
     private async Task AcknowledgeIncident()
     {
-        if (_openIncident is null) return;
-        await Incidents.AcknowledgeAsync(_openIncident.Id, _userDisplayName ?? "", _ackNote, _ackTicket);
-        Toasts.Success("Incident acknowledged. Escalation stopped.");
+        if (_openIncident is null || !await CanRespondToIncidentAsync()) return;
+        if (await Incidents.AcknowledgeAsync(_openIncident.Id, _userId ?? "", _userDisplayName ?? "unknown", _ackNote, _ackTicket))
+        {
+            Toasts.Success("Incident acknowledged. Escalation stopped.");
+        }
+        else
+        {
+            Toasts.Error("This incident has already closed, so it can't be acknowledged.");
+        }
         await Load();
     }
 
     private async Task AssignIncident()
     {
-        if (_openIncident is null) return;
-        await Incidents.AssignAsync(_openIncident.Id, _assigneeName);
-        Toasts.Success($"Assigned to {_assigneeName}.");
+        if (_openIncident is null || !await CanRespondToIncidentAsync()) return;
+        if (await Incidents.AssignAsync(_openIncident.Id, _assigneeName, _userId ?? "", _userDisplayName ?? "unknown"))
+        {
+            Toasts.Success(string.IsNullOrWhiteSpace(_assigneeName) ? "Assignee cleared." : $"Assigned to {_assigneeName.Trim()}.");
+        }
         await Load();
+    }
+
+    // The buttons are hidden for read-only roles; this re-checks on the server so a crafted event can't write.
+    private async Task<bool> CanRespondToIncidentAsync()
+    {
+        var user = (await AuthProvider.GetAuthenticationStateAsync()).User;
+        if (Roles.CanEditPolicy.Split(',').Any(user.IsInRole))
+        {
+            return true;
+        }
+
+        Toasts.Error("Only DBA and Admin roles can acknowledge or assign incidents.");
+        return false;
     }
 
     private async Task<string?> CurrentUserNameAsync() =>

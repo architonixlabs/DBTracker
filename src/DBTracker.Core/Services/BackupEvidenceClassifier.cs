@@ -9,24 +9,49 @@ public static class BackupEvidenceClassifier
     /// <summary>Null for Failed/Missed records; evidence level only describes claimed-successful backups.</summary>
     public static EvidenceLevel? Classify(BackupRecord record, IReadOnlyCollection<RestoreEvent> restoreEvents)
     {
-        if (record.Status != BackupStatus.Success)
+        var lastRestoreSuccessUtc = restoreEvents
+            .Where(r => r.Outcome == RestoreOutcome.Success)
+            .Select(r => (DateTime?)r.TimestampUtc)
+            .Max();
+        return Classify(record.Status, record.Source, record.TimestampUtc, lastRestoreSuccessUtc);
+    }
+
+    /// <summary>Same rule from flat values, for queries that fetch only the instance's latest successful restore time.</summary>
+    public static EvidenceLevel? Classify(BackupStatus status, BackupSource source, DateTime recordTimestampUtc, DateTime? lastRestoreSuccessUtc)
+    {
+        if (status != BackupStatus.Success)
         {
             return null;
         }
 
-        var provenRestorable = restoreEvents.Any(r =>
-            r.Outcome == RestoreOutcome.Success && r.TimestampUtc >= record.TimestampUtc);
-
-        if (provenRestorable)
+        if (lastRestoreSuccessUtc is { } restoredAt && restoredAt >= recordTimestampUtc)
         {
             return EvidenceLevel.RestoreTested;
         }
 
         // A discovered file is never upgraded to Reported just because nothing was restored from it yet.
-        return record.Source == BackupSource.Discovered
+        return source == BackupSource.Discovered
             ? EvidenceLevel.Discovered
             : EvidenceLevel.ReportedSuccess;
     }
+
+    /// <summary>Evidence level of the latest successful backup at or before <paramref name="asOfUtc"/>, using only restores up to that instant.
+    /// Null when there is no successful backup. Ties on timestamp break by Id, the same rule BackupHealthCalculator uses.</summary>
+    public static EvidenceLevel? ClassifyLatestSuccess(IReadOnlyCollection<BackupRecord> records, IReadOnlyCollection<RestoreEvent> restoreEvents, DateTime asOfUtc)
+    {
+        var latest = records
+            .Where(r => r.Status == BackupStatus.Success && r.TimestampUtc <= asOfUtc)
+            .OrderByDescending(r => r.TimestampUtc)
+            .ThenByDescending(r => r.Id)
+            .FirstOrDefault();
+
+        return latest is null
+            ? null
+            : Classify(latest, restoreEvents.Where(r => r.TimestampUtc <= asOfUtc).ToList());
+    }
+
+    /// <summary>Label for a CSV cell or report line; empty when there is no successful backup to describe.</summary>
+    public static string DescribeOrEmpty(EvidenceLevel? level) => level is { } l ? Describe(l) : "";
 
     public static string Describe(EvidenceLevel level) => level switch
     {

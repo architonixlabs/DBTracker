@@ -1,5 +1,6 @@
 @inject ComplianceReportService ReportService
 @inject ToastService Toasts
+@inject AuthenticationStateProvider AuthProvider
 
 <button type="button" class="btn @ButtonClass" @onclick="ToggleExpanded" disabled="@_sending" aria-expanded="@(_expanded ? "true" : "false")">
     <i class="bi bi-envelope" aria-hidden="true"></i> @(_sending ? "Sending…" : ButtonText)
@@ -101,7 +102,8 @@
     private async Task ConfirmSend()
     {
         _sending = true;
-        var result = await ReportService.SendAsync(CurrentScope);
+        var userName = (await AuthProvider.GetAuthenticationStateAsync()).User.Identity?.Name ?? "unknown";
+        var result = await ReportService.SendAsync(CurrentScope, userName);
         _sending = false;
         _expanded = false;
         _preview = null;
@@ -122,11 +124,11 @@
         }
         else if (result.AcceptedCount == 0)
         {
-            Toasts.Error($"Report failed to send to all {result.FailedCount} recipient(s). Check the server log for details.");
+            Toasts.Error($"Report failed to send to all {result.FailedCount} recipient(s). An admin can see the error under Setup and diagnostics, Delivery history.");
         }
         else
         {
-            Toasts.Error($"Partial send: {result.AcceptedCount} accepted, {result.FailedCount} failed. Check the server log for details.");
+            Toasts.Error($"Partial send: {result.AcceptedCount} accepted, {result.FailedCount} failed. An admin can see the error under Setup and diagnostics, Delivery history.");
         }
     }
 }

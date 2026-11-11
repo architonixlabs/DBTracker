@@ -24,6 +24,7 @@ public class ComplianceReportService(
     InstanceOverviewService overviewService,
     IEmailSender emailSender,
     IConfiguration configuration,
+    DeliveryAttemptService deliveryAttempts,
     ILogger<ComplianceReportService> logger)
 {
     /// <summary>Builds the report for a scope without sending; the same dataset Send uses, so preview, download and send can't drift.</summary>
@@ -40,8 +41,9 @@ public class ComplianceReportService(
             recipients, rows.Count);
     }
 
-    /// <summary>Builds and sends the report for the confirmed scope, with a real outcome per recipient.</summary>
-    public async Task<ReportSendResult> SendAsync(ReportScope scope, CancellationToken ct = default)
+    /// <summary>Builds and sends the report for the confirmed scope, with a real outcome per recipient, and stores the attempt for /setup.</summary>
+    /// <param name="triggeredBy">Who asked for it: a user name, or "Background: Scheduled report".</param>
+    public async Task<ReportSendResult> SendAsync(ReportScope scope, string triggeredBy, CancellationToken ct = default)
     {
         var now = DateTime.UtcNow;
         var recipients = ParseRecipients();
@@ -49,6 +51,7 @@ public class ComplianceReportService(
         if (recipients.Count == 0)
         {
             logger.LogWarning("Compliance report requested but Reports:DistributionList is not configured.");
+            await deliveryAttempts.RecordAsync(Core.Enums.DeliveryKind.ComplianceReport, scope.Description, [], triggeredBy, attemptedAtUtc: now, ct: ct);
             return new ReportSendResult(scope, now, []);
         }
 
@@ -61,17 +64,25 @@ public class ComplianceReportService(
         {
             var result = await emailSender.SendAsync(recipient, subject, body, ct);
             outcomes.Add(new ReportRecipientOutcome(recipient, result));
+            if (result.Outcome == Core.Enums.EmailSendOutcome.Failed)
+            {
+                logger.LogWarning("Compliance report to {Recipient} failed: {Detail}", recipient, result.Detail);
+            }
         }
+
+        await deliveryAttempts.RecordAsync(Core.Enums.DeliveryKind.ComplianceReport,
+            $"{scope.Description} ({rows.Count} instance(s))", outcomes.Select(o => o.Result).ToList(), triggeredBy, attemptedAtUtc: now, ct: ct);
 
         return new ReportSendResult(scope, now, outcomes);
     }
 
     /// <summary>Used by the scheduled job, which always sends the full inventory.</summary>
-    public async Task<ReportSendResult> SendNowAsync(CancellationToken ct = default) => await SendAsync(ReportScope.Full(), ct);
+    public async Task<ReportSendResult> SendNowAsync(CancellationToken ct = default) =>
+        await SendAsync(ReportScope.Full(), AuditEventFactory.SystemActorPrefix + ReportHostedService.WorkerName, ct);
 
     private async Task<List<ComplianceReportRow>> BuildRowsAsync(ReportScope scope)
     {
-        var overviews = await overviewService.GetAllAsync();
+        var overviews = await overviewService.GetAllLatestAsync();
 
         return overviews
             .Where(o => scope.Includes(o.Instance.Id))
@@ -79,7 +90,8 @@ public class ComplianceReportService(
                 o.Instance,
                 o.Health,
                 o.LastBackupUtc,
-                o.Instance.RestoreEvents.Any(r => r.Outcome == Core.Enums.RestoreOutcome.Success)))
+                o.Instance.RestoreEvents.Any(r => r.Outcome == Core.Enums.RestoreOutcome.Success),
+                BackupEvidenceClassifier.ClassifyLatestSuccess(o.Instance.BackupRecords.ToList(), o.Instance.RestoreEvents.ToList(), DateTime.UtcNow)))
             .ToList();
     }
 

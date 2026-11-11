@@ -7,6 +7,7 @@
 @inject IConfiguration Configuration
 @inject DBTrackerDbContext Db
 @inject IncidentService Incidents
+@inject NavigationManager Nav
 
 <PageTitle>Reports · DBTracker</PageTitle>
 
@@ -26,7 +27,7 @@ else
     <div class="filter-bar">
         @foreach (var type in ReportTypeOrder)
         {
-            <button type="button" class="btn @(type == _selected ? "btn-primary" : "btn-outline-secondary")" aria-pressed="@(type == _selected ? "true" : "false")" @onclick="() => _selected = type">
+            <button type="button" class="btn @(type == _selected ? "btn-primary" : "btn-outline-secondary")" aria-pressed="@(type == _selected ? "true" : "false")" @onclick="() => SelectType(type)">
                 @Label(type)
             </button>
         }
@@ -39,11 +40,11 @@ else
             <div class="filter-bar" style="padding-top:0;border-top:none;border-bottom:none;margin-bottom:6px;gap:12px;">
                 @foreach (var days in new[] { 7, 30, 90 })
                 {
-                    <button type="button" class="btn btn-sm @(!_useCustomRange && days == _rangeDays ? "btn-primary" : "btn-outline-secondary")" aria-pressed="@(!_useCustomRange && days == _rangeDays ? "true" : "false")" @onclick="() => SelectPreset(days)">
+                    <button type="button" class="btn btn-sm @(!_useCustomRange && days == _range.PresetDays ? "btn-primary" : "btn-outline-secondary")" aria-pressed="@(!_useCustomRange && days == _range.PresetDays ? "true" : "false")" @onclick="() => SelectPreset(days)">
                         Last @days d
                     </button>
                 }
-                <button type="button" class="btn btn-sm @(_useCustomRange ? "btn-primary" : "btn-outline-secondary")" aria-pressed="@(_useCustomRange ? "true" : "false")" @onclick="() => _useCustomRange = true">
+                <button type="button" class="btn btn-sm @(_useCustomRange ? "btn-primary" : "btn-outline-secondary")" aria-pressed="@(_useCustomRange ? "true" : "false")" data-testid="reports-range-custom" @onclick="SelectCustom">
                     Custom
                 </button>
             </div>
@@ -53,17 +54,17 @@ else
                 <div class="d-flex gap-2 align-items-end mb-3" style="flex-wrap:wrap;">
                     <div class="field">
                         <label for="reports-from-local-time" class="form-label small">From (local time)</label>
-                        <input id="reports-from-local-time" type="date" class="form-control form-control-sm" @bind="_customFrom" />
+                        <input id="reports-from-local-time" type="date" class="form-control form-control-sm" @bind="_customFrom" @bind:after="ApplyCustomRange" aria-describedby="reports-range-error" />
                     </div>
                     <div class="field">
                         <label for="reports-to-local-time-inclusive" class="form-label small">To (local time, inclusive)</label>
-                        <input id="reports-to-local-time-inclusive" type="date" class="form-control form-control-sm" @bind="_customTo" />
+                        <input id="reports-to-local-time-inclusive" type="date" class="form-control form-control-sm" @bind="_customTo" @bind:after="ApplyCustomRange" aria-describedby="reports-range-error" />
                     </div>
                 </div>
+                <div id="reports-range-error" class="small text-danger mb-2" role="alert">@_rangeError</div>
             }
 
-            var (fromUtc, toUtc) = CurrentRangeUtc();
-            var rowsInRange = BackupActivityReportBuilder.InRange(AllBackupActivityRows(), fromUtc, toUtc);
+            var rowsInRange = BackupActivityReportBuilder.InRange(_activityRows, _activityRangeUtc.FromUtc, _activityRangeUtc.ToUtc);
             var summary = BackupActivityReportBuilder.Summarize(rowsInRange);
 
             <div class="stat-strip">
@@ -75,7 +76,7 @@ else
             </div>
 
             <div class="d-flex justify-content-between align-items-center mb-3">
-                <span class="small text-muted">Exports all @rowsInRange.Count matching row(s) in the last @_rangeDays day(s), not just the rows rendered on screen.</span>
+                <span class="small text-muted">Exports all @rowsInRange.Count matching row(s) for @(_useCustomRange ? _range.Describe() + " (local dates, inclusive)" : _range.Describe()), not just the rows rendered on screen. This link keeps the date range.</span>
                 <button class="btn btn-outline-primary" @onclick="() => ExportBackupActivity(rowsInRange)" disabled="@(rowsInRange.Count == 0)">
                     <i aria-hidden="true" class="bi bi-download"></i> Export CSV
                 </button>
@@ -89,7 +90,7 @@ else
             {
                 <div class="dbt-table">
                     <table aria-label="Backup runs in range" class="table">
-                        <thead><tr><th>When</th><th>Instance</th><th>Company / Dept</th><th>Engine</th><th>Type</th><th>Status</th><th>Size</th><th>Duration</th><th>Source</th></tr></thead>
+                        <thead><tr><th>When</th><th>Instance</th><th>Company / Dept</th><th>Engine</th><th>Type</th><th>Status</th><th>Size</th><th>Duration</th><th>Source</th><th>Evidence</th></tr></thead>
                         <tbody>
                             @foreach (var r in rowsInRange)
                             {
@@ -103,6 +104,16 @@ else
                                     <td>@(r.SizeMb is null ? "Not recorded" : $"{r.SizeMb:N0} MB")</td>
                                     <td>@(r.DurationMinutes is null ? "Not recorded" : $"{r.DurationMinutes:N0} min")</td>
                                     <td class="text-muted">@(r.Source == BackupSource.Discovered ? "Discovered" : "Logged")</td>
+                                    <td>
+                                        @if (r.Evidence is { } level)
+                                        {
+                                            <span class="badge-health dot @EvidenceClass(level)" title="@EvidenceTooltip(level)">@BackupEvidenceClassifier.Describe(level)</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="text-muted small">Not a success</span>
+                                        }
+                                    </td>
                                 </tr>
                             }
                         </tbody>
@@ -197,11 +208,23 @@ else
 
         case ReportType.ScanActivity:
         {
-            var rows = ScanActivityReportBuilder.Build(
-                _overviews.Select(o => new ScanActivityInput(o.Instance.Name, o.Instance.BackupFileLocation, o.Instance.LastScanUtc, o.Instance.LastScanStatus, o.Instance.LastScanError)),
+            var allScanRows = ScanActivityReportBuilder.Build(
+                _overviews.Select(o => new ScanActivityInput(o.Instance.Name, o.Instance.BackupFileLocation, o.Instance.LastScanUtc, o.Instance.LastScanStatus, o.Instance.LastScanError, o.Instance.LastScanSuccessUtc, o.Instance.Id)),
                 ScanIntervalMinutes, StaleAfterMultiplier, DateTime.UtcNow);
+            var attentionRows = ScanActivityReportBuilder.NeedingAttention(allScanRows);
+            var rows = _scanAttentionOnly ? attentionRows : allScanRows;
 
             <p class="text-muted mb-3">Shared-drive scan status for every instance with a backup file location configured, as evidence that the automated scan is actually running. A scan that hasn't succeeded in a while shows as <strong>Stale</strong> even if its last result was a success, because the scanner itself may have stopped.</p>
+
+            @if (ScanIntervalMinutes <= 0)
+            {
+                <p class="small mb-3" role="status" data-testid="scan-background-off"><i aria-hidden="true" class="bi bi-pause-circle"></i> Background scanning is off (BackupScan:IntervalMinutes is 0), so instances only update when someone uses "Scan now". They show as <strong>Background scan off</strong> instead of Healthy.</p>
+            }
+
+            <div class="filter-bar" style="padding-top:0;border-top:none;border-bottom:none;margin-bottom:6px;gap:12px;">
+                <button type="button" class="btn btn-sm @(_scanAttentionOnly ? "btn-primary" : "btn-outline-secondary")" aria-pressed="@(_scanAttentionOnly ? "true" : "false")" data-testid="scan-filter-attention" @onclick="() => SetScanFilter(true)">Needs attention (@attentionRows.Count)</button>
+                <button type="button" class="btn btn-sm @(!_scanAttentionOnly ? "btn-primary" : "btn-outline-secondary")" aria-pressed="@(!_scanAttentionOnly ? "true" : "false")" data-testid="scan-filter-all" @onclick="() => SetScanFilter(false)">All configured (@allScanRows.Count)</button>
+            </div>
 
             <div class="d-flex justify-content-between align-items-center mb-3">
                 <span class="small text-muted">Exports all @rows.Count row(s) shown: the full result, not one page.</span>
@@ -210,25 +233,36 @@ else
                 </button>
             </div>
 
-            @if (rows.Count == 0)
+            @if (rows.Count == 0 && _scanAttentionOnly && allScanRows.Count > 0)
             {
-                <div class="empty-state"><i aria-hidden="true" class="bi bi-inbox"></i>No instance has a backup file location configured yet.</div>
+                <div class="empty-state" role="status"><i aria-hidden="true" class="bi bi-check-circle"></i>No scans need attention right now.</div>
+            }
+            else if (rows.Count == 0)
+            {
+                <div class="empty-state"><i aria-hidden="true" class="bi bi-inbox"></i>No instance has a backup file location configured yet. Set one on an instance's Edit page so the scanner can find its backup files.</div>
             }
             else
             {
                 <div class="dbt-table">
                     <table aria-label="Scan activity by instance" class="table">
-                        <thead><tr><th>Instance</th><th>Backup file location</th><th>Last scanned</th><th>Status</th><th>Next expected</th><th>Detail</th></tr></thead>
+                        <thead><tr><th>Instance</th><th>Backup file location</th><th>Last attempt</th><th>Last success</th><th>Status</th><th>Next expected</th><th>Detail</th></tr></thead>
                         <tbody>
                             @foreach (var r in rows)
                             {
-                                <tr>
-                                    <td class="fw-semibold">@r.InstanceName</td>
+                                <tr id="scan-row-@r.InstanceId" data-testid="scan-activity-row">
+                                    <td class="fw-semibold"><a href="/instances/@r.InstanceId">@r.InstanceName</a></td>
                                     <td class="text-muted">@r.BackupFileLocation</td>
                                     <td>@(r.LastScanUtc is null ? "Never" : r.LastScanUtc.Value.ToLocalTime().ToString("MMM d, h:mm tt"))</td>
-                                    <td><span class="badge-health dot @ScannerFreshnessClass(r.Scanner.Freshness)">@r.Scanner.Freshness</span></td>
+                                    <td>@(r.Scanner.LastSuccessUtc is null ? "Never" : r.Scanner.LastSuccessUtc.Value.ToLocalTime().ToString("MMM d, h:mm tt"))</td>
+                                    <td><span class="badge-health dot @ScannerFreshnessClass(r.Scanner.Freshness)">@ScannerStalenessClassifier.Describe(r.Scanner.Freshness)</span></td>
                                     <td class="small text-muted">@(r.Scanner.NextExpectedCheckUtc is null ? "Not scheduled" : r.Scanner.NextExpectedCheckUtc.Value.ToLocalTime().ToString("MMM d, h:mm tt"))</td>
-                                    <td class="small @(r.LastScanStatus == ScanStatus.Error ? "text-danger" : "text-muted")">@(r.LastScanStatus == ScanStatus.Error ? r.LastScanError : r.Scanner.RecoveryHint)</td>
+                                    <td class="small @(r.LastScanStatus == ScanStatus.Error ? "text-danger" : "text-muted")">
+                                        @if (r.LastScanStatus == ScanStatus.Error)
+                                        {
+                                            <span class="d-block">@r.LastScanError</span>
+                                        }
+                                        <span class="d-block @(r.LastScanStatus == ScanStatus.Error ? "text-muted" : "")">@r.Scanner.RecoveryHint</span>
+                                    </td>
                                 </tr>
                             }
                         </tbody>
@@ -535,12 +569,25 @@ else
     // default tab and making the user click again.
     [Parameter, SupplyParameterFromQuery(Name = "type")] public string? Type { get; set; }
 
+    // U05: the Backup activity date window round-trips through the URL, so a shared or bookmarked
+    // link reopens the same range. ReportRangeQuery validates it and falls back to the 7-day preset.
+    [Parameter, SupplyParameterFromQuery(Name = "days")] public string? Days { get; set; }
+    [Parameter, SupplyParameterFromQuery(Name = "from")] public string? From { get; set; }
+    [Parameter, SupplyParameterFromQuery(Name = "to")] public string? To { get; set; }
+
+    // U02: "attention" narrows Scan activity to the rows the dashboard banner counted.
+    [Parameter, SupplyParameterFromQuery(Name = "scan")] public string? Scan { get; set; }
+
     private List<InstanceOverview>? _overviews;
     private ReportType _selected = ReportType.BackupActivity;
-    private int _rangeDays = 7;
+    private ReportRangeQuery _range = ReportRangeQuery.Default(DateOnly.FromDateTime(DateTime.Today));
     private bool _useCustomRange;
     private DateTime _customFrom = DateTime.Today.AddDays(-7);
     private DateTime _customTo = DateTime.Today;
+    private string? _rangeError;
+    private bool _scanAttentionOnly;
+    private List<BackupActivityRow> _activityRows = new();
+    private (DateTime FromUtc, DateTime ToUtc) _activityRangeUtc;
 
     // U22: Period A/B default to two adjacent 30-day windows: "this period vs. the one before it".
     private DateTime _trendAFrom = DateTime.Today.AddDays(-60);
@@ -556,30 +603,96 @@ else
 
     protected override async Task OnInitializedAsync()
     {
+        // U06: current state per instance without loading every backup history; Backup activity queries its own window below.
+        _overviews = await OverviewService.GetAllLatestAsync();
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        ApplyQuery();
+        await LoadBackupActivityAsync();
+    }
+
+    private void ApplyQuery()
+    {
         if (Enum.TryParse<ReportType>(Type, true, out var requested))
         {
             _selected = requested;
         }
 
-        _overviews = await OverviewService.GetAllAsync();
+        _range = ReportRangeQuery.Parse(Days, From, To, DateOnly.FromDateTime(DateTime.Today));
+        _useCustomRange = _range.IsCustom;
+        if (_range.IsCustom)
+        {
+            _customFrom = _range.From.ToDateTime(TimeOnly.MinValue);
+            _customTo = _range.To.ToDateTime(TimeOnly.MinValue);
+        }
+        _rangeError = null;
+        _scanAttentionOnly = string.Equals(Scan, "attention", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private string CurrentUrl(ReportType type) =>
+        $"/reports?type={type}&{_range.ToQueryString()}{(_scanAttentionOnly ? "&scan=attention" : "")}";
+
+    private void SelectType(ReportType type)
+    {
+        _selected = type;
+        Nav.NavigateTo(CurrentUrl(type));
+    }
+
+    private async Task LoadBackupActivityAsync()
+    {
+        var (fromUtc, toUtc) = CurrentRangeUtc();
+        _activityRows = await OverviewService.GetBackupActivityAsync(fromUtc, toUtc);
+        _activityRangeUtc = (fromUtc, toUtc);
     }
 
     private void SelectPreset(int days)
     {
         _useCustomRange = false;
-        _rangeDays = days;
+        _rangeError = null;
+        _range = ReportRangeQuery.Preset(days, DateOnly.FromDateTime(DateTime.Today));
+        Nav.NavigateTo(CurrentUrl(_selected), replace: true);
+    }
+
+    private void SelectCustom()
+    {
+        _useCustomRange = true;
+        ApplyCustomRange();
+    }
+
+    private void ApplyCustomRange()
+    {
+        var custom = ReportRangeQuery.Custom(DateOnly.FromDateTime(_customFrom), DateOnly.FromDateTime(_customTo));
+        if (custom is null)
+        {
+            _rangeError = _customFrom > _customTo
+                ? "From must be on or before To."
+                : $"Choose a range of {ReportRangeQuery.MaxCustomDays} days or less.";
+            return;
+        }
+
+        _rangeError = null;
+        _range = custom;
+        Nav.NavigateTo(CurrentUrl(_selected), replace: true);
+    }
+
+    private void SetScanFilter(bool attentionOnly)
+    {
+        _scanAttentionOnly = attentionOnly;
+        Nav.NavigateTo(CurrentUrl(_selected), replace: true);
     }
 
     /// <summary>Custom range is entered as local calendar dates, converted to explicit UTC boundaries: start of day (inclusive) to end of day (inclusive) in the server's local time zone.</summary>
     private (DateTime FromUtc, DateTime ToUtc) CurrentRangeUtc()
     {
-        if (!_useCustomRange)
+        if (!_useCustomRange || !_range.IsCustom)
         {
-            return (DateTime.UtcNow.AddDays(-_rangeDays), DateTime.UtcNow);
+            return (DateTime.UtcNow.AddDays(-_range.PresetDays), DateTime.UtcNow);
         }
 
-        var fromLocal = _customFrom.Date;
-        var toLocal = _customTo.Date.AddDays(1).AddTicks(-1);
+        var fromLocal = _range.From.ToDateTime(TimeOnly.MinValue);
+        var toLocal = _range.To.ToDateTime(TimeOnly.MinValue).AddDays(1).AddTicks(-1);
         return (fromLocal.ToUniversalTime(), toLocal.ToUniversalTime());
     }
 
@@ -652,6 +765,21 @@ else
         _ => "Never tested"
     };
 
+    private static string EvidenceClass(EvidenceLevel level) => level switch
+    {
+        EvidenceLevel.RestoreTested => "OnTrack",
+        EvidenceLevel.ReportedSuccess => "Overdue",
+        _ => "NeverBackedUp"
+    };
+
+    private static string EvidenceTooltip(EvidenceLevel level) => level switch
+    {
+        EvidenceLevel.Discovered => "A file was found on the shared drive. That shows it exists, not that anyone confirmed it.",
+        EvidenceLevel.ReportedSuccess => "Logged by hand as successful. A report, not file proof.",
+        EvidenceLevel.RestoreTested => "A restore has since succeeded from this instance, proving the chain recoverable.",
+        _ => ""
+    };
+
     private static string ScannerFreshnessClass(ScannerFreshness freshness) => freshness switch
     {
         ScannerFreshness.Error => "Failed",
@@ -672,11 +800,6 @@ else
         _ => type.ToString()
     };
 
-    private IEnumerable<BackupActivityRow> AllBackupActivityRows() =>
-        (_overviews ?? []).SelectMany(o => o.Instance.BackupRecords.Select(r => new BackupActivityRow(
-            o.Instance.Name, o.Instance.Company, o.Instance.Department, o.Instance.Engine,
-            r.TimestampUtc, r.Type, r.Status, r.SizeMb, r.DurationMinutes, r.Source)));
-
     private static string FormatMb(double totalMb) =>
         totalMb >= 1024 ? $"{totalMb / 1024:N1} GB" : $"{totalMb:N0} MB";
 
@@ -690,8 +813,10 @@ else
 
     private string SummaryPreview()
     {
+        var now = DateTime.UtcNow;
         var rows = (_overviews ?? []).Select(o => new ComplianceReportRow(
-            o.Instance, o.Health, o.LastBackupUtc, o.Instance.RestoreEvents.Any(r => r.Outcome == RestoreOutcome.Success))).ToList();
+            o.Instance, o.Health, o.LastBackupUtc, o.Instance.RestoreEvents.Any(r => r.Outcome == RestoreOutcome.Success),
+            BackupEvidenceClassifier.ClassifyLatestSuccess(o.Instance.BackupRecords.ToList(), o.Instance.RestoreEvents.ToList(), now))).ToList();
         return ComplianceReportBuilder.BuildPlainTextBody(rows, DateTime.UtcNow);
     }
 
@@ -713,12 +838,13 @@ else
     private Task ExportBackupActivity(IReadOnlyList<BackupActivityRow> rows)
     {
         var sb = new System.Text.StringBuilder();
-        sb.AppendLine("TimestampUtc,Instance,Company,Department,Engine,Type,Status,SizeMb,DurationMinutes,Source");
+        sb.AppendLine("TimestampUtc,Instance,Company,Department,Engine,Type,Status,SizeMb,DurationMinutes,Source,EvidenceLevel");
         foreach (var r in rows)
         {
             sb.AppendLine(string.Join(",", Csv(r.TimestampUtc.ToString("O")), Csv(r.InstanceName), Csv(r.Company), Csv(r.Department),
                 Csv(r.Engine.ToString()), Csv(r.Type.ToString()), Csv(r.Status.ToString()),
-                Csv(r.SizeMb?.ToString("N1") ?? ""), Csv(r.DurationMinutes?.ToString("N1") ?? ""), Csv(r.Source.ToString())));
+                Csv(r.SizeMb?.ToString("N1") ?? ""), Csv(r.DurationMinutes?.ToString("N1") ?? ""), Csv(r.Source.ToString()),
+                Csv(BackupEvidenceClassifier.DescribeOrEmpty(r.Evidence))));
         }
         return DownloadCsv($"dbtracker-backup-activity-{DateTime.UtcNow:yyyyMMdd-HHmm}.csv", sb.ToString());
     }
@@ -751,10 +877,11 @@ else
     private Task ExportScanActivity(IReadOnlyList<ScanActivityRow> rows)
     {
         var sb = new System.Text.StringBuilder();
-        sb.AppendLine("Instance,BackupFileLocation,LastScanUtc,Status,Error");
+        sb.AppendLine("Instance,BackupFileLocation,LastScanUtc,LastScanSuccessUtc,Status,Freshness,Error");
         foreach (var r in rows)
         {
-            sb.AppendLine(string.Join(",", Csv(r.InstanceName), Csv(r.BackupFileLocation), Csv(r.LastScanUtc?.ToString("O") ?? ""), Csv(r.LastScanStatus.ToString()), Csv(r.LastScanError)));
+            sb.AppendLine(string.Join(",", Csv(r.InstanceName), Csv(r.BackupFileLocation), Csv(r.LastScanUtc?.ToString("O") ?? ""),
+                Csv(r.Scanner.LastSuccessUtc?.ToString("O") ?? ""), Csv(r.LastScanStatus.ToString()), Csv(ScannerStalenessClassifier.Describe(r.Scanner.Freshness)), Csv(r.LastScanError)));
         }
         return DownloadCsv($"dbtracker-scan-activity-{DateTime.UtcNow:yyyyMMdd-HHmm}.csv", sb.ToString());
     }

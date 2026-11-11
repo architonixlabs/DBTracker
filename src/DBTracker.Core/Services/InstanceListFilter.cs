@@ -30,7 +30,8 @@ public record InstanceListRow(
     string Region = "",
     string Cluster = "",
     string ReplicaSet = "",
-    OwnershipStatus OwnershipStatus = OwnershipStatus.Missing);
+    OwnershipStatus OwnershipStatus = OwnershipStatus.Missing,
+    DateTime? LastScanSuccessUtc = null);
 
 public enum InstanceSortKey
 {
