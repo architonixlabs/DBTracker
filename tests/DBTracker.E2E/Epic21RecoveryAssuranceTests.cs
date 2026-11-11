@@ -103,7 +103,7 @@ public class Epic21RecoveryAssuranceTests
         await maintenanceCard.Locator("input[placeholder='Node/deployment label']").FillAsync("primary-node (E2E)");
         var outcomeSelect = maintenanceCard.Locator("select").Nth(1);
         await outcomeSelect.SelectOptionAsync("Failed");
-        await maintenanceCard.GetByRole(AriaRole.Button, new LocatorGetByRoleOptions { Name = "Record result (now)" }).ClickAsync();
+        await maintenanceCard.GetByRole(AriaRole.Button, new LocatorGetByRoleOptions { Name = "Record result", Exact = true }).ClickAsync();
         await _page.WaitForTimeoutAsync(600);
 
         await Assertions.Expect(_page.Locator(".dbt-toast").First).ToContainTextAsync("Failed");

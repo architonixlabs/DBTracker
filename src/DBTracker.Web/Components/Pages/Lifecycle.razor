@@ -226,7 +226,7 @@
                                         @foreach (var r in revs)
                                         {
                                             <li>
-                                                @r.RevisedAtUtc.ToLocalTime().ToString("MMM d, yyyy h:mm tt"), @r.RevisedBy: @r.ChangeSummary
+                                                <LocalTime Utc="r.RevisedAtUtc" Format="MMM d, yyyy h:mm tt" ShowUtc="false" />, @r.RevisedBy: @r.ChangeSummary
                                                 @if (!string.IsNullOrWhiteSpace(r.SnapshotJson) && r.SnapshotJson != "{}")
                                                 {
                                                     <details><summary>Values before this change</summary><code class="d-block text-break">@r.SnapshotJson</code></details>

@@ -109,7 +109,7 @@ else
                                                 <div class="text-muted">@d.EvidenceNotes</div>
                                             }
                                             <div class="text-muted" data-testid="dependency-last-review">
-                                                @(d.LastReviewedAtUtc is { } lr ? $"Reviewed {lr.ToLocalTime():MMM d, yyyy} by {d.LastReviewedBy}" : "Never reviewed")
+                                                @if (d.LastReviewedAtUtc is { } lr) { <span>Reviewed <LocalTime Utc="lr" Format="MMM d, yyyy" ShowUtc="false" /> by @d.LastReviewedBy</span> } else { <span>Never reviewed</span> }
                                             </div>
                                             @if (!string.IsNullOrWhiteSpace(d.ResolutionNotes))
                                             {
@@ -237,7 +237,7 @@ else
                                                 {
                                                     <div>Matched rule: @rule.SourceFamily (@rule.SourceBuildMin–@rule.SourceBuildMax) to @rule.TargetFamily (@rule.TargetBuildMin–@rule.TargetBuildMax), @rule.Status, reviewed by @rule.ReviewedBy.</div>
                                                 }
-                                                <div>Evaluated @a.EvaluatedAtUtc.ToLocalTime().ToString("MMM d, yyyy") by @a.EvaluatedBy.</div>
+                                                <div>Evaluated <LocalTime Utc="a.EvaluatedAtUtc" Format="MMM d, yyyy" ShowUtc="false" /> by @a.EvaluatedBy.</div>
                                             </div>
                                         </td>
                                     </tr>
@@ -360,7 +360,7 @@ else
                                     }
                                     @if (!string.IsNullOrWhiteSpace(item.Reviewer))
                                     {
-                                        <dt class="col-4 fw-normal">Reviewed</dt><dd class="col-8 mb-0">@item.Reviewer@(item.ReviewedAtUtc is { } ra ? $", {ra.ToLocalTime():MMM d, yyyy}" : "")</dd>
+                                        <dt class="col-4 fw-normal">Reviewed</dt><dd class="col-8 mb-0">@item.Reviewer@if (item.ReviewedAtUtc is { } ra) { <span>, <LocalTime Utc="ra" Format="MMM d, yyyy" ShowUtc="false" /></span> }</dd>
                                     }
                                     @if (!string.IsNullOrWhiteSpace(item.RemediationOwner) || !string.IsNullOrWhiteSpace(item.RemediationNotes))
                                     {

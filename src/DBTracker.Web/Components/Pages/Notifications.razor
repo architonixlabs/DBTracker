@@ -51,7 +51,7 @@ else
                             <span class="dot" aria-hidden="true" style="background:@SeverityColor(n.Severity)"></span>
                             <span class="d-block">
                                 <span class="notif-message d-block">@n.Message</span>
-                                <span class="notif-time d-block">@n.CreatedAtUtc.ToLocalTime().ToString("MMM d, h:mm tt") @(n.IsRead ? "" : "· unread")</span>
+                                <span class="notif-time d-block"><LocalTime Utc="n.CreatedAtUtc" Format="MMM d, h:mm tt" ShowUtc="false" /> @(n.IsRead ? "" : "· unread")</span>
                             </span>
                         </button>
                     }

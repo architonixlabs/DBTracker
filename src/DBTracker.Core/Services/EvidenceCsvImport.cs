@@ -38,7 +38,7 @@ internal sealed class EvidenceCsvReader
 
     public static (EvidenceCsvReader? Reader, List<List<string>> Records, string? HeaderError) Open(string csvContent, string[] columns, string[] required)
     {
-        var records = CsvRecordSplitter.Split(csvContent);
+        var records = CsvRecordReader.Split(csvContent);
         // Comment lines may come before the header, e.g. a copied template's notes.
         while (records.Count > 0 && (records[0].All(string.IsNullOrWhiteSpace) || records[0][0].TrimStart().StartsWith('#')))
         {

@@ -6,6 +6,7 @@
 @inject IncidentService Incidents
 @inject NavigationManager Nav
 @inject IConfiguration Configuration
+@inject ViewerTimeZone Viewer
 
 <PageTitle>Dashboard · DBTracker</PageTitle>
 
@@ -143,7 +144,7 @@ else
                                 <i class="bi bi-cone-striped text-muted ms-1" role="img" aria-label="Under maintenance, alerts suppressed" title="Under maintenance, alerts suppressed"></i>
                             }
                         </td>
-                        <td>@(o.LastBackupUtc is null ? "Never" : o.LastBackupUtc.Value.ToLocalTime().ToString("MMM d, h:mm tt"))</td>
+                        <td><LocalTime Utc="o.LastBackupUtc" Format="MMM d, h:mm tt" ShowUtc="false" /></td>
                     </tr>
                 }
             </tbody>
@@ -247,10 +248,10 @@ else
 
     private void ToggleAutoRefresh() => _autoRefreshPaused = !_autoRefreshPaused;
 
-    private static string FormatAge(DateTime lastUpdatedUtc)
+    private string FormatAge(DateTime lastUpdatedUtc)
     {
         var age = DateTime.UtcNow - lastUpdatedUtc;
-        return age.TotalSeconds < 5 ? "just now" : $"{lastUpdatedUtc.ToLocalTime():h:mm:ss tt} ({(int)age.TotalSeconds}s ago)";
+        return age.TotalSeconds < 5 ? "just now" : $"{Viewer.Format(lastUpdatedUtc, "h:mm:ss tt")}, {(int)age.TotalSeconds}s ago";
     }
 
     private int Count(BackupHealth health) => _rows?.Count(r => r.Health == health) ?? 0;

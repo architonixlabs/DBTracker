@@ -24,7 +24,7 @@
             }
             else if (_result is not null)
             {
-                <span>Updated @_lastUpdatedUtc.ToLocalTime().ToString("h:mm:ss tt")</span>
+                <span>Updated <LocalTime Utc="_lastUpdatedUtc" Format="h:mm:ss tt" ShowUtc="false" /></span>
             }
         </div>
         <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="RefreshNow" disabled="@_refreshing">

@@ -301,7 +301,7 @@ else
                                         <tr>
                                             <td class="small">@f.FileName</td>
                                             <td class="small">@($"{f.SizeBytes / 1024.0 / 1024.0:N1} MB")</td>
-                                            <td class="small">@f.LastWriteUtc.ToLocalTime().ToString("MMM d, h:mm tt")</td>
+                                            <td class="small"><LocalTime Utc="f.LastWriteUtc" Format="MMM d, h:mm tt" ShowUtc="false" /></td>
                                             <td class="small">
                                                 @if (f.AlreadyKnown)
                                                 {

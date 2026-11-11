@@ -4,6 +4,7 @@
 @inject NavigationManager Nav
 @inject ILogger<NotificationBell> Logger
 @inject IJSRuntime JS
+@inject ViewerTimeZone Viewer
 
 @* G30: the menu is a popover="auto" placed right after its trigger: the browser gives it the top layer,
    light dismiss (click elsewhere or Esc) and focus return to the bell. It is a short list of buttons and
@@ -60,7 +61,7 @@
                         <span>
                             <span class="visually-hidden-text">@SeverityLabel(n.Severity)@(n.IsRead ? "" : ", unread"): </span>
                             <span class="notif-message d-block">@n.Message</span>
-                            <span class="notif-time d-block">@n.CreatedAtUtc.ToLocalTime().ToString("MMM d, h:mm tt")</span>
+                            <span class="notif-time d-block"><LocalTime Utc="n.CreatedAtUtc" Format="MMM d, h:mm tt" ShowUtc="false" /></span>
                         </span>
                     </button>
                 }
@@ -109,6 +110,8 @@
         {
             if (firstRender)
             {
+                // The bell's own labels use the viewer's zone, even on a page with no other time on it.
+                await Viewer.EnsureLoadedAsync(JS);
                 _popoverSupported = await JS.InvokeAsync<bool>("dbtracker.popover.supported");
                 _jsRef = DotNetObjectReference.Create(this);
                 await JS.InvokeVoidAsync("dbtracker.popover.watch", _dropdownRef, _jsRef);
@@ -209,12 +212,12 @@
         (_paused ? ", auto-refresh paused" : "");
 
     private string UpdatedLabel =>
-        (_lastUpdatedUtc == default ? "Not loaded yet" : "Updated " + _lastUpdatedUtc.ToLocalTime().ToString("h:mm:ss tt")) +
+        (_lastUpdatedUtc == default ? "Not loaded yet" : "Updated " + Viewer.Format(_lastUpdatedUtc, "h:mm:ss tt")) +
         (_paused ? ". Auto-refresh paused" : "");
 
     private string ErrorLabel =>
         "Couldn't refresh notifications. Showing what loaded " +
-        (_lastUpdatedUtc == default ? "earlier" : "at " + _lastUpdatedUtc.ToLocalTime().ToString("h:mm tt")) +
+        (_lastUpdatedUtc == default ? "earlier" : "at " + Viewer.Format(_lastUpdatedUtc, "h:mm tt")) +
         ". Use refresh to try again.";
 
     // Runs on a thread-pool timer as async void: an escaping exception would crash the process.

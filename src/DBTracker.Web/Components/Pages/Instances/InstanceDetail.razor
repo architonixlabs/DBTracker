@@ -64,7 +64,7 @@ else
                 @if (instance.MaintenanceUntilUtc is { } maintUtc && maintUtc > DateTime.UtcNow)
                 {
                     <span class="badge-health dot Overdue">
-                        <i class="bi bi-cone-striped" aria-hidden="true"></i> Maintenance until @maintUtc.ToLocalTime().ToString("MMM d, h:mm tt")
+                        <i class="bi bi-cone-striped" aria-hidden="true"></i> Maintenance until <LocalTime Utc="maintUtc" Format="MMM d, h:mm tt" ShowUtc="false" />
                     </span>
                 }
             </h1>
@@ -140,7 +140,7 @@ else
                     : $"Not reachable: {_connectivityEndpointDescription} ({_connectivityResult.Error})")
             </div>
             <div class="text-muted">
-                Checked @_connectivityResult.CheckedAtUtc.ToLocalTime().ToString("MMM d, h:mm:ss tt") · timeout @_connectivityResult.Timeout.TotalSeconds s ·
+                Checked <LocalTime Utc="_connectivityResult.CheckedAtUtc" Format="MMM d, h:mm:ss tt" ShowUtc="false" /> · timeout @_connectivityResult.Timeout.TotalSeconds s ·
                 a successful TCP connection is not proof of database login, backup success or recoverability.
             </div>
         </div>
@@ -286,7 +286,7 @@ else
                     }
                     @if (instance.OwnershipConfirmedAtUtc is { } confirmedAt)
                     {
-                        <dt class="col-5">Confirmed</dt><dd class="col-7">@confirmedAt.ToLocalTime().ToString("MMM d, yyyy") by @instance.OwnershipConfirmedBy</dd>
+                        <dt class="col-5">Confirmed</dt><dd class="col-7"><LocalTime Utc="confirmedAt" Format="MMM d, yyyy" ShowUtc="false" /> by @instance.OwnershipConfirmedBy</dd>
                     }
                     @if (!string.IsNullOrWhiteSpace(instance.Region) || !string.IsNullOrWhiteSpace(instance.Cluster) || !string.IsNullOrWhiteSpace(instance.ReplicaSet))
                     {
@@ -345,7 +345,7 @@ else
                             @foreach (var req in _pendingCorrections)
                             {
                                 <div class="small mb-2">
-                                    <div>Requested by @req.RequestedByName on @req.RequestedAtUtc.ToLocalTime().ToString("MMM d, h:mm tt")</div>
+                                    <div>Requested by @req.RequestedByName on <LocalTime Utc="req.RequestedAtUtc" Format="MMM d, h:mm tt" ShowUtc="false" /></div>
                                     <div class="text-muted">"@req.Note"</div>
                                     @if (!string.IsNullOrWhiteSpace(req.ProposedContactName)) { <div>Proposed name: @req.ProposedContactName</div> }
                                     @if (!string.IsNullOrWhiteSpace(req.ProposedContactEmail)) { <div>Proposed email: @req.ProposedContactEmail</div> }
@@ -394,7 +394,7 @@ else
                             }
                             else
                             {
-                                <span>@instance.LastScanUtc.Value.ToLocalTime().ToString("MMM d, h:mm tt")</span>
+                                <span><LocalTime Utc="instance.LastScanUtc" Format="MMM d, h:mm tt" ShowUtc="false" /></span>
                                 <span class="badge-health dot @ScannerFreshnessClass(_scannerHealth!.Freshness) ms-1">@_scannerHealth.Freshness</span>
                                 @if (instance.LastScanStatus == ScanStatus.Error)
                                 {
@@ -416,7 +416,7 @@ else
                 <h2 class="h6 text-muted mb-3">Maintenance window</h2>
                 @if (instance.MaintenanceUntilUtc is { } activeUntil && activeUntil > DateTime.UtcNow)
                 {
-                    <p class="mb-2"><span class="badge-health dot Overdue">Under maintenance</span> until @activeUntil.ToLocalTime().ToString("MMM d, yyyy h:mm tt"). Overdue/Failed email and webhook alerts are suppressed.</p>
+                    <p class="mb-2"><span class="badge-health dot Overdue">Under maintenance</span> until <LocalTime Utc="activeUntil" Format="MMM d, yyyy h:mm tt" ShowUtc="false" />. Overdue/Failed email and webhook alerts are suppressed.</p>
                     @if (!string.IsNullOrWhiteSpace(instance.MaintenanceReason))
                     {
                         <p class="text-muted small mb-2">@instance.MaintenanceReason</p>
@@ -456,15 +456,15 @@ else
                 <div class="dbt-card">
                     <h2 class="h6 text-muted mb-3">Open incident</h2>
                     <p class="small text-muted mb-2">
-                        Opened @_openIncident.OpenedAtUtc.ToLocalTime().ToString("MMM d, h:mm tt") on @_openIncident.TriggerHealth.
+                        Opened <LocalTime Utc="_openIncident.OpenedAtUtc" Format="MMM d, h:mm tt" ShowUtc="false" /> on @_openIncident.TriggerHealth.
                         @if (_openIncident.EscalationLevel > 0)
                         {
-                            <span style="color:var(--dbt-failed)"> Escalated @_openIncident.EscalationLevel time(s), last @_openIncident.LastEscalatedAtUtc?.ToLocalTime().ToString("MMM d, h:mm tt").</span>
+                            <span style="color:var(--dbt-failed)"> Escalated @_openIncident.EscalationLevel time(s), last <LocalTime Utc="_openIncident.LastEscalatedAtUtc" Format="MMM d, h:mm tt" ShowUtc="false" />.</span>
                         }
                     </p>
                     @if (_openIncident.AcknowledgedAtUtc is { } ackAt)
                     {
-                        <p class="mb-2"><span class="badge-health dot OnTrack">Acknowledged</span> by @_openIncident.AcknowledgedBy on @ackAt.ToLocalTime().ToString("MMM d, h:mm tt"). Escalation stopped. <span class="text-muted">Acknowledgement is a response record only; it never changes the health badge above.</span></p>
+                        <p class="mb-2"><span class="badge-health dot OnTrack">Acknowledged</span> by @_openIncident.AcknowledgedBy on <LocalTime Utc="ackAt" Format="MMM d, h:mm tt" ShowUtc="false" />. Escalation stopped. <span class="text-muted">Acknowledgement is a response record only; it never changes the health badge above.</span></p>
                         @if (!string.IsNullOrWhiteSpace(_openIncident.Note))
                         {
                             <p class="small mb-1"><strong>Note:</strong> @_openIncident.Note</p>
@@ -1220,16 +1220,10 @@ else
     /// <summary>Converts a form's occurrence time from its chosen zone, or returns the error to show.</summary>
     private (DateTime Utc, string ZoneId)? ResolveOccurred(DateTime wallClock, string zoneChoice, out string? error)
     {
-        // The default is "now" rounded to the minute for display; left untouched it means now, not up to 59 seconds earlier.
-        if (wallClock == _entryDefaultLocal && zoneChoice != EventTimeZones.Utc)
-        {
-            error = null;
-            return (DateTime.UtcNow, EntryZone(zoneChoice).Id);
-        }
-
-        var result = EventTimeZones.FromZone(wallClock, EntryZone(zoneChoice));
-        error = result.Error ?? (result.Utc is { } u ? EventTimeZones.FutureError(u, DateTime.UtcNow) : null);
-        return error is null ? (result.Utc!.Value, result.ZoneId) : null;
+        var untouched = wallClock == _entryDefaultLocal && zoneChoice != EventTimeZones.Utc;
+        var result = EventTimeZones.FromEntryForm(wallClock, EntryZone(zoneChoice), untouched, DateTime.UtcNow);
+        error = result.Error;
+        return result.Ok ? (result.Utc!.Value, result.ZoneId) : null;
     }
 
     private static string RecordedByText(string recordedBy, BackupSource source)
@@ -1259,6 +1253,8 @@ else
         Db.BackupRecords.Add(_newRecord);
         await Db.SaveChangesAsync();
         Db.ChangeTracker.Clear();
+        await Audit.RecordUserActionAsync(_userId ?? "", _userDisplayName ?? "unknown", "BackupRecordLogged", "BackupRecord", _newRecord.Id.ToString(), _overview?.Instance.Name ?? $"Instance #{Id}",
+            reason: $"Manual entry: {_newRecord.Type} {_newRecord.Status}", afterJson: EvidenceAuditSnapshot.Backup(_newRecord));
         Toasts.Success($"Backup result logged ({_newRecord.Status}).");
         await Load();
     }
@@ -1287,6 +1283,8 @@ else
         Db.RestoreEvents.Add(_newRestore);
         await Db.SaveChangesAsync();
         Db.ChangeTracker.Clear();
+        await Audit.RecordUserActionAsync(_userId ?? "", _userDisplayName ?? "unknown", "RestoreEventLogged", "RestoreEvent", _newRestore.Id.ToString(), _overview?.Instance.Name ?? $"Instance #{Id}",
+            reason: $"Manual entry: {_newRestore.Reason} restore, {_newRestore.Outcome}", afterJson: EvidenceAuditSnapshot.Restore(_newRestore));
         Toasts.Success($"Restore logged ({_newRestore.Outcome}).");
         await Load();
     }
@@ -1349,7 +1347,8 @@ else
         await Db.SaveChangesAsync();
         Db.ChangeTracker.Clear();
         await Audit.RecordUserActionAsync(_userId ?? "", _userDisplayName ?? "unknown", "BackupRecordCorrected", "BackupRecord", _correctingBackupId.ToString(), _overview!.Instance.Name,
-            reason: _correctionReason, beforeJson: $"{{\"Status\":\"{currentStatus}\"}}", afterJson: $"{{\"Status\":\"{_correctedBackupStatus}\"}}");
+            reason: _correctionReason, beforeJson: EvidenceAuditSnapshot.BackupCorrectionSide(currentStatus, currentNotes),
+            afterJson: EvidenceAuditSnapshot.BackupCorrectionSide(_correctedBackupStatus, _correctedBackupNotes));
         Toasts.Success("Correction recorded. The original entry is kept.");
         await Load();
     }
@@ -1378,7 +1377,8 @@ else
         await Db.SaveChangesAsync();
         Db.ChangeTracker.Clear();
         await Audit.RecordUserActionAsync(_userId ?? "", _userDisplayName ?? "unknown", "RestoreEventCorrected", "RestoreEvent", _correctingRestoreId.ToString(), _overview!.Instance.Name,
-            reason: _correctionReasonRestore, beforeJson: $"{{\"Outcome\":\"{currentOutcome}\"}}", afterJson: $"{{\"Outcome\":\"{_correctedRestoreOutcome}\"}}");
+            reason: _correctionReasonRestore, beforeJson: EvidenceAuditSnapshot.RestoreCorrectionSide(currentOutcome, currentNotes),
+            afterJson: EvidenceAuditSnapshot.RestoreCorrectionSide(_correctedRestoreOutcome, _correctedRestoreNotes));
         Toasts.Success("Correction recorded. The original entry is kept.");
         await Load();
     }

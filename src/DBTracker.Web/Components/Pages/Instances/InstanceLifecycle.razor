@@ -63,7 +63,7 @@ else
                         <span class="badge-health dot @ResolutionCssClass(_identity.ResolutionStatus)">@_identity.ResolutionStatus</span>
                         @if (_identity.IsAttested)
                         {
-                            <span class="small text-muted"><i class="bi bi-patch-check-fill" aria-hidden="true"></i> Attested by @_identity.AttestedBy on @_identity.AttestedAtUtc?.ToLocalTime().ToString("MMM d, yyyy")</span>
+                            <span class="small text-muted"><i class="bi bi-patch-check-fill" aria-hidden="true"></i> Attested by @_identity.AttestedBy on <LocalTime Utc="_identity.AttestedAtUtc" Format="MMM d, yyyy" ShowUtc="false" /></span>
                         }
                         else
                         {
@@ -89,7 +89,7 @@ else
                         <dt class="col-5">DB compatibility level</dt><dd class="col-7">@OrNotRecorded(_identity.DatabaseCompatibilityLevel)</dd>
                         <dt class="col-5">Hosting provider</dt><dd class="col-7">@OrNotRecorded(_identity.HostingProvider)</dd>
                         <dt class="col-5">Hosting context</dt><dd class="col-7" data-testid="identity-hosting-context">@OrNotRecorded(_identity.HostingContext)</dd>
-                        <dt class="col-5">Observed</dt><dd class="col-7">@_identity.ObservedAtUtc.ToLocalTime().ToString("MMM d, yyyy h:mm tt") (@_identity.ObservationSource)</dd>
+                        <dt class="col-5">Observed</dt><dd class="col-7"><LocalTime Utc="_identity.ObservedAtUtc" Format="MMM d, yyyy h:mm tt" ShowUtc="false" /> (@_identity.ObservationSource)</dd>
                     </dl>
 
                     @if (_clusterNodes.Count > 0)
@@ -187,7 +187,7 @@ else
 
                 @if (_latestDecision is not null)
                 {
-                    <p class="small text-muted mb-2">Last decision: <strong>@_latestDecision.ActionType</strong>, @_latestDecision.ActionReference (by @_latestDecision.DecidedBy, @_latestDecision.DecidedAtUtc.ToLocalTime().ToString("MMM d, yyyy"))</p>
+                    <p class="small text-muted mb-2">Last decision: <strong>@_latestDecision.ActionType</strong>, @_latestDecision.ActionReference (by @_latestDecision.DecidedBy, <LocalTime Utc="_latestDecision.DecidedAtUtc" Format="MMM d, yyyy" ShowUtc="false" />)</p>
                 }
 
                 <AuthorizeView Roles="@Roles.CanEditPolicy">
@@ -432,7 +432,7 @@ else
                             @foreach (var o in _observations)
                             {
                                 <tr data-testid="observation-row">
-                                    <td class="small">@o.ObservedAtUtc.ToLocalTime().ToString("MMM d, h:mm tt")</td>
+                                    <td class="small"><LocalTime Utc="o.ObservedAtUtc" Format="MMM d, h:mm tt" ShowUtc="false" /></td>
                                     <td class="small">@o.Source</td>
                                     <td class="small">
                                         @o.RawVersionText

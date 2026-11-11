@@ -16,7 +16,7 @@ public class InstanceOverviewService(IDbContextFactory<DBTrackerDbContext> facto
             .AsNoTracking()
             .Where(i => includeArchived || !i.IsArchived)
             .Include(i => i.BackupRecords)
-            .Include(i => i.RestoreEvents)
+            .Include(i => i.RestoreEvents).ThenInclude(r => r.Corrections)
             .AsSplitQuery()
             .ToListAsync();
 
@@ -225,6 +225,7 @@ public class InstanceOverviewService(IDbContextFactory<DBTrackerDbContext> facto
 
         var restores = await db.RestoreEvents
             .AsNoTracking()
+            .Include(r => r.Corrections)
             .Where(r => includeArchived || !r.DatabaseInstance!.IsArchived)
             .ToListAsync();
         var restoresByInstance = restores.ToLookup(r => r.DatabaseInstanceId);
@@ -278,7 +279,8 @@ public class InstanceOverviewService(IDbContextFactory<DBTrackerDbContext> facto
         var instanceIds = records.Select(r => r.DatabaseInstanceId).Distinct().ToList();
         var lastRestoreSuccess = await db.RestoreEvents
             .AsNoTracking()
-            .Where(r => r.Outcome == RestoreOutcome.Success && r.Source != BackupSource.Imported && instanceIds.Contains(r.DatabaseInstanceId))
+            .Where(RestoreEvidence.IsVerified)
+            .Where(r => instanceIds.Contains(r.DatabaseInstanceId))
             .GroupBy(r => r.DatabaseInstanceId)
             .Select(g => new { InstanceId = g.Key, LastUtc = g.Max(r => r.TimestampUtc) })
             .ToDictionaryAsync(x => x.InstanceId, x => (DateTime?)x.LastUtc);
@@ -311,7 +313,7 @@ public class InstanceOverviewService(IDbContextFactory<DBTrackerDbContext> facto
         var instance = await db.DatabaseInstances
             .AsNoTracking()
             .Include(i => i.BackupRecords)
-            .Include(i => i.RestoreEvents)
+            .Include(i => i.RestoreEvents).ThenInclude(r => r.Corrections)
             .Include(i => i.OwnerTeam)
             .Include(i => i.AppliedPolicy)
             .AsSplitQuery()

@@ -72,6 +72,25 @@ public static class EventTimeZones
     public static string? FutureError(DateTime utc, DateTime nowUtc) =>
         utc > nowUtc.AddMinutes(1) ? "Event time can't be in the future." : null;
 
+    /// <summary>A form's "occurred at" field: a wall-clock time in the chosen zone, rejected when it is in the future or skipped by
+    /// daylight saving. <paramref name="untouchedDefault"/> means the person left the "now" default (shown rounded to the minute),
+    /// so it is taken as now rather than up to 59 seconds earlier.</summary>
+    public static EventTimeResult FromEntryForm(DateTime wallClock, TimeZoneInfo zone, bool untouchedDefault, DateTime nowUtc)
+    {
+        if (untouchedDefault)
+        {
+            return new EventTimeResult(DateTime.SpecifyKind(nowUtc, DateTimeKind.Utc), IdOf(zone), null);
+        }
+
+        var result = FromZone(wallClock, zone);
+        if (result.Error is not null)
+        {
+            return result;
+        }
+
+        return FutureError(result.Utc!.Value, nowUtc) is { } future ? result with { Utc = null, Error = future } : result;
+    }
+
     private static readonly string[] WallClockFormats =
     [
         "yyyy-MM-dd HH:mm", "yyyy-MM-dd HH:mm:ss", "yyyy-MM-ddTHH:mm", "yyyy-MM-ddTHH:mm:ss", "yyyy-MM-ddTHH:mm:ss.FFFFFFF", "yyyy-MM-dd HH:mm:ss.FFFFFFF"

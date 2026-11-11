@@ -192,7 +192,7 @@ else
                         <tbody>
                             @foreach (var t in _campaign.StateTransitions.OrderByDescending(t => t.TransitionedAtUtc))
                             {
-                                <tr><td class="small">@t.TransitionedAtUtc.ToLocalTime().ToString("MMM d, h:mm tt")</td><td class="small">@t.FromState → @t.ToState</td><td class="small">@t.TransitionedBy</td><td class="small">@t.Reason</td></tr>
+                                <tr><td class="small"><LocalTime Utc="t.TransitionedAtUtc" Format="MMM d, h:mm tt" ShowUtc="false" /></td><td class="small">@t.FromState → @t.ToState</td><td class="small">@t.TransitionedBy</td><td class="small">@t.Reason</td></tr>
                             }
                         </tbody>
                     </table>
@@ -268,7 +268,7 @@ else
                         <tbody>
                             @foreach (var a in _campaign.Approvals.OrderByDescending(a => a.DecidedAtUtc))
                             {
-                                <tr><td class="small">@a.Scope</td><td class="small">@a.Decision</td><td class="small">@a.ApproverName</td><td class="small">@a.DecidedAtUtc.ToLocalTime().ToString("MMM d, h:mm tt")</td><td class="small" data-testid="approval-notes">@a.Notes</td></tr>
+                                <tr><td class="small">@a.Scope</td><td class="small">@a.Decision</td><td class="small">@a.ApproverName</td><td class="small"><LocalTime Utc="a.DecidedAtUtc" Format="MMM d, h:mm tt" ShowUtc="false" /></td><td class="small" data-testid="approval-notes">@a.Notes</td></tr>
                             }
                         </tbody>
                     </table>
