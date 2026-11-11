@@ -1,3 +1,4 @@
+﻿using DBTracker.Web.Services;
 using DBTracker.Infrastructure;
 using DBTracker.Infrastructure.Audit;
 using DBTracker.Infrastructure.Install;
@@ -176,6 +177,8 @@ if (app.Environment.IsProduction())
 {
     app.UseHsts();
 }
+// CSP with a per-request script nonce, plus the companion headers (SecurityHeaderPolicy). First, so error pages get them too.
+app.UseSecurityHeaders();
 app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
 // The tray polls these over loopback http and doesn't follow redirects; see HttpsRedirectExemption.
 app.UseWhen(
@@ -197,6 +200,7 @@ app.MapRazorComponents<App>()
 app.MapIdentityLogoutEndpoint();
 app.MapDeviceLinkEndpoints();
 app.MapTrayApi();
+app.MapCspReports();
 
 app.Run();
 

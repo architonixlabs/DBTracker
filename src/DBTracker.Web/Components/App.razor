@@ -6,23 +6,22 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <base href="/" />
     <ResourcePreloader />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800&display=swap" />
+    @* Self-hosted fonts: no third-party request, and locked-down servers still render. Preload only Inter's latin file. *@
+    <link rel="preload" href="fonts/inter-latin.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="stylesheet" href="@Assets["fonts/fonts.css"]" />
     <link rel="stylesheet" href="lib/bootstrap/css/bootstrap.min.css" />
     <link rel="stylesheet" href="lib/bootstrap-icons/font/bootstrap-icons.min.css" />
     <link rel="stylesheet" href="@Assets["app.css"]" />
     <link rel="stylesheet" href="@Assets["DBTracker.Web.styles.css"]" />
-    <ImportMap />
+    <ImportMap nonce="@CspNonce" />
     <HeadOutlet />
 </head>
 
 <body>
     <Routes @rendermode="RenderModeForRequest" />
     <ReconnectModal />
-    <script src="lib/bootstrap/js/bootstrap.bundle.min.js"></script>
-    <script src="js/dbtracker.js"></script>
-    <script src="@Assets["_framework/blazor.web.js"]"></script>
+    <script nonce="@CspNonce" src="js/dbtracker.js"></script>
+    <script nonce="@CspNonce" src="@Assets["_framework/blazor.web.js"]"></script>
 </body>
 
 </html>
@@ -34,6 +33,9 @@
     // ResetPassword, /account/change-password) rely on interactive event dispatch.
     [CascadingParameter]
     private HttpContext HttpContext { get; set; } = default!;
+
+    // Set per request by SecurityHeadersMiddleware; the CSP only runs scripts that carry it.
+    private string CspNonce => HttpContext.Items[DBTracker.Web.Services.SecurityHeadersMiddleware.NonceKey] as string ?? "";
 
     private IComponentRenderMode? RenderModeForRequest =>
         HttpContext.Request.Path.StartsWithSegments("/Account/Login", StringComparison.OrdinalIgnoreCase)

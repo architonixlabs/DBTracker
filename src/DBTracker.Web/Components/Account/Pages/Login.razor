@@ -1,4 +1,4 @@
-@page "/Account/Login"
+﻿@page "/Account/Login"
 @layout AuthLayout
 @using System.ComponentModel.DataAnnotations
 @using Microsoft.AspNetCore.Authentication
@@ -56,7 +56,7 @@
     </div>
 </div>
 
-<script src="js/device-link-login.js"></script>
+<CspScript Src="js/device-link-login.js" />
 
 @code {
     private string? errorMessage;

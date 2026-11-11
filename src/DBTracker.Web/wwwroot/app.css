@@ -51,6 +51,8 @@ html, body {
     color: var(--dbt-text);
     font-family: var(--dbt-sans);
     font-size: 14px;
+    /* Scales the fallback font to Inter's x-height while fonts/ loads, so text doesn't jump on swap. */
+    font-size-adjust: from-font;
     -webkit-font-smoothing: antialiased;
 }
 
