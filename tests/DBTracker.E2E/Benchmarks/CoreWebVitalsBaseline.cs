@@ -21,10 +21,12 @@ public class CoreWebVitalsBaseline
         "Server=localhost;Database=DBTracker_Test;Integrated Security=True;TrustServerCertificate=True;";
 
     private const string ObserverScript = """
-        window.__cwv = { lcp: 0, cls: 0, events: [], loafs: [] };
+        window.__cwv = { lcp: 0, cls: 0, events: [], loafs: [], shifts: [] };
+        const describe = n => !n || !n.tagName ? '' : n.tagName.toLowerCase() + (n.id ? '#' + n.id : '') + (typeof n.className === 'string' && n.className.trim() ? '.' + n.className.trim().split(/\s+/).slice(0, 2).join('.') : '');
         new PerformanceObserver(l => { for (const e of l.getEntries()) window.__cwv.lcp = e.startTime; })
           .observe({ type: 'largest-contentful-paint', buffered: true });
-        new PerformanceObserver(l => { for (const e of l.getEntries()) if (!e.hadRecentInput) window.__cwv.cls += e.value; })
+        new PerformanceObserver(l => { for (const e of l.getEntries()) if (!e.hadRecentInput) { window.__cwv.cls += e.value;
+            if (e.value >= 0.01) window.__cwv.shifts.push(e.value.toFixed(3) + ' ' + (e.sources || []).map(x => describe(x.node)).filter(Boolean).slice(0, 3).join(', ')); } })
           .observe({ type: 'layout-shift', buffered: true });
         new PerformanceObserver(l => { for (const e of l.getEntries()) if (e.interactionId) window.__cwv.events.push({ name: e.name, duration: e.duration, id: e.interactionId,
             inputDelay: e.processingStart - e.startTime, processing: e.processingEnd - e.processingStart, presentation: e.startTime + e.duration - e.processingEnd }); })
@@ -49,7 +51,7 @@ public class CoreWebVitalsBaseline
             new PageCheck("New instance form", "/instances/new", "button[type=submit]:text('Save instance')", null),
         };
 
-        var report = new StringBuilder("| Profile | Page | Load to ready ms | LCP ms | CLS | Slowest interaction ms (input / processing / presentation) | Long frames > 50 ms |\n|---|---|---|---|---|---|---|\n");
+        var report = new StringBuilder("| Profile | Page | Load to ready ms | LCP ms | CLS | Slowest interaction ms (input / processing / presentation) | Long frames > 50 ms | Shifts >= 0.01 (elements) |\n|---|---|---|---|---|---|---|---|\n");
         foreach (var (profile, mobile) in new[] { ("Desktop", false), ("Phone 360px, 4x CPU", true) })
         {
             var context = await GlobalSetup.Server.Browser.NewContextAsync(new BrowserNewContextOptions
@@ -110,7 +112,8 @@ public class CoreWebVitalsBaseline
             .Select(e => $"{e.GetProperty("duration").GetDouble():N0} ({e.GetProperty("inputDelay").GetDouble():N0} / {e.GetProperty("processing").GetDouble():N0} / {e.GetProperty("presentation").GetDouble():N0}) {e.GetProperty("name").GetString()}")
             .FirstOrDefault() ?? "none over 16 ms";
         var longFrames = cwv.GetProperty("loafs").EnumerateArray().Count(d => d.GetDouble() > 50);
-        return $"| {profile} | {page} | {loadMs:N0} | {lcp:N0} | {cls:N3} | {slowest} | {longFrames} |\n";
+        var shifts = string.Join("; ", cwv.GetProperty("shifts").EnumerateArray().Select(x => x.GetString()));
+        return $"| {profile} | {page} | {loadMs:N0} | {lcp:N0} | {cls:N3} | {slowest} | {longFrames} | {(shifts.Length == 0 ? "none" : shifts)} |\n";
     }
 
     private static async Task LoginAsync(IPage page)
