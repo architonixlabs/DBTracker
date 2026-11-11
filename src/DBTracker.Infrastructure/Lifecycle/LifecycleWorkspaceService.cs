@@ -47,6 +47,18 @@ public class LifecycleWorkspaceService(IDbContextFactory<DBTrackerDbContext> fac
         var activeExceptions = (await db.ReadinessExceptions.AsNoTracking().ToListAsync())
             .Where(e => ReadinessExceptionEvaluator.IsActive(e, now))
             .ToList();
+        var dependencyCounts = await db.InstanceDependencies.AsNoTracking()
+            .Where(d => d.Kind == DependencyKind.Deployment || d.Kind == DependencyKind.HostedDatabase)
+            .GroupBy(d => new { d.DatabaseInstanceId, d.Kind })
+            .Select(g => new { g.Key.DatabaseInstanceId, g.Key.Kind, Count = g.Count() })
+            .ToListAsync();
+        // A window whose planned end has passed while it is still Planned, Approved or InProgress makes its campaign late.
+        var overdueWindowCounts = await db.ChangeWindows.AsNoTracking()
+            .Where(w => w.PlannedEndUtc < now &&
+                        (w.Status == ChangeWindowStatus.Planned || w.Status == ChangeWindowStatus.Approved || w.Status == ChangeWindowStatus.InProgress))
+            .GroupBy(w => w.MigrationCampaignId)
+            .Select(g => new { CampaignId = g.Key, Count = g.Count() })
+            .ToDictionaryAsync(g => g.CampaignId, g => g.Count);
 
         var result = new List<LifecycleWorkspaceInput>();
         foreach (var instance in instances)
@@ -82,7 +94,11 @@ public class LifecycleWorkspaceService(IDbContextFactory<DBTrackerDbContext> fac
                 instance.OwnerTeam?.Name,
                 clusterCount,
                 latestCampaign?.State,
-                expiringCount));
+                expiringCount,
+                IdentityMajor: identity?.Major,
+                DeploymentCount: dependencyCounts.Where(d => d.DatabaseInstanceId == instance.Id && d.Kind == DependencyKind.Deployment).Sum(d => d.Count),
+                HostedDatabaseCount: dependencyCounts.Where(d => d.DatabaseInstanceId == instance.Id && d.Kind == DependencyKind.HostedDatabase).Sum(d => d.Count),
+                OverdueChangeWindowCount: latestCampaign is not null && overdueWindowCounts.TryGetValue(latestCampaign.Id, out var overdue) ? overdue : 0));
         }
 
         return result;

@@ -4,12 +4,14 @@
 @using DBTracker.Core.Enums
 @using DBTracker.Core.Services
 @using DBTracker.Infrastructure.Identity
+@using DBTracker.Infrastructure.Ownership
 @using DBTracker.Infrastructure.Queries
 @using DBTracker.Infrastructure.Recovery
 @using Microsoft.AspNetCore.Components.Authorization
 @using Microsoft.JSInterop
 @inject InstanceOverviewService OverviewService
 @inject CertificateDependencyService Certificates
+@inject TeamService Teams
 @inject AuthenticationStateProvider AuthProvider
 @inject DBTracker.Web.Services.ToastService Toasts
 @inject IJSRuntime JS
@@ -41,7 +43,8 @@ else
             <h1>@_instance.Name</h1>
             <div class="subtitle">
                 Certificate and recovery-key reminders · @_instance.Engine · <a href="/instances/@Id">Back to instance detail</a><br />
-                Stores secret-store references only. No password or private-key value is kept here or in the CSV export.
+                Stores secret-store references only. No password or private-key value is kept here or in the CSV export. Renewals and rotations
+                are done in your certificate or secret-management system and recorded here; DBTracker never issues or rotates anything.
             </div>
         </div>
         <div class="d-flex gap-2">
@@ -55,13 +58,14 @@ else
     {
         <div class="table-responsive mb-3" role="region" aria-label="Certificate dependencies" tabindex="0">
             <table class="table table-sm dbt-table mb-0" data-testid="certificate-table">
-                <thead><tr><th scope="col">Kind</th><th scope="col">Label</th><th scope="col">Expires</th><th scope="col">Expiry status</th><th scope="col">Rotation status</th><th scope="col">Verified access</th><th scope="col"><span class="visually-hidden">Actions</span></th></tr></thead>
+                <thead><tr><th scope="col">Kind</th><th scope="col">Label</th><th scope="col">Owner</th><th scope="col">Expires</th><th scope="col">Expiry status</th><th scope="col">Rotation status</th><th scope="col">Verified access</th><th scope="col"><span class="visually-hidden">Actions</span></th></tr></thead>
                 <tbody>
                     @foreach (var row in _rows)
                     {
                         <tr data-testid="certificate-row">
                             <td class="small">@row.Certificate.Kind</td>
                             <td class="small">@row.Certificate.Label</td>
+                            <td class="small" data-testid="certificate-owner">@OwnerLabel(row.Certificate)</td>
                             <td class="small">@(row.Certificate.ExpiresAtUtc?.ToString("MMM d, yyyy") ?? "unknown")</td>
                             <td class="small" data-testid="certificate-expiry-status">
                                 <span class="badge-health dot @ExpiryCssClass(row.ExpiryStatus)">@row.ExpiryStatus</span>
@@ -78,9 +82,47 @@ else
                                     <button type="button" class="btn btn-link btn-sm p-0" @onclick="() => ToggleVerifiedAccess(row.Certificate)">
                                         @(row.Certificate.VerifiedBackupRestoreAccess ? "Clear verified access" : "Mark verified access")
                                     </button>
+                                    <button type="button" class="btn btn-link btn-sm p-0 ms-1" @onclick="() => StartEvent(row.Certificate, CertificateEventType.Renewal)" data-testid="renew-certificate-button">Record renewal</button>
+                                    <button type="button" class="btn btn-link btn-sm p-0 ms-1" @onclick="() => StartEvent(row.Certificate, CertificateEventType.KeyRotation)" data-testid="rotate-certificate-button">Record key rotation</button>
                                 </AuthorizeView>
+                                <button type="button" class="btn btn-link btn-sm p-0 ms-1" @onclick="() => ToggleHistory(row.Certificate.Id)" aria-expanded="@(_historyFor == row.Certificate.Id ? "true" : "false")" data-testid="certificate-history-button">History (@row.Certificate.History.Count)</button>
                             </td>
                         </tr>
+                        @if (_historyFor == row.Certificate.Id)
+                        {
+                            <tr>
+                                <td colspan="8" class="small" data-testid="certificate-history">
+                                    @if (row.Certificate.History.Count == 0)
+                                    {
+                                        <span class="text-muted">No renewals or rotations recorded yet.</span>
+                                    }
+                                    else
+                                    {
+                                        <ol class="mb-0 ps-3">
+                                            @foreach (var h in row.Certificate.History.OrderByDescending(h => h.OccurredAtUtc))
+                                            {
+                                                <li data-testid="certificate-history-item">
+                                                    @(h.EventType == CertificateEventType.Renewal ? "Renewed" : "Key rotated") @h.OccurredAtUtc.ToString("yyyy-MM-dd")
+                                                    @if (h.EventType == CertificateEventType.Renewal)
+                                                    {
+                                                        <span>: expiry @(h.PreviousExpiresAtUtc?.ToString("yyyy-MM-dd") ?? "unknown") to @(h.NewExpiresAtUtc?.ToString("yyyy-MM-dd") ?? "unknown")</span>
+                                                    }
+                                                    <span class="text-muted">, recorded by @h.RecordedBy.</span>
+                                                    @if (!string.IsNullOrWhiteSpace(h.ReplicasOrClientsUpdated))
+                                                    {
+                                                        <div>Updated in step: @h.ReplicasOrClientsUpdated</div>
+                                                    }
+                                                    @if (!string.IsNullOrWhiteSpace(h.Evidence))
+                                                    {
+                                                        <div class="text-muted">Evidence: @h.Evidence</div>
+                                                    }
+                                                </li>
+                                            }
+                                        </ol>
+                                    }
+                                </td>
+                            </tr>
+                        }
                     }
                 </tbody>
             </table>
@@ -91,6 +133,45 @@ else
         <div class="empty-state py-3">
             <i class="bi bi-shield-lock" aria-hidden="true"></i> No certificate or recovery-key dependencies recorded yet.
             <AuthorizeView Roles="@Roles.CanEditPolicy"><span>Record the first one in the form below.</span></AuthorizeView>
+        </div>
+    }
+
+    @if (_eventCert is not null)
+    {
+        <div class="dbt-card mb-3" data-testid="certificate-event-panel">
+            <h2 class="h6 text-muted mb-2">@(_eventType == CertificateEventType.Renewal ? "Record renewal" : "Record key rotation"): @_eventCert.Label</h2>
+            <p class="small text-muted">
+                @if (_eventType == CertificateEventType.Renewal)
+                {
+                    <span>The new expiry replaces @(_eventCert.ExpiresAtUtc?.ToString("yyyy-MM-dd") ?? "the unknown current date"), and expiry notices start over for the new date.</span>
+                }
+                else
+                {
+                    <span>Key rotation replaces key material. It doesn't change the certificate's expiry date.</span>
+                }
+                Affected replicas or clients on record: @(string.IsNullOrWhiteSpace(_eventCert.AffectedReplicasOrClientsText) ? "none recorded" : _eventCert.AffectedReplicasOrClientsText).
+            </p>
+            <div class="row g-2 mb-2">
+                <div class="col-md-4">
+                    <label class="form-label small mb-1" for="cert-event-date">@(_eventType == CertificateEventType.Renewal ? "Renewed on" : "Rotated on")</label>
+                    <input id="cert-event-date" type="date" class="form-control form-control-sm" @bind="_eventDate" data-testid="certificate-event-date" />
+                </div>
+                @if (_eventType == CertificateEventType.Renewal)
+                {
+                    <div class="col-md-4">
+                        <label class="form-label small mb-1" for="cert-new-expiry">New expiry</label>
+                        <input id="cert-new-expiry" type="date" class="form-control form-control-sm" @bind="_eventNewExpiry" data-testid="certificate-new-expiry" />
+                    </div>
+                }
+            </div>
+            <div class="mb-2"><label class="form-label small mb-1" for="cert-event-replicas">Replicas or clients updated in step</label><input id="cert-event-replicas" class="form-control form-control-sm" @bind="_eventReplicas" @bind:event="oninput" /></div>
+            <div class="mb-2"><label class="form-label small mb-1" for="cert-event-evidence">Evidence (ticket, change or secret-store version; never the key)</label><input id="cert-event-evidence" class="form-control form-control-sm" @bind="_eventEvidence" @bind:event="oninput" /></div>
+            <button type="button" class="btn btn-primary btn-sm" @onclick="SaveEvent" data-testid="save-certificate-event">Save</button>
+            <button type="button" class="btn btn-link btn-sm" @onclick="CancelEvent">Cancel</button>
+            @if (_eventError is not null)
+            {
+                <p class="small mt-2 mb-0" role="alert" style="color:var(--dbt-failed);" data-testid="certificate-event-error">@_eventError</p>
+            }
         </div>
     }
 
@@ -116,8 +197,25 @@ else
             </div>
             <div class="row g-2 mb-2">
                 <div class="col-md-3"><label class="form-label small mb-1" for="cert-rotation">Rotation interval (days)</label><input id="cert-rotation" type="number" min="1" class="form-control form-control-sm" placeholder="Rotation interval (days)" @bind="_rotationIntervalDays" /></div>
-                <div class="col-md-5"><label class="form-label small mb-1" for="cert-affected">Affected replicas or clients</label><input id="cert-affected" class="form-control form-control-sm" placeholder="Affected replicas/clients" @bind="_affectedReplicas" @bind:event="oninput" /></div>
+                <div class="col-md-9"><label class="form-label small mb-1" for="cert-affected">Affected replicas or clients</label><input id="cert-affected" class="form-control form-control-sm" placeholder="Affected replicas/clients" @bind="_affectedReplicas" @bind:event="oninput" /></div>
+            </div>
+            <div class="row g-2 mb-2">
+                <div class="col-md-4">
+                    <label class="form-label small mb-1" for="cert-owner-team">Owner team</label>
+                    <select id="cert-owner-team" class="form-select form-select-sm" @bind="_ownerTeamId" data-testid="certificate-owner-team">
+                        <option value="0">No owner team</option>
+                        @foreach (var t in _teams)
+                        {
+                            <option value="@t.Id">@t.Name</option>
+                        }
+                    </select>
+                </div>
                 <div class="col-md-4"><label class="form-label small mb-1" for="cert-owner">Owner name</label><input id="cert-owner" class="form-control form-control-sm" placeholder="Owner name" @bind="_ownerName" @bind:event="oninput" /></div>
+                <div class="col-md-4">
+                    <label class="form-label small mb-1" for="cert-owner-email">Owner email</label>
+                    <input id="cert-owner-email" type="email" class="form-control form-control-sm" @bind="_ownerEmail" @bind:event="oninput" aria-describedby="cert-owner-help" data-testid="certificate-owner-email" />
+                </div>
+                <div class="form-text" id="cert-owner-help">Expiry notices go to the owner email and the owner team's contacts. The instance contact gets them only when neither is set.</div>
             </div>
             <button type="button" class="btn btn-primary btn-sm" @onclick="AddCertificate" disabled="@string.IsNullOrWhiteSpace(_label)" data-testid="add-certificate">Record dependency</button>
         </div>
@@ -129,18 +227,30 @@ else
 
     private DatabaseInstance? _instance;
     private bool _loaded, _loadFailed;
-    private string? _userName;
+    private string _userName = "unknown";
+    private IReadOnlyCollection<string> _userRoles = [];
     private List<CertificateRow> _rows = new();
+    private List<Team> _teams = new();
 
     private CertificateKind _kind = CertificateKind.Tls;
-    private string _label = "", _secretStoreReference = "", _affectedReplicas = "", _ownerName = "";
+    private string _label = "", _secretStoreReference = "", _affectedReplicas = "", _ownerName = "", _ownerEmail = "";
+    private int _ownerTeamId;
     private DateTime? _expiresAt;
     private int? _rotationIntervalDays;
+
+    private CertificateDependency? _eventCert;
+    private CertificateEventType _eventType;
+    private DateTime _eventDate = DateTime.UtcNow.Date;
+    private DateTime? _eventNewExpiry;
+    private string _eventEvidence = "", _eventReplicas = "";
+    private string? _eventError;
+    private int? _historyFor;
 
     protected override async Task OnInitializedAsync()
     {
         var state = await AuthProvider.GetAuthenticationStateAsync();
         _userName = state.User.Identity?.Name ?? "unknown";
+        _userRoles = state.User.Claims.Where(c => c.Type == System.Security.Claims.ClaimTypes.Role).Select(c => c.Value).ToList();
         await Retry();
     }
 
@@ -168,6 +278,7 @@ else
         }
 
         _rows = await Certificates.ListForInstanceAsync(Id);
+        _teams = (await Teams.ListAsync()).Select(s => s.Team).ToList();
     }
 
     private async Task AddCertificate()
@@ -177,15 +288,18 @@ else
             DatabaseInstanceId = Id,
             Kind = _kind,
             Label = _label,
-            ExpiresAtUtc = _expiresAt,
+            ExpiresAtUtc = _expiresAt is { } e ? DateTime.SpecifyKind(e, DateTimeKind.Utc) : null,
             SecretStoreReference = _secretStoreReference,
             RotationIntervalDays = _rotationIntervalDays,
             AffectedReplicasOrClientsText = _affectedReplicas,
-            OwnerName = _ownerName
-        }, _userName ?? "unknown");
+            OwnerName = _ownerName.Trim(),
+            OwnerEmail = _ownerEmail.Trim(),
+            OwnerTeamId = _ownerTeamId == 0 ? null : _ownerTeamId
+        }, _userName);
 
         Toasts.Success($"Certificate dependency \"{_label}\" recorded.");
-        _label = _secretStoreReference = _affectedReplicas = _ownerName = "";
+        _label = _secretStoreReference = _affectedReplicas = _ownerName = _ownerEmail = "";
+        _ownerTeamId = 0;
         _expiresAt = null;
         _rotationIntervalDays = null;
         await Load();
@@ -193,9 +307,58 @@ else
 
     private async Task ToggleVerifiedAccess(CertificateDependency cert)
     {
-        await Certificates.SetVerifiedAccessAsync(cert.Id, !cert.VerifiedBackupRestoreAccess, _userName ?? "unknown");
+        await Certificates.SetVerifiedAccessAsync(cert.Id, !cert.VerifiedBackupRestoreAccess, _userName);
         Toasts.Success("Verified-access flag updated.");
         await Load();
+    }
+
+    private void StartEvent(CertificateDependency cert, CertificateEventType type)
+    {
+        _eventCert = cert;
+        _eventType = type;
+        _eventDate = DateTime.UtcNow.Date;
+        _eventNewExpiry = null;
+        _eventEvidence = "";
+        _eventReplicas = cert.AffectedReplicasOrClientsText;
+        _eventError = null;
+    }
+
+    private void CancelEvent()
+    {
+        _eventCert = null;
+        _eventError = null;
+    }
+
+    private async Task SaveEvent()
+    {
+        if (_eventCert is null)
+        {
+            return;
+        }
+
+        var occurred = DateTime.SpecifyKind(_eventDate, DateTimeKind.Utc);
+        var (ok, error) = _eventType == CertificateEventType.Renewal
+            ? await Certificates.RecordRenewalAsync(_eventCert.Id, occurred, _eventNewExpiry is { } n ? DateTime.SpecifyKind(n, DateTimeKind.Utc) : null,
+                _eventEvidence, _eventReplicas, _userName, _userRoles)
+            : await Certificates.RecordRotationAsync(_eventCert.Id, occurred, _eventEvidence, _eventReplicas, _userName, _userRoles);
+        if (!ok)
+        {
+            _eventError = error;
+            return;
+        }
+
+        Toasts.Success(_eventType == CertificateEventType.Renewal ? $"Renewal of \"{_eventCert.Label}\" recorded." : $"Key rotation of \"{_eventCert.Label}\" recorded.");
+        _historyFor = _eventCert.Id;
+        _eventCert = null;
+        await Load();
+    }
+
+    private void ToggleHistory(int certId) => _historyFor = _historyFor == certId ? null : certId;
+
+    private static string OwnerLabel(CertificateDependency cert)
+    {
+        var parts = new[] { cert.OwnerName, cert.OwnerTeam?.Name }.Where(p => !string.IsNullOrWhiteSpace(p)).ToList();
+        return parts.Count == 0 ? "Not recorded" : string.Join(", ", parts);
     }
 
     private static string Csv(string value) =>
@@ -206,7 +369,7 @@ else
     private async Task ExportCsv()
     {
         var sb = new System.Text.StringBuilder();
-        sb.AppendLine("Kind,Label,ExpiresAtUtc,ExpiryStatus,RotationStatus,SecretStoreReference,VerifiedBackupRestoreAccess,Owner");
+        sb.AppendLine("Kind,Label,ExpiresAtUtc,ExpiryStatus,RotationStatus,SecretStoreReference,VerifiedBackupRestoreAccess,Owner,OwnerTeam,LastRenewedAtUtc,LastRotatedAtUtc");
         foreach (var row in _rows)
         {
             // Second redaction layer at export; AddAsync already redacts on write.
@@ -219,7 +382,10 @@ else
                 Csv(row.RotationStatus.ToString()),
                 Csv(reference),
                 Csv(row.Certificate.VerifiedBackupRestoreAccess ? "Yes" : "No"),
-                Csv(row.Certificate.OwnerName)));
+                Csv(row.Certificate.OwnerName),
+                Csv(row.Certificate.OwnerTeam?.Name ?? ""),
+                Csv(row.Certificate.LastRenewedAtUtc?.ToString("O") ?? ""),
+                Csv(row.Certificate.LastRotatedAtUtc?.ToString("O") ?? "")));
         }
 
         await JS.InvokeVoidAsync("dbtracker.downloadCsv", $"dbtracker-certificates-{_instance!.Name}-{DateTime.UtcNow:yyyyMMdd-HHmm}.csv", sb.ToString());

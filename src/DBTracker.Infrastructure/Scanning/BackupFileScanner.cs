@@ -65,7 +65,8 @@ public class BackupFileScanner(DBTrackerDbContext db)
                 {
                     DatabaseInstanceId = instanceId,
                     TimestampUtc = file.LastWriteUtc,
-                    Type = BackupFileTypeClassifier.Classify(file.FileName),
+                    Type = BackupFileTypeClassifier.ClassifyForChain(file.FileName),
+                    ChainRole = BackupFileTypeClassifier.ClassifyChainRole(file.FileName),
                     Status = BackupStatus.Success,
                     SizeMb = Math.Round(file.SizeBytes / 1024.0 / 1024.0, 1),
                     ObservedFileBytes = file.SizeBytes,

@@ -51,4 +51,13 @@ public class ChangeWindowApprovalAuthorizerTests
         Assert.False(ChangeWindowApprovalAuthorizer.IsAuthorized("DBA", ["Viewer"]));
         Assert.False(ChangeWindowApprovalAuthorizer.IsAuthorized("Application owner", ["Viewer"]));
     }
+
+    [Fact]
+    public void AuthorizedScopes_ListsOnlyWhatTheRoleMaySign()
+    {
+        Assert.Equal(["Change manager", "Application owner", "Platform"], ChangeWindowApprovalAuthorizer.AuthorizedScopes(["ITManager"]));
+        Assert.Equal(["Security"], ChangeWindowApprovalAuthorizer.AuthorizedScopes(["Auditor"]));
+        Assert.Empty(ChangeWindowApprovalAuthorizer.AuthorizedScopes(["Viewer"]));
+        Assert.Equal(ChangeWindowApprovalAuthorizer.KnownScopes, ChangeWindowApprovalAuthorizer.AuthorizedScopes(["Admin"]));
+    }
 }

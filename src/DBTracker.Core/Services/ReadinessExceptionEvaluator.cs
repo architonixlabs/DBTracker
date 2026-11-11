@@ -37,4 +37,45 @@ public static class ReadinessExceptionEvaluator
     public static bool CanApprove(ReadinessException exception, string approverUserId) =>
         !exception.RequiresSeparateApprover ||
         !string.Equals(exception.PreparedByUserId, approverUserId, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>The longest single exception or renewal allowed, so a waiver can't quietly become permanent.</summary>
+    public const int MaxDurationDays = 365;
+
+    /// <summary>Checks an expiry chosen for a new exception or a renewal: it must be in the future and within MaxDurationDays.</summary>
+    public static string? ValidateExpiry(DateTime expiresAtUtc, DateTime nowUtc)
+    {
+        if (expiresAtUtc <= nowUtc)
+        {
+            return "Choose an expiry date in the future.";
+        }
+        if (expiresAtUtc > nowUtc.AddDays(MaxDurationDays))
+        {
+            return $"An exception can last at most {MaxDurationDays} days. Renew it again later if it is still needed.";
+        }
+        return null;
+    }
+
+    /// <summary>The newest record in a renewal chain, i.e. the one no other exception renews.</summary>
+    public static bool IsLatestInChain(ReadinessException exception, IEnumerable<ReadinessException> all) =>
+        !all.Any(e => e.RenewalOfExceptionId == exception.Id);
+}
+
+/// <summary>The kinds of record an exception can waive a gate on. Each name matches what the gates look up.</summary>
+public static class ReadinessExceptionTargets
+{
+    public const string DatabaseInstance = "DatabaseInstance";
+    public const string MigrationCampaign = "MigrationCampaign";
+    public const string ChangeWindow = "ChangeWindow";
+    public const string RetirementChecklist = "RetirementChecklist";
+
+    public static IReadOnlyList<string> All { get; } = [DatabaseInstance, MigrationCampaign, ChangeWindow, RetirementChecklist];
+
+    public static string Describe(string targetType) => targetType switch
+    {
+        DatabaseInstance => "Instance",
+        MigrationCampaign => "Migration campaign",
+        ChangeWindow => "Change window",
+        RetirementChecklist => "Retirement checklist",
+        _ => targetType
+    };
 }

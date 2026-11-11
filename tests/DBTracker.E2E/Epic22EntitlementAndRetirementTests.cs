@@ -208,8 +208,9 @@ public class Epic22EntitlementAndRetirementTests
         // Record and approve a scoped D14 exception targeting this exact checklist.
         await GotoAsync("/exceptions");
         await WaitForCircuitAsync();
-        await _page.Locator("input[placeholder='Target type (e.g. MigrationCampaign)']").FillAsync("RetirementChecklist");
-        await _page.Locator("input[type=number]").First.FillAsync(checklistId.ToString());
+        await _page.Locator("[data-testid=exception-target-type]").SelectOptionAsync("RetirementChecklist");
+        await _page.WaitForTimeoutAsync(400);
+        await _page.Locator("[data-testid=exception-target]").SelectOptionAsync(checklistId.ToString());
         await _page.Locator("input[placeholder='Waived check/policy reference']").FillAsync("D22 retirement checklist (E2E)");
         await _page.Locator("textarea[placeholder='Reason']").FillAsync("E2E scoped bypass — remaining manual gates not completed in this test.");
         // Same Admin user both prepares and approves this exception below — uncheck "requires
@@ -219,7 +220,8 @@ public class Epic22EntitlementAndRetirementTests
         await _page.Locator("[data-testid=create-exception-button]").ClickAsync();
         await _page.WaitForTimeoutAsync(600);
 
-        var exceptionRow = _page.Locator("[data-testid=exception-row]", new PageLocatorOptions { HasText = "RetirementChecklist" });
+        // Newest first, so First is the exception just recorded even if earlier runs left others with the same reference.
+        var exceptionRow = _page.Locator("[data-testid=exception-row]", new PageLocatorOptions { HasText = "D22 retirement checklist (E2E)" }).First;
         await Assertions.Expect(exceptionRow.Locator("[data-testid=exception-status]")).ToContainTextAsync("PendingApproval");
         await exceptionRow.Locator("[data-testid=approve-exception-button]").ClickAsync();
         await _page.WaitForTimeoutAsync(600);

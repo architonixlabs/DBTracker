@@ -17,6 +17,11 @@ public class RecoveryObjective
     /// <summary>Reference only; full tracking lives in BackupCopyLocation.</summary>
     public string OffsiteCopyReferenceNote { get; set; } = string.Empty;
 
+    /// <summary>Copy expectations checked by BackupCopyExpectationEvaluator. Null means never recorded, which reports as Unknown, never as met.</summary>
+    public bool? RequiresOffsiteCopy { get; set; }
+    public bool? RequiresImmutableCopy { get; set; }
+    public bool? RequiresEncryptedCopies { get; set; }
+
     public string Notes { get; set; } = string.Empty;
 
     public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;

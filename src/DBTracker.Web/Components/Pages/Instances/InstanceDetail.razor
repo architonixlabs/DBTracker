@@ -509,6 +509,17 @@ else
                                 </InputSelect>
                             </div>
                             <div class="mb-2">
+                                <label class="form-label small" for="backup-chain-role">Backup-chain role</label>
+                                <InputSelect id="backup-chain-role" class="form-select form-select-sm" @bind-Value="_newRecord.ChainRole" aria-describedby="backup-chain-role-help" data-testid="backup-chain-role">
+                                    <option value="">Same as type</option>
+                                    @foreach (var m in Enum.GetValues<ChainMemberType>())
+                                    {
+                                        <option value="@m">@m</option>
+                                    }
+                                </InputSelect>
+                                <div class="form-text" id="backup-chain-role-help">Set this for a WAL archive, binlog or archival copy, which the type list can't express. It counts toward the recovery page's chain coverage.</div>
+                            </div>
+                            <div class="mb-2">
                                 <label class="form-label small" for="backup-status">Status</label>
                                 <InputSelect id="backup-status" class="form-select form-select-sm" @bind-Value="_newRecord.Status">
                                     @foreach (var s in Enum.GetValues<BackupStatus>())

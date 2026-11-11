@@ -26,4 +26,7 @@ public static class Roles
 
     /// <summary>Roles allowed to see cost figures. Narrower than ContractEvidencePolicy: a DBA can record a contract, but amounts are Admin/ITManager only.</summary>
     public const string CommercialEvidencePolicy = $"{Admin},{ItManager}";
+
+    /// <summary>Roles allowed to declare or lift change freezes: change management, not the people scheduling the changes.</summary>
+    public const string ChangeFreezePolicy = $"{Admin},{ItManager}";
 }
