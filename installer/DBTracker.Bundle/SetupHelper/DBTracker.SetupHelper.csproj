@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <!-- .NET Framework 4.6.2 ships with Windows Server 2016 and later, so the helper needs no runtime install. -->
+    <TargetFramework>net462</TargetFramework>
+    <!-- A 32-bit dism.exe cannot service a running 64-bit Windows. -->
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <Prefer32Bit>false</Prefer32Bit>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <AssemblyName>DBTracker.SetupHelper</AssemblyName>
+    <RootNamespace>DBTracker.SetupHelper</RootNamespace>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="System.ServiceProcess" />
+  </ItemGroup>
+
+</Project>

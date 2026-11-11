@@ -1,0 +1,144 @@
+<?xml version="1.0" encoding="utf-8"?>
+<?include PrereqMetadata.generated.wxi ?>
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:bal="http://wixtoolset.org/schemas/v4/wxs/bal"
+     xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util">
+
+  <Bundle Name="DBTracker Setup"
+          Manufacturer="Architonix Labs LLP"
+          Version="$(var.BundleVersion)"
+          UpgradeCode="237B335C-66AD-4BF6-9D7D-02A89DC76B1D"
+          AboutUrl="https://github.com/architonixlabs/DBTracker"
+          HelpUrl="https://github.com/architonixlabs/DBTracker/blob/main/DEPLOYMENT.md">
+
+    <Log Prefix="DBTracker-Setup" Extension="log" />
+
+    <BootstrapperApplication>
+      <bal:WixStandardBootstrapperApplication
+          Theme="hyperlinkLicense"
+          ThemeFile="Theme\DBTrackerTheme.xml"
+          LocalizationFile="Theme\DBTrackerTheme.wxl"
+          LicenseUrl="https://github.com/architonixlabs/DBTracker/blob/main/LICENSE"
+          LaunchTarget="http://localhost:[SitePort]/install"
+          ShowVersion="yes" />
+    </BootstrapperApplication>
+
+    <bal:Condition Message="DBTracker Setup needs 64-bit Windows 10, Windows Server 2016 or later."
+                   Condition="VersionNT64 AND VersionNT &gt;= v10.0" />
+
+    <!-- Overridable from the command line, e.g. DBTracker-Setup.exe /quiet SitePort=8200 InstallSqlExpress=1 -->
+    <Variable Name="InstallFolder" Type="formatted" Value="[WindowsVolume]inetpub\DBTracker" bal:Overridable="yes" />
+    <Variable Name="SitePort" Type="string" Value="8150" bal:Overridable="yes" />
+    <Variable Name="SiteName" Type="string" Value="DBTracker" bal:Overridable="yes" />
+    <Variable Name="AppPoolName" Type="string" Value="DBTracker" bal:Overridable="yes" />
+    <Variable Name="InstallSqlExpress" Type="numeric" Value="0" bal:Overridable="yes" />
+    <!-- Server that gets a login for the app pool identity. Blank skips it (do it yourself, see DEPLOYMENT.md). -->
+    <Variable Name="SqlLoginServer" Type="string" Value="" bal:Overridable="yes" />
+    <Variable Name="LaunchWizard" Type="numeric" Value="1" bal:Overridable="yes" />
+    <Variable Name="DotNetChannel" Type="string" Value="$(var.DotNetChannel)" />
+
+    <!-- IIS: each feature DBTracker relies on records 1 under InetStp\Components once enabled. -->
+    <util:RegistrySearch Id="IisW3svcSearch" Variable="IisW3svc" Root="HKLM" Key="SOFTWARE\Microsoft\InetStp\Components" Value="W3SVC" Result="value" Bitness="always64" />
+    <util:RegistrySearch Id="IisStaticContentSearch" Variable="IisStaticContent" Root="HKLM" Key="SOFTWARE\Microsoft\InetStp\Components" Value="StaticContent" Result="value" Bitness="always64" />
+    <util:RegistrySearch Id="IisDefaultDocumentSearch" Variable="IisDefaultDocument" Root="HKLM" Key="SOFTWARE\Microsoft\InetStp\Components" Value="DefaultDocument" Result="value" Bitness="always64" />
+    <util:RegistrySearch Id="IisHttpErrorsSearch" Variable="IisHttpErrors" Root="HKLM" Key="SOFTWARE\Microsoft\InetStp\Components" Value="HttpErrors" Result="value" Bitness="always64" />
+    <util:RegistrySearch Id="IisRequestFilteringSearch" Variable="IisRequestFiltering" Root="HKLM" Key="SOFTWARE\Microsoft\InetStp\Components" Value="RequestFiltering" Result="value" Bitness="always64" />
+    <util:RegistrySearch Id="IisWebSocketsSearch" Variable="IisWebSockets" Root="HKLM" Key="SOFTWARE\Microsoft\InetStp\Components" Value="WebSockets" Result="value" Bitness="always64" />
+    <util:RegistrySearch Id="IisManagementConsoleSearch" Variable="IisManagementConsole" Root="HKLM" Key="SOFTWARE\Microsoft\InetStp\Components" Value="ManagementConsole" Result="value" Bitness="always64" />
+
+    <!-- Hosting Bundle: the ASP.NET Core Module V2 is only installed by the Hosting Bundle (the SDK and
+         plain runtime installers don't add it), and its major version tracks the .NET major (20.x = .NET 10).
+         The ASP.NET Core Shared Framework registry keys aren't written for .NET 10 runtimes installed by
+         the SDK, so the runtime is detected by its folder instead. -->
+    <util:FileSearch Id="AncmSearch" Variable="AncmVersion" Path="[ProgramFiles64Folder]IIS\Asp.Net Core Module\V2\aspnetcorev2.dll" Result="version" />
+    <util:DirectorySearch Id="AspNetCoreRuntimeSearch" Variable="AspNetCoreRuntimePresent" Path="[ProgramFiles64Folder]dotnet\shared\Microsoft.AspNetCore.App\$(var.AspNetCoreRuntimeVersion)" Result="exists" />
+
+    <!-- SQL Server: any local instance is listed under Instance Names\SQL. -->
+    <util:RegistrySearch Id="SqlInstancesSearch" Variable="SqlInstancesExist" Root="HKLM" Key="SOFTWARE\Microsoft\Microsoft SQL Server\Instance Names\SQL" Result="exists" Bitness="always64" />
+    <util:RegistrySearch Id="SqlExpressInstanceSearch" Variable="SqlExpressInstanceExists" Root="HKLM" Key="SOFTWARE\Microsoft\Microsoft SQL Server\Instance Names\SQL" Value="SQLEXPRESS" Result="exists" Bitness="always64" />
+    <!-- With no local SQL Server, the only server Setup can grant a login on is the Express instance it
+         would install; it's only used when that box is ticked (see the MsiProperty conditions). -->
+    <SetVariable Id="DefaultSqlLoginServer" Variable="SqlLoginServer" Value=".\SQLEXPRESS" Condition="NOT SqlInstancesExist AND NOT SqlLoginServer" After="SqlInstancesSearch" />
+
+    <Chain>
+      <ExePackage Id="EnableIis"
+                  DisplayName="IIS with the WebSocket Protocol"
+                  SourceFile="$(var.SetupHelperPath)"
+                  Name="SetupHelper\DBTracker.SetupHelper.exe"
+                  InstallArguments="enable-iis"
+                  DetectCondition="IisW3svc = 1 AND IisStaticContent = 1 AND IisDefaultDocument = 1 AND IisHttpErrors = 1 AND IisRequestFiltering = 1 AND IisWebSockets = 1 AND IisManagementConsole = 1"
+                  PerMachine="yes"
+                  Permanent="yes"
+                  Vital="yes"
+                  Compressed="yes">
+        <ExitCode Value="3010" Behavior="scheduleReboot" />
+      </ExePackage>
+
+      <ExePackage Id="HostingBundle"
+                  DisplayName="ASP.NET Core $(var.AspNetCoreRuntimeVersion) Hosting Bundle"
+                  InstallArguments="/install /quiet /norestart"
+                  RepairArguments="/repair /quiet /norestart"
+                  DetectCondition="AncmVersion &gt;= v$(var.AncmMinVersion) AND AspNetCoreRuntimePresent"
+                  PerMachine="yes"
+                  Permanent="yes"
+                  Vital="yes"
+                  LogPathVariable="HostingBundleLog">
+        <ExePackagePayload Name="$(var.HostingBundleFileName)"
+                           DownloadUrl="$(var.HostingBundleUrl)"
+                           Size="$(var.HostingBundleSize)"
+                           Hash="$(var.HostingBundleSha512)"
+                           ProductName="Microsoft ASP.NET Core $(var.AspNetCoreRuntimeVersion) Hosting Bundle"
+                           Description="Microsoft ASP.NET Core $(var.AspNetCoreRuntimeVersion) Hosting Bundle"
+                           Version="$(var.AspNetCoreRuntimeVersion)" />
+        <ExitCode Value="3010" Behavior="scheduleReboot" />
+        <ExitCode Value="1641" Behavior="scheduleReboot" />
+      </ExePackage>
+
+      <!-- Same detection as the Hosting Bundle, so IIS restarts only in the run that installed it. -->
+      <ExePackage Id="RestartIis"
+                  DisplayName="Restart IIS"
+                  SourceFile="$(var.SetupHelperPath)"
+                  Name="SetupHelper\Restart\DBTracker.SetupHelper.exe"
+                  CacheId="DBTracker.SetupHelper.RestartIis.$(var.BundleVersion)"
+                  InstallArguments="restart-iis"
+                  DetectCondition="AncmVersion &gt;= v$(var.AncmMinVersion) AND AspNetCoreRuntimePresent"
+                  PerMachine="yes"
+                  Permanent="yes"
+                  Vital="yes"
+                  Compressed="yes" />
+
+      <ExePackage Id="SqlExpress"
+                  DisplayName="SQL Server Express"
+                  InstallCondition="InstallSqlExpress = 1 AND NOT SqlInstancesExist"
+                  DetectCondition="SqlExpressInstanceExists"
+                  InstallArguments="/IACCEPTSQLSERVERLICENSETERMS /ENU /ACTION=Install /QUIET"
+                  PerMachine="yes"
+                  Permanent="yes"
+                  Vital="yes">
+        <ExePackagePayload Name="$(var.SqlExpressFileName)"
+                           DownloadUrl="$(var.SqlExpressUrl)"
+                           Size="$(var.SqlExpressSize)"
+                           Hash="$(var.SqlExpressSha512)"
+                           ProductName="$(var.SqlExpressProductName)"
+                           Description="Microsoft SQL Server Express installer"
+                           Version="$(var.SqlExpressVersion)" />
+        <ExitCode Value="3010" Behavior="scheduleReboot" />
+      </ExePackage>
+
+      <MsiPackage Id="DBTrackerMsi"
+                  SourceFile="$(var.DBTrackerMsiPath)"
+                  Vital="yes"
+                  Compressed="yes">
+        <MsiProperty Name="INSTALLFOLDER" Value="[InstallFolder]" />
+        <MsiProperty Name="SITE_NAME" Value="[SiteName]" />
+        <MsiProperty Name="APPPOOL_NAME" Value="[AppPoolName]" />
+        <MsiProperty Name="SITE_PORT" Value="[SitePort]" />
+        <MsiProperty Name="LAUNCH_WIZARD" Value="[LaunchWizard]" />
+        <!-- Grant only on a server that exists after this run: an existing local instance the user named,
+             or the Express instance this run installed. -->
+        <MsiProperty Name="SQL_SERVER" Value="[SqlLoginServer]" Condition="SqlLoginServer AND (SqlInstancesExist OR InstallSqlExpress = 1)" />
+        <MsiProperty Name="SQL_GRANT_LOGIN" Value="1" Condition="SqlLoginServer AND (SqlInstancesExist OR InstallSqlExpress = 1)" />
+      </MsiPackage>
+    </Chain>
+  </Bundle>
+</Wix>
