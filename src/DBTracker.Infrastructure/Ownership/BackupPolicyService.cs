@@ -5,12 +5,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace DBTracker.Infrastructure.Ownership;
 
-/// <summary>
-/// Reusable, version-able cadence/retention/restore-test policies (U21) — builds on U12's org-default
-/// + per-instance-override pattern by giving the default a name and a bumped version number.
-/// Applying a policy copies its values onto the target instances' own fields after an explicit
-/// preview (BackupPolicyApplyPreviewBuilder); it never auto-applies on policy edit.
-/// </summary>
+/// <summary>Named, versioned backup policies. Applying one copies its values onto instances after a preview; editing a policy never auto-applies it.</summary>
 public class BackupPolicyService(IDbContextFactory<DBTrackerDbContext> factory, AuditRecorder audit)
 {
     public async Task<List<BackupPolicy>> ListAsync()
@@ -47,7 +42,7 @@ public class BackupPolicyService(IDbContextFactory<DBTrackerDbContext> factory, 
         return true;
     }
 
-    /// <summary>Edits a policy's values and bumps its Version — the before/after is captured in the U19 audit trail rather than a separate version-history table.</summary>
+    /// <summary>Edits a policy and bumps its Version; the before/after values go to the audit trail.</summary>
     public async Task UpdateAsync(int id, int expectedBackupIntervalHours, int? retentionPolicyDays, int? restoreTestIntervalDays, string updatedByUserId, string updatedByName)
     {
         using var db = await factory.CreateDbContextAsync();

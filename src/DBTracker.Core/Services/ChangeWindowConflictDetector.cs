@@ -1,9 +1,9 @@
 namespace DBTracker.Core.Services;
 
-/// <summary>One other scheduled D12 ChangeWindow sharing at least one affected instance with the candidate window being checked.</summary>
+/// <summary>Another scheduled change window sharing at least one instance with the candidate.</summary>
 public record SiblingChangeWindow(int Id, string Title, DateTime PlannedStartUtc, DateTime PlannedEndUtc);
 
-/// <summary>One instance's existing (Epic 12) maintenance window, if any.</summary>
+/// <summary>One instance's existing maintenance window, if any.</summary>
 public record InstanceMaintenanceWindow(string InstanceName, DateTime? MaintenanceUntilUtc, string MaintenanceReason);
 
 public record ChangeWindowConflictResult(
@@ -13,12 +13,7 @@ public record ChangeWindowConflictResult(
     public bool HasFreezeConflicts => FreezeConflicts.Count > 0;
 }
 
-/// <summary>
-/// Pure (no I/O) overlap detection for D12. Two windows conflict when their [start, end) ranges
-/// overlap, regardless of which started first. A maintenance-window overlap is reported separately
-/// and never folds into "conflict" — Epic 12's maintenance suppresses alerts, it does not prove a
-/// change is safe, so it must stay visible rather than being treated as clearance.
-/// </summary>
+/// <summary>Overlap detection on [start, end) ranges. A maintenance-window overlap is reported separately, because maintenance only suppresses alerts and never means a change is safe.</summary>
 public static class ChangeWindowConflictDetector
 {
     public static ChangeWindowConflictResult Detect(

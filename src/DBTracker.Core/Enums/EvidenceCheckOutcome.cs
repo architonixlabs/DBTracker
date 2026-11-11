@@ -1,10 +1,6 @@
 namespace DBTracker.Core.Enums;
 
-/// <summary>
-/// Shared outcome for one discrete evidence check across D11 (rehearsal) and D13 (post-change
-/// validation) — correctness/performance/application-tests/integrity/jobs-permissions/HA-replication/
-/// backup-restore. NotPerformed is the default and is never treated as Passed anywhere that reads it.
-/// </summary>
+/// <summary>Outcome of one evidence check in a rehearsal or post-change validation. NotPerformed is the default and never counts as Passed.</summary>
 public enum EvidenceCheckOutcome
 {
     NotPerformed,

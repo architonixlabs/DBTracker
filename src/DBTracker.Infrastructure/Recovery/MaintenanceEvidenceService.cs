@@ -8,13 +8,7 @@ namespace DBTracker.Infrastructure.Recovery;
 
 public record MaintenanceEvidenceRow(MaintenanceEvidenceRecord Record, MaintenanceEvidenceStatus Status);
 
-/// <summary>
-/// D18 — integrity/HA/maintenance-job evidence, deliberately separate from backup-health plumbing:
-/// nothing here ever reads or writes BackupRecord/BackupHealth, and nothing in BackupHealthCalculator
-/// reads this table. A reviewed external monitoring/ticket link (Source != ManuallyEntered) requires
-/// SourceReference — enforced here as well as in the UI, since this is also where an import path
-/// would land.
-/// </summary>
+/// <summary>Integrity, HA and maintenance-job evidence, never read by backup health or vice versa. A non-manual Source requires SourceReference, checked here too because imports land here.</summary>
 public class MaintenanceEvidenceService(IDbContextFactory<DBTrackerDbContext> factory, AuditRecorder audit)
 {
     public async Task<List<MaintenanceEvidenceRow>> ListForInstanceAsync(int instanceId)

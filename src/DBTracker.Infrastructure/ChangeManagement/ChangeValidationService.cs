@@ -5,12 +5,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace DBTracker.Infrastructure.ChangeManagement;
 
-/// <summary>
-/// D13 — post-change validation and sign-off per instance within a D10 MigrationCampaign. Recording
-/// a validation or a sign-off here never itself completes the campaign — CampaignCompletionGateService
-/// (via the pure ChangeCompletionGateEvaluator) is the only thing CampaignService.TransitionAsync
-/// consults before allowing CampaignState.Completed.
-/// </summary>
+/// <summary>Post-change validation and sign-off per instance. Recording them never completes the campaign; only the completion gate can.</summary>
 public class ChangeValidationService(IDbContextFactory<DBTrackerDbContext> factory, AuditRecorder audit)
 {
     public async Task<List<ChangeValidation>> ListForCampaignAsync(int campaignId)

@@ -5,16 +5,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace DBTracker.Infrastructure.MigrationPlanning;
 
-/// <summary>
-/// D09 — upgrade-readiness checklist per instance/target pairing, built on top of D07/D08's own
-/// evidence. CreateChecklistAsync seeds one item per standard ReadinessCheckArea at Unknown status —
-/// nothing here ever starts a check as Passed. UpdateTargetAsync is the "changed target invalidates
-/// affected checks" rule from the acceptance criteria: it marks every already-recorded (non-Unknown)
-/// item IsInvalidated so ReadinessChecklistAggregator reports it as Unknown again, while leaving the
-/// original Status/Findings in place for history. Evidence expiry (ReadinessCheckItem.
-/// EvidenceExpiresAtUtc) is purely time-based and needs no write here — ReadinessChecklistAggregator
-/// recomputes it live against "now" every time it's read.
-/// </summary>
+/// <summary>Readiness checklists seeded at Unknown. UpdateTargetAsync invalidates every recorded item while keeping its original result; evidence expiry is computed on read, so it needs no write.</summary>
 public class ReadinessChecklistService(IDbContextFactory<DBTrackerDbContext> factory, AuditRecorder audit)
 {
     private static readonly (ReadinessCheckArea Area, string Label)[] StandardAreas =
@@ -110,7 +101,7 @@ public class ReadinessChecklistService(IDbContextFactory<DBTrackerDbContext> fac
         return true;
     }
 
-    /// <summary>A changed migration target invalidates every non-Unknown check already recorded on this checklist — it stays visible for history but counts as Unknown again until re-reviewed against the new target.</summary>
+    /// <summary>A changed target invalidates every recorded check; each stays visible but counts as Unknown until re-reviewed.</summary>
     public async Task<bool> UpdateTargetAsync(int checklistId, string newTargetLabel, string actorName)
     {
         using var db = await factory.CreateDbContextAsync();

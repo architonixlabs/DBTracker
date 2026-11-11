@@ -2,12 +2,7 @@ using DBTracker.Core.Enums;
 
 namespace DBTracker.Core.Entities;
 
-/// <summary>
-/// One alternative recorded and compared on a D10 MigrationCampaign — upgrade, patch, replace,
-/// retire or a documented support-extension/exception. IsChosen marks which one the campaign is
-/// actually proceeding with; recording the others preserves the comparison instead of only keeping
-/// the final decision.
-/// </summary>
+/// <summary>One option compared on a migration campaign (upgrade, patch, replace, retire, exception). Keeping the rejected ones preserves the comparison; IsChosen marks the one in progress.</summary>
 public class CampaignAlternative
 {
     public int Id { get; set; }
@@ -22,7 +17,7 @@ public class CampaignAlternative
     public string RiskNotes { get; set; } = string.Empty;
     public bool IsChosen { get; set; }
 
-    /// <summary>D21 feed — optional link to the reviewed EditionCostEstimate this alternative's EstimatedCost came from, kept for traceability. Never auto-syncs after the fact; EstimatedCost stays the authoritative, explicitly-entered figure on this row.</summary>
+    /// <summary>Optional link to the cost estimate EstimatedCost came from, for traceability. Never auto-synced; EstimatedCost stays authoritative.</summary>
     public int? SourceCostEstimateId { get; set; }
     public EditionCostEstimate? SourceCostEstimate { get; set; }
 

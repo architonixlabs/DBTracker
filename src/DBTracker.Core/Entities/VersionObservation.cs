@@ -2,13 +2,7 @@ using DBTracker.Core.Enums;
 
 namespace DBTracker.Core.Entities;
 
-/// <summary>
-/// One version-metadata observation attempt (D06) — manual entry/import today; FutureCollector is a
-/// labelled extension point only, not implemented. A failed attempt (PermissionDenied/Unreachable)
-/// is recorded honestly and never overwrites VersionIdentity (the declared/attested value) and never
-/// marks the instance retired. DriftStatus/DriftDetail compare this observation against the
-/// instance's current declared VersionIdentity at the time it was recorded.
-/// </summary>
+/// <summary>One version-metadata observation (manual entry or import). A failed attempt is recorded but never overwrites the declared identity or retires the instance.</summary>
 public class VersionObservation
 {
     public int Id { get; set; }

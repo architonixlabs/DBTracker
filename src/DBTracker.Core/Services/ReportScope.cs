@@ -1,10 +1,6 @@
 namespace DBTracker.Core.Services;
 
-/// <summary>
-/// What a report run actually covers (U09) — made explicit so "current filtered view" is never
-/// silently sent when the viewer meant "everything", or vice versa. Preview, download and send all
-/// derive from the same scope.
-/// </summary>
+/// <summary>What a report run covers, so a filtered view is never sent when everything was meant, or the reverse. Preview, download and send all use it.</summary>
 public record ReportScope(bool IsFullInventory, IReadOnlySet<int> InstanceIds, string Description)
 {
     public static ReportScope Full(string description = "Full inventory") => new(true, new HashSet<int>(), description);

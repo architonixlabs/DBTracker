@@ -2,16 +2,7 @@ using DBTracker.Core.Enums;
 
 namespace DBTracker.Core.Entities;
 
-/// <summary>
-/// D18 — one recorded/imported result of an integrity check, replication/failover drill, or a
-/// required recurring maintenance job. Named generically (CheckType, not "DBCC result") so it covers
-/// every engine, not just SQL Server. This is always a point-in-time recorded result — never a
-/// continuously measured HA health signal — and is deliberately kept off BackupHealth entirely
-/// (U04's "separate concerns" pattern): a Failed/Stale/Missing row here never changes a backup
-/// health badge, and vice versa. RelatedDependencyId optionally reuses D07's InstanceDependency to
-/// identify which node/deployment this result is about, instead of inventing a parallel topology
-/// model; NodeOrDeploymentLabel is the free-text fallback when there's no matching dependency row.
-/// </summary>
+/// <summary>A recorded integrity check, failover drill, or maintenance job result. Point-in-time only, and kept apart from backup health in both directions.</summary>
 public class MaintenanceEvidenceRecord
 {
     public int Id { get; set; }
@@ -23,7 +14,7 @@ public class MaintenanceEvidenceRecord
 
     public string NodeOrDeploymentLabel { get; set; } = string.Empty;
 
-    /// <summary>Optional reuse of D07's dependency/topology model for the node/deployment this result covers.</summary>
+    /// <summary>Optional dependency row identifying the node or deployment this result covers.</summary>
     public int? RelatedDependencyId { get; set; }
     public InstanceDependency? RelatedDependency { get; set; }
 

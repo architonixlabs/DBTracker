@@ -7,6 +7,6 @@ public enum SubscriptionScope
     Instance,
     Company,
 
-    /// <summary>Instances owned by a specific Team (U21) — membership narrows what's surfaced, same as Company; it never grants visibility beyond the viewer's role.</summary>
+    /// <summary>Instances owned by a specific team. Narrows what's surfaced; never grants visibility beyond the viewer's role.</summary>
     Team
 }

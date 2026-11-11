@@ -169,8 +169,7 @@ public static class SeedData
             Notes = "Quarterly DR drill — restored to staging, verified row counts."
         });
 
-        // Seed notifications matching the Failed/Overdue instances above, so the bell has
-        // something to show without waiting for the first background alert sweep.
+        // Seeded directly so the bell has something to show before the first alert sweep.
         instances[3].LastNotifiedHealth = BackupHealth.Failed;
         instances[3].LastNotifiedUtc = now.AddHours(-2);
         instances[8].LastNotifiedHealth = BackupHealth.Failed;
@@ -208,10 +207,7 @@ public static class SeedData
                 IsRead = true
             });
 
-        // An open, unacknowledged incident on the same Failed instance (U08) — the alert sweep
-        // that would normally open this is disabled in the Testing environment
-        // (Alerts:IntervalMinutes: 0), same reason the notifications above are seeded directly
-        // rather than produced by a live sweep.
+        // Seeded directly because the alert sweep is disabled in Testing (Alerts:IntervalMinutes: 0).
         db.Incidents.Add(new Incident
         {
             DatabaseInstanceId = instances[3].Id,
@@ -221,12 +217,8 @@ public static class SeedData
 
         await db.SaveChangesAsync();
 
-        // Epic 18 (D01-D06): seed enough structured identity/catalogue/advisory data for the
-        // lifecycle pages to show something real without every E2E test having to build it from
-        // scratch. ARXMAIL-PROD-01 (PostgreSQL) demonstrates an attested identity with a support
-        // deadline approaching inside the default 30-day notice window; CONTOSO-HR-MYSQL
-        // demonstrates a manually-entered, more-precise raw version (D01 layering on top of the
-        // free-text Version field) with a full patch-baseline and advisory story.
+        // Lifecycle seed data: ARXMAIL-PROD-01 has an attested identity with a support deadline inside the 30-day notice window;
+        // CONTOSO-HR-MYSQL has a more precise manual version with a full patch-baseline and advisory story.
         db.VersionIdentities.AddRange(
             new VersionIdentity
             {

@@ -1,6 +1,6 @@
 namespace DBTracker.Core.Enums;
 
-/// <summary>D12 — a go/no-go decision recorded in a cutover journal entry. None means no decision is attached to that particular entry (e.g. a plain action/note).</summary>
+/// <summary>A go/no-go decision on a cutover journal entry. None means the entry carries no decision.</summary>
 public enum GoNoGoDecision
 {
     None,

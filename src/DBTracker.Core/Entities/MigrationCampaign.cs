@@ -2,14 +2,7 @@ using DBTracker.Core.Enums;
 
 namespace DBTracker.Core.Entities;
 
-/// <summary>
-/// A migration "wave" (D10) grouping affected deployments under one source/target/reason/method with
-/// accountable owners drawn from Epic 17's Team model. State only ever moves through
-/// CampaignStateTransitionValidator's allowed graph, with every transition recorded in
-/// CampaignStateTransitions — scheduling a campaign (reaching Scheduled) is purely a planning fact and
-/// deliberately never writes to PathAssessment/ReadinessChecklist/SupportRunway, so it cannot imply a
-/// reduced risk/readiness status elsewhere in the app.
-/// </summary>
+/// <summary>A migration wave grouping deployments under one source, target, and method. State moves only through CampaignStateTransitionValidator, and scheduling never implies reduced risk elsewhere.</summary>
 public class MigrationCampaign
 {
     public int Id { get; set; }

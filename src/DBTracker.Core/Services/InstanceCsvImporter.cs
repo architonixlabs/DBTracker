@@ -7,19 +7,19 @@ namespace DBTracker.Core.Services;
 public record ImportRowError(int RowNumber, string Message);
 public record ImportResult(IReadOnlyList<DatabaseInstance> Valid, IReadOnlyList<ImportRowError> Errors);
 
-/// <summary>How a parsed CSV row relates to the existing inventory (U17) — computed by matching on Name (case-insensitive), the chosen stable identity for re-imports.</summary>
+/// <summary>How a parsed CSV row relates to the inventory, matched by Name (case-insensitive).</summary>
 public enum ImportRowPlan
 {
-    /// <summary>No existing instance has this name — would insert a new row.</summary>
+    /// <summary>No existing instance has this name; a new row would be created.</summary>
     Create,
 
-    /// <summary>Exactly one existing instance has this name — would update it in place rather than duplicating.</summary>
+    /// <summary>Exactly one existing instance has this name; it would be updated in place.</summary>
     Update,
 
-    /// <summary>Matches an existing instance whose fields are already identical — nothing would change.</summary>
+    /// <summary>Matches an existing instance whose fields are already identical; nothing would change.</summary>
     Skip,
 
-    /// <summary>Matches more than one existing instance, or repeats a name already used earlier in this same file — too ambiguous to apply automatically.</summary>
+    /// <summary>Matches several instances, or repeats a name earlier in the file; too ambiguous to apply.</summary>
     Ambiguous
 }
 
@@ -32,13 +32,7 @@ public record ImportPreviewResult(IReadOnlyList<ImportRowPreview> Rows, IReadOnl
     public int AmbiguousCount => Rows.Count(r => r.Plan == ImportRowPlan.Ambiguous);
 }
 
-/// <summary>
-/// Parses a CSV of database instances for bulk onboarding and repeat re-import (U17) — adding fifty
-/// databases one at a time through the form doesn't scale, and re-importing the same export should
-/// update existing rows rather than duplicate them. Pure (no I/O): the caller reads the uploaded
-/// file and persists the result. Header is order-independent and case-insensitive; only Name and
-/// Engine are required. Validation is shared with the create/edit form via InstanceValidator (U13).
-/// </summary>
+/// <summary>Parses an instance CSV for onboarding and repeat re-import, updating existing rows instead of duplicating them. Headers are order- and case-insensitive; only Name and Engine are required, and validation is shared with the form via InstanceValidator.</summary>
 public static class InstanceCsvImporter
 {
     public static readonly string[] Columns =
@@ -51,7 +45,7 @@ public static class InstanceCsvImporter
 
     public static string TemplateCsv() => string.Join(",", Columns) + "\n";
 
-    /// <summary>Back-compat simple parse (no matching against existing inventory) — every row that parses cleanly comes back as "would create".</summary>
+    /// <summary>Parse without matching against existing inventory; every clean row comes back as Create.</summary>
     public static ImportResult Parse(string csvContent)
     {
         var preview = ParseForImport(csvContent, new Dictionary<string, DatabaseInstance>(StringComparer.OrdinalIgnoreCase));
@@ -59,12 +53,7 @@ public static class InstanceCsvImporter
         return new ImportResult(valid, preview.Errors);
     }
 
-    /// <summary>
-    /// Parses the CSV and classifies every row as Create/Update/Skip/Ambiguous against the supplied
-    /// existing instances (keyed by Name, case-insensitive — the stable match rule). A name repeated
-    /// within the file itself is also Ambiguous, so a typo'd duplicate row never silently overwrites
-    /// the same instance twice in one import.
-    /// </summary>
+    /// <summary>Parses the CSV and classifies each row as Create/Update/Skip/Ambiguous against existing instances by Name. A name repeated within the file is Ambiguous, so one import can't update the same instance twice.</summary>
     public static ImportPreviewResult ParseForImport(string csvContent, IReadOnlyDictionary<string, DatabaseInstance> existingByName)
     {
         var rows = new List<ImportRowPreview>();
@@ -101,12 +90,8 @@ public static class InstanceCsvImporter
                 return idx >= 0 && idx < cells.Count ? cells[idx].Trim() : "";
             }
 
-            // A column simply absent from this file's header (vs. present but empty) must never be
-            // read as "clear this field" on an Update row — a lean re-export covering only a few
-            // columns (e.g. Name/Engine/Application) would otherwise silently blank every other
-            // field, including contact info, on the matched existing instance. Present-but-empty
-            // still means "set to empty": only a genuinely missing column falls back to whatever
-            // the matched existing instance already has.
+            // A column missing from the header keeps the existing value on Update, so a partial re-export can't blank
+            // fields like contact info. A column present but empty still means set to empty.
             var name = Get("Name");
             if (string.IsNullOrWhiteSpace(name))
             {
@@ -205,9 +190,7 @@ public static class InstanceCsvImporter
             if (existing is not null)
             {
                 candidate.Id = existing.Id;
-                // Carries over the existing row's concurrency token (U13) — without this, updating
-                // via CSV import would always fail EF's optimistic-concurrency check, since a fresh
-                // DatabaseInstance's RowVersion defaults to empty rather than what's actually stored.
+                // Carry over the stored RowVersion; a fresh instance's empty token would fail EF's concurrency check.
                 candidate.RowVersion = existing.RowVersion;
                 var plan = IsUnchanged(existing, candidate) ? ImportRowPlan.Skip : ImportRowPlan.Update;
                 rows.Add(new ImportRowPreview(rowNumber, plan, candidate, existing.Id, null));
@@ -241,12 +224,7 @@ public static class InstanceCsvImporter
         existing.RunbookUrl == candidate.RunbookUrl &&
         existing.Notes == candidate.Notes;
 
-    /// <summary>
-    /// Splits raw CSV text into records (rows of cells), respecting RFC-4180-style quoting: a
-    /// quoted field can contain commas and literal newlines, and "" inside a quoted field is a
-    /// literal quote character. Unlike splitting on '\n' first, this never breaks a quoted
-    /// multi-line field into two rows.
-    /// </summary>
+    /// <summary>Splits CSV text into records with RFC 4180 quoting: quoted fields may contain commas and newlines, and "" is a literal quote.</summary>
     private static List<List<string>> SplitCsvRecords(string content)
     {
         var records = new List<List<string>>();

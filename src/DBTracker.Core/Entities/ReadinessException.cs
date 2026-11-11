@@ -2,27 +2,17 @@ using DBTracker.Core.Enums;
 
 namespace DBTracker.Core.Entities;
 
-/// <summary>
-/// D14 — the generic, reusable exception/waiver mechanism D05/D09/D11/D12/D13 all reference: a
-/// TargetType + TargetId (e.g. "MigrationCampaign"/campaignId, "RehearsalRecord"/rehearsalId,
-/// "ReadinessCheckItem"/itemId, "SupportRunwayDecision"/decisionId, "ChangeWindow"/windowId) plus
-/// exactly which policy/gate is being waived (WaivedCheckReference). An exception is an explicit,
-/// time-boxed risk acceptance — it never changes any vendor fact (D02/D03) and never clears the
-/// underlying risk; IsVendorSupportCoverage is fixed false specifically so this table is never
-/// confused with actual paid vendor support entitlement (that remains a separate, later-epic concept).
-/// ReadinessExceptionEvaluator (pure) computes the live effective status from Status + ExpiresAtUtc —
-/// nothing here mutates Status to "Expired" on its own, the same pattern D09 uses for evidence expiry.
-/// RenewalOfExceptionId preserves the rejection/renewal chain instead of overwriting history.
-/// </summary>
+/// <summary>A time-boxed waiver of one named gate on one target (TargetType + TargetId). It never changes vendor facts or clears the risk, and is never paid vendor coverage.</summary>
+/// <remarks>Effective status, including Expired, is computed by ReadinessExceptionEvaluator; RenewalOfExceptionId keeps the renewal chain.</remarks>
 public class ReadinessException
 {
     public int Id { get; set; }
 
-    /// <summary>What kind of record this exception covers, e.g. "MigrationCampaign", "RehearsalRecord", "ChangeWindow", "ReadinessCheckItem", "SupportRunwayDecision", "DatabaseInstance". Not an enum — the set of waivable targets grows as new features reference this table.</summary>
+    /// <summary>Kind of record covered, e.g. "MigrationCampaign", "ChangeWindow", "DatabaseInstance". A string because the set of waivable targets grows.</summary>
     public string TargetType { get; set; } = string.Empty;
     public int TargetId { get; set; }
 
-    /// <summary>Exactly which policy/gate is being waived (e.g. "D11 rehearsal evidence", "D13 completion gate: Application tests", "D03 support-runway notice").</summary>
+    /// <summary>Exactly which policy or gate is waived (e.g. "rehearsal evidence", "completion gate: Application tests").</summary>
     public string WaivedCheckReference { get; set; } = string.Empty;
 
     public string Reason { get; set; } = string.Empty;
@@ -64,7 +54,7 @@ public class ReadinessException
     public int? RenewalOfExceptionId { get; set; }
     public ReadinessException? RenewalOfException { get; set; }
 
-    /// <summary>Dedupe state for the expiry-notice sweep (ReadinessExceptionService.EvaluateAndNotifyExpiringAsync) — set once the owner has been alerted that this exception has newly become Expired, so the same expiry isn't re-notified every sweep.</summary>
+    /// <summary>Set once the owner has been told this exception expired, so the sweep doesn't re-notify.</summary>
     public DateTime? ExpiryNotifiedAtUtc { get; set; }
 
     public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;

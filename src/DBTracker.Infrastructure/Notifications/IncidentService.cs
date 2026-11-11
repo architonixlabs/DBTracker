@@ -3,7 +3,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace DBTracker.Infrastructure.Notifications;
 
-/// <summary>User-facing incident operations (U08) — acknowledge, assign, add a note/ticket reference. None of these touch backup health; they're a response-tracking overlay.</summary>
+/// <summary>Acknowledge, assign, and note incidents. None of these touch backup health.</summary>
 public class IncidentService(IDbContextFactory<DBTrackerDbContext> factory)
 {
     public async Task<Incident?> GetOpenAsync(int instanceId)
@@ -22,11 +22,7 @@ public class IncidentService(IDbContextFactory<DBTrackerDbContext> factory)
             .ToListAsync();
     }
 
-    /// <summary>
-    /// Incidents that were open as of a specific past instant (U22 trend comparisons) — opened at or
-    /// before asOfUtc, and either still open or closed after asOfUtc. Uses the incident's own real
-    /// OpenedAtUtc/ClosedAtUtc timestamps rather than recomputing health from today's inventory.
-    /// </summary>
+    /// <summary>Incidents open at a past instant, from their stored OpenedAtUtc/ClosedAtUtc rather than recomputed health.</summary>
     public async Task<List<Incident>> ListOpenAsOfAsync(DateTime asOfUtc)
     {
         using var db = await factory.CreateDbContextAsync();

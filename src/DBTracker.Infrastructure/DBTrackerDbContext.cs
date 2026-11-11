@@ -30,7 +30,6 @@ public class DBTrackerDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<BackupPolicy> BackupPolicies => Set<BackupPolicy>();
     public DbSet<ContactCorrectionRequest> ContactCorrectionRequests => Set<ContactCorrectionRequest>();
 
-    // Epic 18 (D01-D06): database identity, releases and support lifecycle.
     public DbSet<VersionIdentity> VersionIdentities => Set<VersionIdentity>();
     public DbSet<ClusterNodeVersion> ClusterNodeVersions => Set<ClusterNodeVersion>();
     public DbSet<ReleaseCatalogEntry> ReleaseCatalogEntries => Set<ReleaseCatalogEntry>();
@@ -41,7 +40,6 @@ public class DBTrackerDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<AdvisoryInstanceAssessment> AdvisoryInstanceAssessments => Set<AdvisoryInstanceAssessment>();
     public DbSet<VersionObservation> VersionObservations => Set<VersionObservation>();
 
-    // Epic 19 (D07-D10): dependency assessment and migration planning.
     public DbSet<InstanceDependency> InstanceDependencies => Set<InstanceDependency>();
     public DbSet<PathSupportRule> PathSupportRules => Set<PathSupportRule>();
     public DbSet<PathAssessment> PathAssessments => Set<PathAssessment>();
@@ -53,9 +51,6 @@ public class DBTrackerDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<CampaignStateTransition> CampaignStateTransitions => Set<CampaignStateTransition>();
     public DbSet<CampaignApproval> CampaignApprovals => Set<CampaignApproval>();
 
-    // Epic 20 (D11-D15): rehearsal/recovery evidence, scheduled change windows and cutover journal,
-    // post-change validation, generic readiness exceptions, and the lifecycle workspace (read-only
-    // over existing data — no new DbSet needed for D15 itself).
     public DbSet<RehearsalRecord> RehearsalRecords => Set<RehearsalRecord>();
     public DbSet<RehearsalRollbackDecisionPoint> RehearsalRollbackDecisionPoints => Set<RehearsalRollbackDecisionPoint>();
     public DbSet<ChangeWindow> ChangeWindows => Set<ChangeWindow>();
@@ -66,9 +61,6 @@ public class DBTrackerDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<ChangeValidationSignoff> ChangeValidationSignoffs => Set<ChangeValidationSignoff>();
     public DbSet<ReadinessException> ReadinessExceptions => Set<ReadinessException>();
 
-    // Epic 21 (D16-D20): recovery objectives/backup-chain coverage, backup-copy availability and
-    // retention evidence, integrity/HA/maintenance-job evidence, capacity and performance planning
-    // evidence, and certificate/recovery-key dependency reminders.
     public DbSet<RecoveryObjective> RecoveryObjectives => Set<RecoveryObjective>();
     public DbSet<BackupChainRequirement> BackupChainRequirements => Set<BackupChainRequirement>();
     public DbSet<BackupCopyLocation> BackupCopyLocations => Set<BackupCopyLocation>();
@@ -78,8 +70,6 @@ public class DBTrackerDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<WorkloadComparison> WorkloadComparisons => Set<WorkloadComparison>();
     public DbSet<CertificateDependency> CertificateDependencies => Set<CertificateDependency>();
 
-    // Epic 22 (D21-D22): support entitlement/edition-cost readiness and the decommission/
-    // source-retirement checklist that gates the existing U14 archive flow.
     public DbSet<SupportContract> SupportContracts => Set<SupportContract>();
     public DbSet<SupportContractAssignment> SupportContractAssignments => Set<SupportContractAssignment>();
     public DbSet<EditionCostEstimate> EditionCostEstimates => Set<EditionCostEstimate>();
@@ -91,9 +81,7 @@ public class DBTrackerDbContext : IdentityDbContext<ApplicationUser>
 
         modelBuilder.Entity<ApplicationUser>(entity =>
         {
-            // Every existing user (including seed data from before U16) must stay able to sign in
-            // once this column exists — the SQL-side default has to be true, not bool's CLR default
-            // of false, or the migration would retroactively lock out every account that already exists.
+            // Existing accounts must still sign in after this column is added, so the SQL default is true, not bool's false.
             entity.Property(e => e.IsActive).HasDefaultValue(true);
         });
 
@@ -121,7 +109,6 @@ public class DBTrackerDbContext : IdentityDbContext<ApplicationUser>
             entity.Property(e => e.ConnectivityHostOverride).HasMaxLength(255);
             entity.Property(e => e.RowVersion).IsRowVersion();
 
-            // U21 additions.
             entity.Property(e => e.BackupContactName).HasMaxLength(200);
             entity.Property(e => e.BackupContactEmail).HasMaxLength(320);
             entity.Property(e => e.BackupContactPhone).HasMaxLength(50);
@@ -162,9 +149,7 @@ public class DBTrackerDbContext : IdentityDbContext<ApplicationUser>
 
             entity.HasIndex(e => new { e.DatabaseInstanceId, e.TimestampUtc });
 
-            // Guards against duplicate Discovered evidence from two concurrent scans racing each
-            // other (U01): the filter only applies to rows with a known byte signature, so legacy
-            // Discovered records (ObservedFileBytes null, predating this column) aren't constrained.
+            // Stops two concurrent scans inserting the same Discovered evidence. Rows with no byte signature (older records) are not constrained.
             entity.HasIndex(e => new { e.DatabaseInstanceId, e.SourceFile, e.ObservedFileBytes })
                 .IsUnique()
                 .HasFilter("[Source] = 1 AND [ObservedFileBytes] IS NOT NULL");
@@ -186,10 +171,7 @@ public class DBTrackerDbContext : IdentityDbContext<ApplicationUser>
                 .HasForeignKey(r => r.DatabaseInstanceId)
                 .OnDelete(DeleteBehavior.Cascade);
 
-            // NoAction, not SetNull: SQL Server rejects a second cascade path to BackupRecords
-            // (DatabaseInstance already cascades to both BackupRecords and RestoreEvents). A
-            // backup record referenced by a restore test is never deleted by itself anyway —
-            // only alongside its whole instance, which cascades RestoreEvents away first.
+            // NoAction, not SetNull: SQL Server rejects a second cascade path to BackupRecords. Instance deletes cascade RestoreEvents first.
             entity.HasOne(r => r.LinkedBackupRecord)
                 .WithMany()
                 .HasForeignKey(r => r.LinkedBackupRecordId)
@@ -392,8 +374,7 @@ public class DBTrackerDbContext : IdentityDbContext<ApplicationUser>
                 .HasForeignKey(e => e.DatabaseInstanceId)
                 .OnDelete(DeleteBehavior.Cascade);
 
-            // "Is there already an open incident for this instance" is checked on every alert
-            // sweep, so it needs to be cheap; ClosedAtUtc == null identifies the open one(s).
+            // Checked on every alert sweep; ClosedAtUtc == null identifies the open incident.
             entity.HasIndex(e => new { e.DatabaseInstanceId, e.ClosedAtUtc });
         });
 
@@ -413,7 +394,6 @@ public class DBTrackerDbContext : IdentityDbContext<ApplicationUser>
             entity.HasIndex(e => new { e.TargetType, e.TargetId });
         });
 
-        // Epic 18 (D01-D06).
         modelBuilder.Entity<VersionIdentity>(entity =>
         {
             entity.Property(e => e.RawVersionText).HasMaxLength(200);
@@ -453,10 +433,7 @@ public class DBTrackerDbContext : IdentityDbContext<ApplicationUser>
                 .HasForeignKey(e => e.DatabaseInstanceId)
                 .OnDelete(DeleteBehavior.Cascade);
 
-            // NoAction, not SetNull: SQL Server rejects a second cascade path to ClusterNodeVersions
-            // (DatabaseInstance already cascades to both VersionIdentities and ClusterNodeVersions
-            // directly). A node row is never deleted on its own anyway — only alongside its whole
-            // instance, which cascades it away regardless of this FK's own action.
+            // NoAction: SQL Server rejects a second cascade path; instance deletes already cascade node rows.
             entity.HasOne(e => e.VersionIdentity)
                 .WithMany(v => v.ClusterNodeVersions)
                 .HasForeignKey(e => e.VersionIdentityId)
@@ -590,7 +567,6 @@ public class DBTrackerDbContext : IdentityDbContext<ApplicationUser>
             entity.HasIndex(e => new { e.DatabaseInstanceId, e.ObservedAtUtc });
         });
 
-        // Epic 19 (D07-D10).
         modelBuilder.Entity<InstanceDependency>(entity =>
         {
             entity.Property(e => e.Name).HasMaxLength(200).IsRequired();
@@ -684,12 +660,7 @@ public class DBTrackerDbContext : IdentityDbContext<ApplicationUser>
                 .HasForeignKey(e => e.DatabaseInstanceId)
                 .OnDelete(DeleteBehavior.Cascade);
 
-            // NoAction, not Cascade: SQL Server rejects a second cascade path to ReadinessChecklist
-            // (DatabaseInstance already cascades to it directly, and also to PathAssessment, which
-            // this FK also points at). A checklist is never deleted on its own via this FK anyway —
-            // only alongside its whole instance, which cascades it away regardless of this FK's own
-            // action. Same resolution already used for ClusterNodeVersion.VersionIdentityId and
-            // RestoreEvent.LinkedBackupRecordId.
+            // NoAction: second cascade path via PathAssessment, which SQL Server rejects. Instance deletes cascade the checklist.
             entity.HasOne(e => e.PathAssessment)
                 .WithMany()
                 .HasForeignKey(e => e.PathAssessmentId)
@@ -730,13 +701,7 @@ public class DBTrackerDbContext : IdentityDbContext<ApplicationUser>
             entity.Property(e => e.EstimatedEffortHours).HasColumnType("decimal(10,2)");
             entity.Property(e => e.EstimatedCost).HasColumnType("decimal(14,2)");
 
-            // NoAction on all three, not SetNull: three separate FK columns on one table all
-            // referencing the same Teams table hits the same SQL Server restriction as a single
-            // table reachable via two cascade paths ("may cause cycles or multiple cascade paths"),
-            // even though these three don't chain through each other. There is no team-delete
-            // feature in this app (TeamService has no delete/remove-team method) so this never
-            // blocks a real operation; same resolution already used elsewhere in this schema for an
-            // identical shape (RestoreEvent.LinkedBackupRecord, ClusterNodeVersion.VersionIdentity).
+            // NoAction on all three: three FKs to Teams trip SQL Server's multiple-cascade-path rule. Teams are never deleted.
             entity.HasOne(e => e.AccountableDbaTeam)
                 .WithMany()
                 .HasForeignKey(e => e.AccountableDbaTeamId)
@@ -784,8 +749,7 @@ public class DBTrackerDbContext : IdentityDbContext<ApplicationUser>
                 .HasForeignKey(e => e.MigrationCampaignId)
                 .OnDelete(DeleteBehavior.Cascade);
 
-            // NoAction: optional D21 traceability link, not a feature that deletes estimates — kept
-            // conservative rather than reasoning about a cascade path through EditionCostEstimate.
+            // NoAction: an optional traceability link; estimates are never deleted through it.
             entity.HasOne(e => e.SourceCostEstimate)
                 .WithMany()
                 .HasForeignKey(e => e.SourceCostEstimateId)
@@ -821,7 +785,6 @@ public class DBTrackerDbContext : IdentityDbContext<ApplicationUser>
             entity.HasIndex(e => e.MigrationCampaignId);
         });
 
-        // Epic 20 (D11-D15).
         modelBuilder.Entity<RehearsalRecord>(entity =>
         {
             entity.Property(e => e.SourceLabel).HasMaxLength(300);
@@ -840,9 +803,7 @@ public class DBTrackerDbContext : IdentityDbContext<ApplicationUser>
                 .HasForeignKey(e => e.MigrationCampaignId)
                 .OnDelete(DeleteBehavior.Cascade);
 
-            // NoAction, not Cascade/SetNull: DatabaseInstance already cascades to this table directly
-            // and to PathAssessment, which this FK also points at — the same "second cascade path"
-            // shape already resolved this way for ReadinessChecklist.PathAssessmentId.
+            // NoAction: second cascade path via PathAssessment, as for ReadinessChecklist.
             entity.HasOne(e => e.DatabaseInstance)
                 .WithMany()
                 .HasForeignKey(e => e.DatabaseInstanceId)
@@ -853,9 +814,7 @@ public class DBTrackerDbContext : IdentityDbContext<ApplicationUser>
                 .HasForeignKey(e => e.PathAssessmentId)
                 .OnDelete(DeleteBehavior.NoAction);
 
-            // NoAction, not SetNull: same shape as RestoreEvent.LinkedBackupRecordId — a restore
-            // event referenced by a rehearsal is never deleted on its own, only alongside its whole
-            // instance, which already cascades RestoreEvents away.
+            // NoAction: second cascade path to RestoreEvents, as for RestoreEvent.LinkedBackupRecordId.
             entity.HasOne(e => e.LinkedRestoreEvent)
                 .WithMany()
                 .HasForeignKey(e => e.LinkedRestoreEventId)
@@ -895,10 +854,7 @@ public class DBTrackerDbContext : IdentityDbContext<ApplicationUser>
                 .HasForeignKey(e => e.CommunicationOwnerTeamId)
                 .OnDelete(DeleteBehavior.SetNull);
 
-            // NoAction: ReadinessException is also reachable from MigrationCampaign/DatabaseInstance
-            // via its generic TargetType/TargetId (no FK, so no cascade path there), but this is a
-            // direct FK from ChangeWindow — Restrict/NoAction avoids any future cycle if a cascade
-            // path is ever added between ChangeWindow and ReadinessException's own ancestry.
+            // NoAction on the direct ChangeWindow FK, to avoid a future cascade cycle.
             entity.HasOne(e => e.EmergencyException)
                 .WithMany()
                 .HasForeignKey(e => e.EmergencyExceptionId)
@@ -963,7 +919,7 @@ public class DBTrackerDbContext : IdentityDbContext<ApplicationUser>
                 .HasForeignKey(e => e.MigrationCampaignId)
                 .OnDelete(DeleteBehavior.Cascade);
 
-            // NoAction: same "second cascade path from DatabaseInstance" shape as RehearsalRecord above.
+            // NoAction: second cascade path from DatabaseInstance, as for RehearsalRecord.
             entity.HasOne(e => e.DatabaseInstance)
                 .WithMany()
                 .HasForeignKey(e => e.DatabaseInstanceId)
@@ -1021,9 +977,7 @@ public class DBTrackerDbContext : IdentityDbContext<ApplicationUser>
                 .HasForeignKey(e => e.AccountableOwnerTeamId)
                 .OnDelete(DeleteBehavior.SetNull);
 
-            // Restrict, not Cascade: a self-referencing FK must not cascade-delete (SQL Server
-            // rejects a self-referencing cascade path outright), and there is no delete feature for
-            // exceptions in this app anyway — renewal history is preserved by construction.
+            // Restrict: SQL Server rejects a self-referencing cascade, and exceptions are never deleted.
             entity.HasOne(e => e.RenewalOfException)
                 .WithMany()
                 .HasForeignKey(e => e.RenewalOfExceptionId)
@@ -1034,8 +988,6 @@ public class DBTrackerDbContext : IdentityDbContext<ApplicationUser>
             entity.HasIndex(e => e.ExpiresAtUtc);
         });
 
-        // Epic 21 (D16-D20). BackupRecord.ChainRole (D16) needs no special mapping — a plain
-        // nullable enum column, same as every other nullable enum elsewhere in this schema.
         modelBuilder.Entity<RecoveryObjective>(entity =>
         {
             entity.Property(e => e.EncryptionKeyReferenceNote).HasMaxLength(500);
@@ -1092,10 +1044,7 @@ public class DBTrackerDbContext : IdentityDbContext<ApplicationUser>
             entity.Property(e => e.Notes).HasMaxLength(2000);
             entity.Property(e => e.RecordedBy).HasMaxLength(320);
 
-            // NoAction on both: DatabaseInstance already cascades to this table directly and, via
-            // RelatedDependencyId, this FK also reaches InstanceDependency — which DatabaseInstance
-            // already cascades to directly too. Same "second cascade path" shape already resolved
-            // this way for RehearsalRecord/ChangeValidation's DatabaseInstanceId + PathAssessmentId.
+            // NoAction on both: second cascade path via InstanceDependency.
             entity.HasOne(e => e.DatabaseInstance)
                 .WithMany()
                 .HasForeignKey(e => e.DatabaseInstanceId)
@@ -1131,8 +1080,7 @@ public class DBTrackerDbContext : IdentityDbContext<ApplicationUser>
             entity.Property(e => e.MissingDataNotes).HasMaxLength(1000);
             entity.Property(e => e.EstimatedBy).HasMaxLength(320);
 
-            // NoAction on both: same "second cascade path via PathAssessment" shape as
-            // RehearsalRecord/ChangeValidation/ReadinessChecklist above.
+            // NoAction on both: second cascade path via PathAssessment.
             entity.HasOne(e => e.DatabaseInstance)
                 .WithMany()
                 .HasForeignKey(e => e.DatabaseInstanceId)
@@ -1157,11 +1105,7 @@ public class DBTrackerDbContext : IdentityDbContext<ApplicationUser>
             entity.Property(e => e.ComparisonNotes).HasMaxLength(2000);
             entity.Property(e => e.RecordedBy).HasMaxLength(320);
 
-            // NoAction on all three: DatabaseInstance already cascades to CapacityMeasurement
-            // directly, so Pre/PostMeasurementId reaching the same table via WorkloadComparison is a
-            // second cascade path — same shape as RestoreEvent.LinkedBackupRecordId. DatabaseInstanceId
-            // is also NoAction for the same belt-and-suspenders reason used for RehearsalRecord/
-            // ChangeValidation above.
+            // NoAction on all three: second cascade path to CapacityMeasurement.
             entity.HasOne(e => e.DatabaseInstance)
                 .WithMany()
                 .HasForeignKey(e => e.DatabaseInstanceId)
@@ -1231,7 +1175,6 @@ public class DBTrackerDbContext : IdentityDbContext<ApplicationUser>
         {
             entity.Property(e => e.CreatedBy).HasMaxLength(320);
 
-            // Leaf join table — both parents are simple Cascade, same shape as CampaignInstanceLink.
             entity.HasOne(e => e.SupportContract)
                 .WithMany(c => c.Assignments)
                 .HasForeignKey(e => e.SupportContractId)
@@ -1286,8 +1229,7 @@ public class DBTrackerDbContext : IdentityDbContext<ApplicationUser>
                 .HasForeignKey(e => e.MigrationCampaignId)
                 .OnDelete(DeleteBehavior.Cascade);
 
-            // NoAction: same "second cascade path from DatabaseInstance via MigrationCampaign" shape
-            // as ChangeValidation/RehearsalRecord above.
+            // NoAction: second cascade path via MigrationCampaign.
             entity.HasOne(e => e.DatabaseInstance)
                 .WithMany()
                 .HasForeignKey(e => e.DatabaseInstanceId)

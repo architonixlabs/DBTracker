@@ -5,7 +5,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace DBTracker.Infrastructure.Notifications;
 
-/// <summary>Per-user subscriptions (U07) — which slice of instances/companies a user cares about, and whether they also want email.</summary>
+/// <summary>Per-user subscriptions: which instances or companies a user follows, and whether they want email.</summary>
 public class NotificationSubscriptionService(IDbContextFactory<DBTrackerDbContext> factory)
 {
     public async Task<List<NotificationSubscription>> ListAsync(string userId)
@@ -39,13 +39,7 @@ public class NotificationSubscriptionService(IDbContextFactory<DBTrackerDbContex
         await db.NotificationSubscriptions.Where(s => s.Id == id && s.UserId == userId).ExecuteDeleteAsync();
     }
 
-    /// <summary>
-    /// User IDs with an Email/Both subscription matching this instance/company — the alert sweep
-    /// fans out to these in addition to the instance's own contact email. Authorization note: this
-    /// can only narrow who gets told about an already-broadcast alert; it never grants a
-    /// subscriber visibility into an instance they couldn't already see (no row-level security
-    /// exists today — see U21).
-    /// </summary>
+    /// <summary>Users with a matching Email/Both subscription, emailed alongside the instance contact. Only narrows who hears about a broadcast alert; never grants visibility.</summary>
     public async Task<List<string>> GetEmailSubscriberUserIdsAsync(int instanceId, string company, int? ownerTeamId = null)
     {
         using var db = await factory.CreateDbContextAsync();

@@ -6,15 +6,8 @@ using Microsoft.EntityFrameworkCore;
 
 namespace DBTracker.Infrastructure.ChangeManagement;
 
-/// <summary>
-/// D14 — the generic exception/waiver mechanism: TargetType + TargetId + WaivedCheckReference, used
-/// by D11/D12/D13 (and referenceable by D05/D09) rather than a one-off field bolted onto each of
-/// them. Approving requires ExceptionApprovalAuthorizer to authorize the caller's role and (when the
-/// exception requires it) a different person from whoever prepared it — both checked here, not just
-/// in the UI. Expiry is never written as a status transition; EvaluateAndNotifyExpiringAsync only
-/// raises a one-time notice and stamps ExpiryNotifiedAtUtc so it isn't repeated every sweep — the
-/// actual gating always re-checks ReadinessExceptionEvaluator.IsActive live against "now".
-/// </summary>
+/// <summary>Readiness exceptions (TargetType + TargetId + WaivedCheckReference). Approval checks the approver's role and, when required, that a different person prepared it.</summary>
+/// <remarks>Expiry is never written as a status; the sweep only sends a one-time notice, and gates check IsActive live.</remarks>
 public class ReadinessExceptionService(IDbContextFactory<DBTrackerDbContext> factory, AuditRecorder audit)
 {
     public async Task<List<ReadinessException>> ListAsync(string? targetType = null, int? targetId = null)
@@ -38,7 +31,7 @@ public class ReadinessExceptionService(IDbContextFactory<DBTrackerDbContext> fac
         return await db.ReadinessExceptions.AsNoTracking().Include(e => e.AccountableOwnerTeam).Include(e => e.RenewalOfException).FirstOrDefaultAsync(e => e.Id == id);
     }
 
-    /// <summary>Full renewal/rejection chain for one exception, oldest first — preserved history, never overwritten.</summary>
+    /// <summary>The renewal/rejection chain for one exception, oldest first.</summary>
     public async Task<List<ReadinessException>> GetHistoryChainAsync(int id)
     {
         using var db = await factory.CreateDbContextAsync();
@@ -104,7 +97,7 @@ public class ReadinessExceptionService(IDbContextFactory<DBTrackerDbContext> fac
         return (true, "");
     }
 
-    /// <summary>Revokes a previously approved exception early — reopens whatever it was covering immediately (ReadinessExceptionEvaluator.IsActive becomes false the moment Status flips, independent of ExpiresAtUtc).</summary>
+    /// <summary>Revokes an approved exception early; whatever it covered is blocked again immediately.</summary>
     public async Task<bool> RevokeAsync(int id, string revokedBy, string reason)
     {
         using var db = await factory.CreateDbContextAsync();
@@ -124,14 +117,14 @@ public class ReadinessExceptionService(IDbContextFactory<DBTrackerDbContext> fac
         return true;
     }
 
-    /// <summary>Creates a new exception that renews a rejected/expired/revoked one, preserving the chain via RenewalOfExceptionId rather than editing the original.</summary>
+    /// <summary>Creates an exception renewing a rejected, expired or revoked one, linked via RenewalOfExceptionId.</summary>
     public async Task<ReadinessException> RenewAsync(int originalId, ReadinessException renewal, string preparedByUserId, string preparedByUserName)
     {
         renewal.RenewalOfExceptionId = originalId;
         return await CreateAsync(renewal, preparedByUserId, preparedByUserName);
     }
 
-    /// <summary>One sweep: notify the accountable owner once for every Approved exception that has newly become Expired since the last sweep. Safe to call from the background hosted service or an explicit admin action, same dual-path pattern as SupportRunwayService.</summary>
+    /// <summary>One sweep: notify the owner once for each Approved exception that has newly expired. Shared by the hosted service and the manual admin action.</summary>
     public async Task<int> EvaluateAndNotifyExpiringAsync(CancellationToken ct = default)
     {
         using var db = await factory.CreateDbContextAsync(ct);

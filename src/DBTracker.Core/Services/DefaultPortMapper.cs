@@ -2,7 +2,7 @@ using DBTracker.Core.Enums;
 
 namespace DBTracker.Core.Services;
 
-/// <summary>Conventional default TCP port per engine — a starting guess for the connectivity check, not a guarantee (real deployments remap ports).</summary>
+/// <summary>Conventional default TCP port per engine. A starting guess for the connectivity check, since real deployments remap ports.</summary>
 public static class DefaultPortMapper
 {
     public static int GetDefaultPort(DatabaseEngine engine) => engine switch

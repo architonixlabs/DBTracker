@@ -3,7 +3,7 @@ using DBTracker.Core.Enums;
 
 namespace DBTracker.Core.Services;
 
-/// <summary>Aggregated D09 checklist summary — blocking findings and unknown checks are both exposed in full, not just counted, per "summarize without hiding the underlying detail".</summary>
+/// <summary>Checklist summary listing blocking findings and unknown checks in full, not just counted.</summary>
 public record ReadinessChecklistSummary(
     int TotalCount,
     int PassedCount,
@@ -14,14 +14,7 @@ public record ReadinessChecklistSummary(
     IReadOnlyList<ReadinessCheckItem> BlockingFindings,
     IReadOnlyList<ReadinessCheckItem> UnknownChecks);
 
-/// <summary>
-/// Pure aggregation/blocking-summary logic for a D09 readiness checklist. EffectiveStatus is the
-/// single place that applies the two ways a recorded result stops counting — explicit invalidation
-/// (the checklist's target changed) and evidence expiry — so a Passed/Failed item past either of
-/// those is reported as Unknown here even though its stored Status field is untouched. A check that
-/// was simply never performed is Unknown by its own default and is never promoted to Passed anywhere
-/// in this aggregation.
-/// </summary>
+/// <summary>Checklist aggregation. EffectiveStatus is the one place invalidation and evidence expiry turn a recorded result back into Unknown; the stored Status is untouched, and nothing unperformed becomes Passed.</summary>
 public static class ReadinessChecklistAggregator
 {
     public static ReadinessCheckStatus EffectiveStatus(ReadinessCheckItem item, DateTime nowUtc)

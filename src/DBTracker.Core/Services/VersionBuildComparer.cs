@@ -2,12 +2,7 @@ using System.Text.RegularExpressions;
 
 namespace DBTracker.Core.Services;
 
-/// <summary>
-/// Compares two build/version strings numerically segment-by-segment (e.g. "2000.5" &lt; "4000.1",
-/// "9" &lt; "10") instead of lexicographically, which would wrongly rank "9" above "10". Non-numeric
-/// segments compare as equal-weight ordinal text so a mixed string still orders sensibly. Pure and
-/// engine-agnostic — used by PatchBaselineComparer and AdvisoryApplicabilityClassifier.
-/// </summary>
+/// <summary>Compares build strings numerically by segment ("9" &lt; "10"); non-numeric segments compare as ordinal text.</summary>
 public static class VersionBuildComparer
 {
     public static int Compare(string? a, string? b)

@@ -1,6 +1,6 @@
 namespace DBTracker.Core.Enums;
 
-/// <summary>How precisely a vendor-published date (D02) is actually known — vendor pages often publish a quarter or year, not a day. Unknown/TBD dates must stay explicit rather than being defaulted to a fabricated day.</summary>
+/// <summary>How precisely a vendor date is known. Vendors often publish only a quarter or year, so unknown and TBD dates stay explicit instead of becoming an invented day.</summary>
 public enum DatePrecision
 {
     Exact,

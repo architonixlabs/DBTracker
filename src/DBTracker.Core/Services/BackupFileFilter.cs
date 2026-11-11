@@ -24,15 +24,10 @@ public record FileEvaluation(string FileName, long SizeBytes, DateTime LastWrite
     };
 }
 
-/// <summary>
-/// Per-instance configurable rules (U01) deciding which files on a shared drive are even candidate
-/// backup evidence — unrelated files (by name pattern), zero-length files, and files still being
-/// written are excluded before anything is recorded. Pure (no I/O): callers supply the file stats,
-/// including a second stat taken a short delay later to detect an in-progress write.
-/// </summary>
+/// <summary>Per-instance rules for which shared-drive files count as backup evidence: unmatched names, zero-length files and files still being written are excluded. Callers pass a second stat taken a moment later to detect in-progress writes.</summary>
 public static class BackupFileFilter
 {
-    /// <summary>Default rule set (empty pattern string) matches every file name/extension — preserves pre-U01 behavior.</summary>
+    /// <summary>Default rule set: an empty pattern string matches every file.</summary>
     public const string MatchAllPatterns = "";
 
     public static FileEligibility Evaluate(

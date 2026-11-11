@@ -2,11 +2,7 @@ using DBTracker.Core.Enums;
 
 namespace DBTracker.Core.Services;
 
-/// <summary>
-/// D20 — pure key-rotation classification, deliberately a separate evaluator/enum from
-/// CertificateExpiryEvaluator: a certificate can be far from expiring while its key is overdue for
-/// rotation, and vice versa. Nothing here conflates the two concepts.
-/// </summary>
+/// <summary>Key-rotation classification, separate from certificate expiry: either can be due without the other.</summary>
 public static class KeyRotationEvaluator
 {
     public static KeyRotationStatus Classify(DateTime? lastRotatedAtUtc, int? rotationIntervalDays, DateTime nowUtc)

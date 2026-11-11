@@ -2,18 +2,8 @@ using DBTracker.Core.Enums;
 
 namespace DBTracker.Core.Services;
 
-/// <summary>
-/// Pure state-machine rules for a D10 MigrationCampaign. Encodes the normal forward flow
-/// (Proposed → Assessing → Ready → Scheduled → In progress → Validating → Completed) plus the
-/// documented exception exits: Blocked is reachable from most active states and returns only to
-/// Assessing; Cancelled is reachable from every state that hasn't already finished; Rolled back is
-/// reachable from In progress/Validating/Completed (a problem can surface even after sign-off) and
-/// only re-enters the flow via Assessing, never jumps straight back to Ready/Scheduled. Cancelled and
-/// a final Completed (no later rollback) are terminal. This file decides nothing about risk or
-/// readiness — CampaignService.TransitionAsync calls this and this alone before writing a transition;
-/// it never reads or writes PathAssessment/ReadinessChecklist/SupportRunway, so a state change here
-/// cannot itself change or imply anything about risk/readiness elsewhere in the app.
-/// </summary>
+/// <summary>Allowed state transitions for a migration campaign: the forward flow, Blocked back to Assessing, Cancelled from any unfinished state, and Rolled back re-entering only via Assessing.</summary>
+/// <remarks>Never reads or writes risk or readiness records, so a state change can't imply anything about them.</remarks>
 public static class CampaignStateTransitionValidator
 {
     private static readonly Dictionary<CampaignState, CampaignState[]> Allowed = new()

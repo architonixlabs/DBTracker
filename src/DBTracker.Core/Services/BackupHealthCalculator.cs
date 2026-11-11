@@ -3,7 +3,7 @@ using DBTracker.Core.Enums;
 
 namespace DBTracker.Core.Services;
 
-/// <summary>Plain-language explanation of a health result (U04) — the evidence behind it and the next deadline, kept separate from scan freshness and maintenance suppression so none of the three get conflated.</summary>
+/// <summary>The evidence behind a health result and the next deadline, kept separate from scan freshness and maintenance suppression.</summary>
 public record HealthExplanation(
     BackupHealth Health,
     DateTime? LastSuccessUtc,
@@ -16,22 +16,11 @@ public record HealthExplanation(
 
 public static class BackupHealthCalculator
 {
-    /// <summary>
-    /// Computes backup health for an instance as of <paramref name="asOfUtc"/>.
-    /// Failed beats overdue: a fresh failure is worse than an on-time success streak with an
-    /// older failure buried in history. Records timestamped after <paramref name="asOfUtc"/> are
-    /// ignored — evidence from the future can't yet be used to judge an earlier instant (U04).
-    /// Ties on timestamp break by Id (insertion order), so results are deterministic.
-    /// </summary>
+    /// <summary>Computes backup health as of <paramref name="asOfUtc"/>. A fresh failure beats an on-time streak; records after <paramref name="asOfUtc"/> are ignored, and timestamp ties break by Id.</summary>
     public static BackupHealth Compute(DatabaseInstance instance, IReadOnlyCollection<BackupRecord> records, DateTime asOfUtc) =>
         ComputeFromLatest(instance, MostRecentAsOf(records, asOfUtc), asOfUtc);
 
-    /// <summary>
-    /// Same rule as <see cref="Compute"/>, but takes the single most-recent-as-of record directly
-    /// instead of the full history — lets callers that only need the summary (dashboard/list rows,
-    /// U06) compute health from a lightweight per-instance subquery rather than loading every
-    /// BackupRecord for every instance.
-    /// </summary>
+    /// <summary>Same rule as <see cref="Compute"/> from just the latest record, so list and dashboard queries don't load every BackupRecord.</summary>
     public static BackupHealth ComputeFromLatest(DatabaseInstance instance, BackupRecord? mostRecentAsOf, DateTime asOfUtc)
     {
         if (mostRecentAsOf is null)
@@ -61,7 +50,7 @@ public static class BackupHealthCalculator
             .FirstOrDefault();
     }
 
-    /// <summary>Builds the plain-language reasoning behind a health result (U04) — last success, latest attempt, the governing interval, next due time and how overdue it is, with maintenance suppression called out separately rather than folded into the health value itself.</summary>
+    /// <summary>Builds the reasoning behind a health result: last success, latest attempt, interval, next due, overdue duration, and maintenance suppression called out separately.</summary>
     public static HealthExplanation Explain(DatabaseInstance instance, IReadOnlyCollection<BackupRecord> records, DateTime asOfUtc)
     {
         var health = Compute(instance, records, asOfUtc);

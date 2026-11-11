@@ -1,13 +1,6 @@
 namespace DBTracker.Core.Services;
 
-/// <summary>
-/// Pure dedupe/escalation rule for D03's configurable 365/180/90/30-day support-runway notices.
-/// "Crossed" means days-remaining has dropped to at or below a configured threshold; the most
-/// urgent (smallest) threshold crossed is what matters. A notice only fires again once a *more*
-/// urgent threshold than the last one notified has been crossed, so a sweep doesn't re-notify every
-/// run — but overdue (days &lt;= 0) always counts as more urgent than any positive threshold, so the
-/// "it's now actually due" notice still fires even after the 30-day one already did.
-/// </summary>
+/// <summary>Dedupe for threshold-based support-runway notices: a notice fires again only when a more urgent threshold is crossed. Overdue (days &lt;= 0) is always more urgent, so the due-now notice still fires after the 30-day one.</summary>
 public static class SupportRunwayNoticeEvaluator
 {
     /// <summary>The most urgent configured threshold (days-before-deadline) that has been crossed, or null if none has.</summary>

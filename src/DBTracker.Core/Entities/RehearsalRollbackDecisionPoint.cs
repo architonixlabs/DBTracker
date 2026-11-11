@@ -1,6 +1,6 @@
 namespace DBTracker.Core.Entities;
 
-/// <summary>One documented rollback decision point within a D11 rehearsal — a trigger condition and what happens if it fires, in order. IsPointOfNoReturn flags the step past which the rehearsal (and, when carried into the real D12 cutover journal, the actual cutover) is understood to no longer be cleanly reversible.</summary>
+/// <summary>One ordered rollback decision point: a trigger and its consequence. IsPointOfNoReturn marks where the change stops being cleanly reversible.</summary>
 public class RehearsalRollbackDecisionPoint
 {
     public int Id { get; set; }

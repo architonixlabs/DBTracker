@@ -1,6 +1,6 @@
 namespace DBTracker.Core.Entities;
 
-/// <summary>Append-only revision history for a ReleaseCatalogEntry (D02) — created/edit/override/refresh, each with who and a JSON snapshot of the prior state, so a catalogue fact's history survives later edits.</summary>
+/// <summary>Append-only revision history for a catalogue entry: who changed it and a JSON snapshot of the prior state.</summary>
 public class ReleaseCatalogRevision
 {
     public int Id { get; set; }

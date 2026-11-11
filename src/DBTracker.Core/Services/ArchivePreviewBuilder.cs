@@ -1,6 +1,6 @@
 namespace DBTracker.Core.Services;
 
-/// <summary>Counts informing the "what archiving this instance affects" preview (U14) — gathered by the caller, summarized here so the wording stays consistent and unit-testable without a database.</summary>
+/// <summary>Counts for the archive preview, gathered by the caller.</summary>
 public record ArchiveImpactCounts(
     bool BackgroundScanConfigured,
     bool AlertableNow,
@@ -9,10 +9,7 @@ public record ArchiveImpactCounts(
 
 public record ArchiveImpactLine(string Text);
 
-/// <summary>
-/// Turns the raw counts above into the plain-language "here's what archiving affects" preview shown
-/// before a reason is required and the archive is confirmed (U14). Pure/testable.
-/// </summary>
+/// <summary>Turns the counts into the plain-language preview of what archiving affects, shown before the archive is confirmed.</summary>
 public static class ArchivePreviewBuilder
 {
     public static IReadOnlyList<ArchiveImpactLine> Build(ArchiveImpactCounts counts)

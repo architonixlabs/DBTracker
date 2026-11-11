@@ -1,6 +1,6 @@
 namespace DBTracker.Core.Services;
 
-/// <summary>D17 — masks a backup-copy's raw storage path/reference for roles that shouldn't see it, on every view and every CSV/report export alike (one chokepoint, not a per-page reimplementation).</summary>
+/// <summary>Masks a backup copy's raw storage path for roles that shouldn't see it. The single chokepoint for every view and export.</summary>
 public static class BackupCopyLocationMasker
 {
     public const string MaskedPlaceholder = "•••• (masked — Admin/DBA only)";

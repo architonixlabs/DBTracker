@@ -3,10 +3,7 @@ using DBTracker.Core.Enums;
 
 namespace DBTracker.Core.Services;
 
-/// <summary>
-/// Builds a single AuditEvent record from its parts (U19) — pure/testable so the "who gets recorded
-/// as System vs. a named user" rule can be verified without a database.
-/// </summary>
+/// <summary>Builds one AuditEvent, including the rule for recording a System actor versus a named user.</summary>
 public static class AuditEventFactory
 {
     public const string SystemActorPrefix = "Background: ";

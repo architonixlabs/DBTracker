@@ -6,12 +6,7 @@ using Microsoft.Extensions.Configuration;
 
 namespace DBTracker.Infrastructure.ChangeManagement;
 
-/// <summary>
-/// D11 — rehearsal, recovery and rollback evidence for one instance within a D10 MigrationCampaign.
-/// Pure freshness/pass-fail logic lives in RehearsalEvidenceEvaluator; this class is just the I/O
-/// around it — recording a rehearsal (with its rollback decision points) and reading back the latest
-/// one plus its computed readiness result for a given pairing.
-/// </summary>
+/// <summary>Records rehearsals with their rollback decision points and reads back the latest one with its computed readiness.</summary>
 public class RehearsalService(IDbContextFactory<DBTrackerDbContext> factory, AuditRecorder audit, IConfiguration configuration)
 {
     private int DefaultValidityDays => configuration.GetValue("Rehearsal:DefaultValidityDays", RehearsalEvidenceEvaluator.DefaultValidityDays);

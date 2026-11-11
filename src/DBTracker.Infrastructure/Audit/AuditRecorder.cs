@@ -5,20 +5,8 @@ using Microsoft.EntityFrameworkCore;
 
 namespace DBTracker.Infrastructure.Audit;
 
-/// <summary>
-/// The single write path into the AuditEvent table (U19) — every caller (instance create/edit,
-/// archive/unarchive, maintenance, CSV import/bulk edit, account changes, evidence corrections)
-/// goes through here rather than writing the entity directly, so "append-only" is enforced in one
-/// place: there is deliberately no Update/Delete method on this class.
-///
-/// Retention: events are kept indefinitely today — there is no automatic purge/archival job. If
-/// this table's growth becomes a concern, add a time-boxed cleanup (e.g. keep N years) as an
-/// explicit, documented policy rather than letting it grow forever by default.
-///
-/// Uses its own short-lived DbContext via the factory (same isolation pattern as NotificationService
-/// and DeviceLinkService elsewhere in this app) so recording an audit event never races a caller's
-/// own ambient scoped DbContext mid-SaveChanges.
-/// </summary>
+/// <summary>The only write path into AuditEvent. It has no Update or Delete, which is what keeps the log append-only.</summary>
+/// <remarks>Events are kept indefinitely; there is no purge job. Uses its own short-lived DbContext so recording never races the caller's scoped context mid-SaveChanges.</remarks>
 public class AuditRecorder(IDbContextFactory<DBTrackerDbContext> factory)
 {
     public async Task RecordAsync(AuditEvent evt, CancellationToken ct = default)

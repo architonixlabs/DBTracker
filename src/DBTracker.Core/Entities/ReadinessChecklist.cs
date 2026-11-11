@@ -1,11 +1,6 @@
 namespace DBTracker.Core.Entities;
 
-/// <summary>
-/// One upgrade-readiness checklist header (D09) for a specific source/target pairing on an instance —
-/// optionally linked to the D08 PathAssessment it follows from. ReadinessChecklistService seeds one
-/// ReadinessCheckItem per applicable ReadinessCheckArea at Unknown; nothing here ever defaults an
-/// un-performed item to Passed.
-/// </summary>
+/// <summary>An upgrade-readiness checklist for one source/target pairing. Items are seeded at Unknown, never Passed.</summary>
 public class ReadinessChecklist
 {
     public int Id { get; set; }

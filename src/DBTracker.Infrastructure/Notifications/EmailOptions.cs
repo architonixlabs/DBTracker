@@ -18,7 +18,7 @@ public class ArxMailOptions
     public string ApiKey { get; set; } = string.Empty;
 }
 
-/// <summary>Outbound webhook for alerts — generic HTTP POST, not tied to one platform. Empty Url = disabled (NullWebhookSender logs instead).</summary>
+/// <summary>Generic outbound webhook for alerts. Empty Url disables it.</summary>
 public class WebhookOptions
 {
     public string Url { get; set; } = string.Empty;

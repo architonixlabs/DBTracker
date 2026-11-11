@@ -2,15 +2,7 @@ using DBTracker.Core.Enums;
 
 namespace DBTracker.Core.Entities;
 
-/// <summary>
-/// One check row within a D09 ReadinessChecklist. Status defaults to Unknown and stays Unknown until
-/// a reviewer records a real result — ReadinessChecklistAggregator never treats an un-performed check
-/// as Passed. IsInvalidated and EvidenceExpiresAtUtc are the two ways a previously-recorded result
-/// stops counting: a changed migration target explicitly invalidates every non-Unknown item on its
-/// checklist (ReadinessChecklistService.InvalidateForTargetChangeAsync), and old evidence simply ages
-/// out on its own via EvidenceExpiresAtUtc — both are surfaced as Unknown again, not silently dropped
-/// (the original Status/Findings/Reviewer stay on the row for audit purposes).
-/// </summary>
+/// <summary>One readiness check. It stays Unknown until a reviewer records a result, and returns to Unknown when invalidated by a target change or expired evidence; the original result is kept.</summary>
 public class ReadinessCheckItem
 {
     public int Id { get; set; }

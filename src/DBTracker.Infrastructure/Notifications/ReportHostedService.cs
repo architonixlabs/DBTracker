@@ -6,11 +6,7 @@ using Microsoft.Extensions.Logging;
 
 namespace DBTracker.Infrastructure.Notifications;
 
-/// <summary>
-/// Periodically emails the compliance report to "Reports:DistributionList". Interval in days via
-/// "Reports:IntervalDays" (default 7 — weekly); &lt;= 0 disables the schedule. "Send now" on the
-/// Compliance page works regardless of whether the schedule is enabled.
-/// </summary>
+/// <summary>Emails the compliance report to Reports:DistributionList every Reports:IntervalDays (default 7); &lt;= 0 disables the schedule. Send now works either way.</summary>
 public class ReportHostedService(
     IServiceScopeFactory scopeFactory,
     IConfiguration configuration,

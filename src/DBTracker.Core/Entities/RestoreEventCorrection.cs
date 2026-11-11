@@ -2,10 +2,7 @@ using DBTracker.Core.Enums;
 
 namespace DBTracker.Core.Entities;
 
-/// <summary>
-/// An append-only correction to a RestoreEvent (U11) — same model as BackupRecordCorrection. The
-/// original record's Outcome/Notes are never overwritten in place.
-/// </summary>
+/// <summary>An append-only correction to a RestoreEvent; the original Outcome/Notes are never overwritten.</summary>
 public class RestoreEventCorrection
 {
     public int Id { get; set; }

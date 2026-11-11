@@ -2,7 +2,7 @@ using DBTracker.Core.Enums;
 
 namespace DBTracker.Core.Services;
 
-/// <summary>D20 — pure certificate-expiry classification. Unknown (no expiry recorded) is never conflated with Ok.</summary>
+/// <summary>Certificate-expiry classification. Unknown (no expiry recorded) is never treated as Ok.</summary>
 public static class CertificateExpiryEvaluator
 {
     public static CertificateExpiryStatus Classify(DateTime? expiresAtUtc, DateTime nowUtc, int warningDays = 30)

@@ -1,6 +1,6 @@
 namespace DBTracker.Core.Enums;
 
-/// <summary>A product release's standard support phase (D03) relative to today. Unknown is a correct, first-class outcome when the catalogue has no usable milestone data — never defaulted to Mainstream.</summary>
+/// <summary>A release's standard support phase relative to today. Unknown when the catalogue has no usable milestones; never defaulted to Mainstream.</summary>
 public enum SupportPhase
 {
     Mainstream,

@@ -2,16 +2,7 @@ using DBTracker.Core.Enums;
 
 namespace DBTracker.Core.Entities;
 
-/// <summary>
-/// One technical dependency relationship on an instance (D07): what it relies on (driver,
-/// extension/plugin, job, linked service, replica/HA group, backup tooling, OS/runtime, managed
-/// provider) or what relies on it (Direction = Downstream, a consuming application/deployment).
-/// Manual entry/mapping is explicitly sufficient for this release — there is no auto-discovery.
-/// IsResolved distinguishes a dependency that's been reviewed/confirmed from one still open; an
-/// unresolved row is what DependencyImpactAssessor surfaces as a flag before a shared-engine change.
-/// Recording two rows for the same Name/Kind with different VersionState (e.g. Legacy + Transitioning)
-/// is how a mixed-version transition state is represented — nothing here forces one row per name.
-/// </summary>
+/// <summary>A manually mapped dependency an instance relies on, or a downstream consumer. Unresolved rows flag a shared-engine change; two rows with different VersionState model a mixed-version transition.</summary>
 public class InstanceDependency
 {
     public int Id { get; set; }
@@ -25,7 +16,6 @@ public class InstanceDependency
     public string Name { get; set; } = string.Empty;
     public string Description { get; set; } = string.Empty;
 
-    /// <summary>Owner team (reuses Epic 17's Team concept per D07's acceptance criteria — not a new ownership model).</summary>
     public int? OwnerTeamId { get; set; }
     public Team? OwnerTeam { get; set; }
 

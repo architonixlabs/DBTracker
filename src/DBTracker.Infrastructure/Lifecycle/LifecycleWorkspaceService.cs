@@ -10,14 +10,8 @@ public record LifecycleWorkspaceView(
     IReadOnlyList<LifecycleWorkspaceRow> MatchingRows,
     LifecycleWorkspaceSummary Summary);
 
-/// <summary>
-/// D15 — the I/O behind the lifecycle workspace/reports. One row per non-archived DatabaseInstance
-/// (ClusterNodeVersions are counted, never expanded into extra rows), pulling together D01's identity,
-/// D03's support runway, D04's approved-baseline coverage, D10's latest campaign state and D14's
-/// currently-active exceptions — all of it computed fresh on every call, nothing cached. The workspace
-/// and the report builder are handed the exact same AllRows/MatchingRows pair, so an export can never
-/// show a different scoped result than what the workspace rendered.
-/// </summary>
+/// <summary>Loads lifecycle workspace rows, one per non-archived instance (cluster nodes counted, not expanded), computed fresh on each call.</summary>
+/// <remarks>The workspace and report builder get the same AllRows/MatchingRows, so an export matches the screen.</remarks>
 public class LifecycleWorkspaceService(IDbContextFactory<DBTrackerDbContext> factory)
 {
     public const int ExpiringExceptionHorizonDays = 30;

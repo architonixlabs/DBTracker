@@ -1,12 +1,6 @@
 namespace DBTracker.Core.Entities;
 
-/// <summary>
-/// D19 — a migration space estimate for one instance, optionally linked to a D10 MigrationCampaign
-/// and/or a D08 PathAssessment rather than existing in isolation. AssumptionsText is required by
-/// convention (enforced at the service layer, not the database) because this is never meant to read
-/// as a bare, unexplained number — CapacityForecastBuilder applies the same "show your assumptions"
-/// rule to the related growth-forecast computation.
-/// </summary>
+/// <summary>A migration space estimate for one instance. AssumptionsText is required (enforced in the service) so the number never stands unexplained.</summary>
 public class MigrationCapacityEstimate
 {
     public int Id { get; set; }

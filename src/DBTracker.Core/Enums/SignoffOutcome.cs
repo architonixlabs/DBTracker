@@ -1,6 +1,6 @@
 namespace DBTracker.Core.Enums;
 
-/// <summary>D13 — one reviewer's sign-off decision within their own scope on a ChangeValidation.</summary>
+/// <summary>One reviewer's sign-off decision on a change validation.</summary>
 public enum SignoffOutcome
 {
     Approved,

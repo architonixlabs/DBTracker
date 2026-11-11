@@ -6,14 +6,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace DBTracker.Infrastructure.Lifecycle;
 
-/// <summary>
-/// D05 — imported/referenced advisories and their per-instance applicability assessments. This app
-/// never scans for advisories itself; ImportAsync only records what was already found/reviewed
-/// elsewhere (e.g. DefectDojo/Dependency-Track per org standards), deliberately not duplicating
-/// that platform's own UI. EvaluateForInstanceAsync applies AdvisoryApplicabilityClassifier's
-/// automatic Potential/NotApplicable/Unknown suggestion, but never touches an assessment a reviewer
-/// has already reviewed (IsReviewed) — only a human can set Confirmed.
-/// </summary>
+/// <summary>Imported advisories and per-instance assessments. Advisories are recorded, not scanned for; automatic evaluation never touches a reviewed assessment, and only a reviewer sets Confirmed.</summary>
 public class AdvisoryService(IDbContextFactory<DBTrackerDbContext> factory, AuditRecorder audit)
 {
     public async Task<List<AdvisoryRecord>> ListAsync(DatabaseEngine? engine = null)
@@ -94,7 +87,7 @@ public class AdvisoryService(IDbContextFactory<DBTrackerDbContext> factory, Audi
         return updated;
     }
 
-    /// <summary>A reviewer's explicit judgment — the only path that can set Confirmed, and the only path that stops future automatic re-evaluation from overwriting this assessment.</summary>
+    /// <summary>A reviewer's judgment. The only path to Confirmed, and it stops automatic re-evaluation of this assessment.</summary>
     public async Task<bool> ReviewAssessmentAsync(int assessmentId, AdvisoryClassification classification, string reviewerEvidence,
         string owner, DateTime? remediationDeadlineUtc, string targetPatch, AdvisoryVerificationStatus verificationStatus, string reviewedBy)
     {

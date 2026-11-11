@@ -1,12 +1,6 @@
 namespace DBTracker.Core.Entities;
 
-/// <summary>
-/// D19 — a pre/post representative-workload comparison for one instance's migration, reusing two
-/// existing CapacityMeasurement rows (Workload or PerformanceBaseline type) rather than duplicating
-/// their values. Either side may be null while only one half has been measured yet — the comparison
-/// is honest about being partial rather than forcing both sides to exist before anything can be
-/// recorded.
-/// </summary>
+/// <summary>A pre/post workload comparison referencing two CapacityMeasurement rows. Either side may be null while only one is measured.</summary>
 public class WorkloadComparison
 {
     public int Id { get; set; }

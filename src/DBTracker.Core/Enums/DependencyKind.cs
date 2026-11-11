@@ -1,6 +1,6 @@
 namespace DBTracker.Core.Enums;
 
-/// <summary>What kind of technical dependency one InstanceDependency row describes (D07).</summary>
+/// <summary>What kind of dependency an InstanceDependency row describes.</summary>
 public enum DependencyKind
 {
     Application,
@@ -12,7 +12,7 @@ public enum DependencyKind
     LinkedService,
     Replica,
     BackupTooling,
-    /// <summary>A downstream consumer of this instance — something that depends on it, not something it depends on.</summary>
+    /// <summary>A downstream consumer of this instance, not something it depends on.</summary>
     Consumer,
     Other
 }

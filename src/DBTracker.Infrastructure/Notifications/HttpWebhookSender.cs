@@ -5,7 +5,7 @@ using Microsoft.Extensions.Options;
 
 namespace DBTracker.Infrastructure.Notifications;
 
-/// <summary>POSTs the alert payload as JSON to the configured webhook URL — generic enough for Slack incoming webhooks (which key off the top-level "text" field) or any other JSON receiver.</summary>
+/// <summary>POSTs the alert payload as JSON to the configured webhook URL.</summary>
 public class HttpWebhookSender(HttpClient http, IOptions<WebhookOptions> options, ILogger<HttpWebhookSender> logger) : IWebhookSender
 {
     public async Task SendAsync(WebhookAlertPayload payload, CancellationToken ct = default)

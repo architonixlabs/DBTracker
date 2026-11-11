@@ -1,6 +1,6 @@
 namespace DBTracker.Core.Enums;
 
-/// <summary>Where a MaintenanceEvidenceRecord's (D18) result came from — a reviewed external monitoring/ticket link is a valid first-class source, not just manually-typed results.</summary>
+/// <summary>Where a maintenance result came from. A reviewed external monitoring or ticket link is a valid source.</summary>
 public enum MaintenanceEvidenceSource
 {
     ManuallyEntered,

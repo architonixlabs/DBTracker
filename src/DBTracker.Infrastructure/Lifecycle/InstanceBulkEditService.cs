@@ -7,15 +7,8 @@ namespace DBTracker.Infrastructure.Lifecycle;
 
 public record BulkEditApplyResult(int AppliedCount, int SkippedArchivedCount, IReadOnlyList<string> ValidationErrors);
 
-/// <summary>
-/// Applies a reviewed bulk owner/tag/retention edit (U17) to a set of instances. Permission is
-/// re-checked by the caller's own [Authorize(Roles=Roles.CanEditPolicy)] on the page at request
-/// time (every call here happens inside that same request); "conflicts" are re-checked here by
-/// re-reading each instance fresh immediately before writing rather than trusting the preview's
-/// now-possibly-stale snapshot — an instance archived since the preview was built is skipped rather
-/// than silently un-archived by a bulk write that was never about archiving. Bulk edit deliberately
-/// has no path to set IsArchived — archiving stays a separate, individually-confirmed action (U14).
-/// </summary>
+/// <summary>Applies a reviewed bulk owner/tag/retention edit. Each instance is re-read before writing, and one archived since the preview is skipped.</summary>
+/// <remarks>Permission is enforced by the page's CanEditPolicy authorization. Bulk edit cannot set IsArchived.</remarks>
 public class InstanceBulkEditService(IDbContextFactory<DBTrackerDbContext> factory, AuditRecorder audit)
 {
     public async Task<IReadOnlyList<BulkEditRowPreview>> PreviewAsync(IReadOnlyList<int> instanceIds, BulkEditRequest request)

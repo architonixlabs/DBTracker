@@ -5,20 +5,13 @@ using Microsoft.Extensions.Logging;
 
 namespace DBTracker.Infrastructure.Notifications;
 
-/// <summary>Per-recipient send outcome (U09) — a no-op/disabled sender can never be reported as "sent".</summary>
+/// <summary>Per-recipient send outcome; a disabled sender is never reported as sent.</summary>
 public record ReportRecipientOutcome(string Recipient, EmailSendResult Result);
 
-/// <summary>
-/// What "Send report"/"Send now" would do, computed from the exact same row set that gets sent —
-/// shown to the user before they confirm (U09).
-/// </summary>
+/// <summary>What sending would do, computed from the same rows that get sent and shown before confirmation.</summary>
 public record ReportPreview(ReportScope Scope, DateTime GenerationTimeUtc, string Subject, string Body, IReadOnlyList<string> Recipients, int RowCount);
 
-/// <summary>
-/// The result of an actual send: generation time/scope/body are recorded alongside per-recipient
-/// outcomes. "No recipients configured" and "a configured recipient's send was Disabled" both mean
-/// nothing was actually sent (U09) — Disabled covers both, so neither can be reported as accepted.
-/// </summary>
+/// <summary>Result of a send: generation time, scope, body and per-recipient outcomes. No recipients and a Disabled sender both mean nothing was sent.</summary>
 public record ReportSendResult(ReportScope Scope, DateTime GenerationTimeUtc, IReadOnlyList<ReportRecipientOutcome> Outcomes)
 {
     public int AcceptedCount => Outcomes.Count(o => o.Result.Outcome == Core.Enums.EmailSendOutcome.Accepted);
@@ -33,10 +26,7 @@ public class ComplianceReportService(
     IConfiguration configuration,
     ILogger<ComplianceReportService> logger)
 {
-    /// <summary>
-    /// Builds the report for the given scope without sending anything — the exact dataset "Send"
-    /// will use, so preview/download/send can never drift from each other (U09).
-    /// </summary>
+    /// <summary>Builds the report for a scope without sending; the same dataset Send uses, so preview, download and send can't drift.</summary>
     public async Task<ReportPreview> BuildPreviewAsync(ReportScope scope, DateTime? generationTimeUtc = null)
     {
         var now = generationTimeUtc ?? DateTime.UtcNow;
@@ -50,7 +40,7 @@ public class ComplianceReportService(
             recipients, rows.Count);
     }
 
-    /// <summary>Builds the report for the confirmed scope and sends it, reporting a real per-recipient outcome for each address. Used by "Send now"/"Send report" and the schedule.</summary>
+    /// <summary>Builds and sends the report for the confirmed scope, with a real outcome per recipient.</summary>
     public async Task<ReportSendResult> SendAsync(ReportScope scope, CancellationToken ct = default)
     {
         var now = DateTime.UtcNow;
@@ -76,7 +66,7 @@ public class ComplianceReportService(
         return new ReportSendResult(scope, now, outcomes);
     }
 
-    /// <summary>Preserved for the scheduled background job, which always sends the full inventory.</summary>
+    /// <summary>Used by the scheduled job, which always sends the full inventory.</summary>
     public async Task<ReportSendResult> SendNowAsync(CancellationToken ct = default) => await SendAsync(ReportScope.Full(), ct);
 
     private async Task<List<ComplianceReportRow>> BuildRowsAsync(ReportScope scope)

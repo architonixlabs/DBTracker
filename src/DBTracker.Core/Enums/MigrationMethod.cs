@@ -1,6 +1,6 @@
 namespace DBTracker.Core.Enums;
 
-/// <summary>D08 — only recorded where the engine/assessment actually supports it; this app never generates executable migration scripts for any of these.</summary>
+/// <summary>Migration technique, recorded only where the engine supports it. No migration scripts are generated.</summary>
 public enum MigrationMethod
 {
     Patch,

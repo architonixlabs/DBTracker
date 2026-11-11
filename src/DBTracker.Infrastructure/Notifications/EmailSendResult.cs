@@ -2,10 +2,7 @@ using DBTracker.Core.Enums;
 
 namespace DBTracker.Infrastructure.Notifications;
 
-/// <summary>
-/// What a send attempt actually resulted in (U09) — "the provider accepted it" is never conflated
-/// with "the recipient received it"; Detail carries diagnosis for a Failed attempt.
-/// </summary>
+/// <summary>What a send attempt resulted in. Provider acceptance is never treated as delivery; Detail explains a failure.</summary>
 public record EmailSendResult(EmailSendOutcome Outcome, string? Detail = null)
 {
     public static readonly EmailSendResult Disabled = new(EmailSendOutcome.Disabled);

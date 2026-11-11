@@ -3,7 +3,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace DBTracker.Infrastructure.Queries;
 
-/// <summary>Per-user saved filter/sort views (U05) for the Instances list and Reports page.</summary>
+/// <summary>Per-user saved views for the Instances list and Reports page.</summary>
 public class SavedViewService(IDbContextFactory<DBTrackerDbContext> factory)
 {
     public async Task<List<SavedView>> ListAsync(string userId, string viewType)

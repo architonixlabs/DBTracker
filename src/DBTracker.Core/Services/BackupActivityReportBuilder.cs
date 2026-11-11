@@ -16,11 +16,7 @@ public record BackupActivityRow(
 
 public record BackupActivitySummary(int TotalRuns, int SuccessCount, int FailedCount, int MissedCount, double TotalSizeMb, double? AvgDurationMinutes);
 
-/// <summary>
-/// Backup runs within a date window — what actually happened, not just current state. Serves the
-/// DBA persona: spotting patterns (a flaky job, growing backup sizes, duration creep) that a
-/// point-in-time snapshot can't show. Pure (no I/O), so it's unit-testable without a database.
-/// </summary>
+/// <summary>Backup runs within a date window, for spotting patterns a point-in-time view can't show: a flaky job, growing sizes, duration creep.</summary>
 public static class BackupActivityReportBuilder
 {
     public static IReadOnlyList<BackupActivityRow> InRange(IEnumerable<BackupActivityRow> rows, DateTime fromUtc, DateTime toUtc) =>

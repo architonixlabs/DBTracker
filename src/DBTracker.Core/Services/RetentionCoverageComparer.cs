@@ -5,12 +5,7 @@ namespace DBTracker.Core.Services;
 
 public record RetentionCoverageResult(RetentionCoverageStatus Status, string Reasoning);
 
-/// <summary>
-/// D17 — compares recorded, currently-available backup-copy evidence against a retention policy
-/// (reusing U21/D01's policy pattern rather than a new one). A copy that was merely discovered once,
-/// long ago, and is no longer currently verified accessible never counts toward coverage — only
-/// copies BackupCopyAvailabilityEvaluator currently calls available can.
-/// </summary>
+/// <summary>Currently available backup copies compared against a retention policy. A copy discovered once but no longer verified never counts.</summary>
 public static class RetentionCoverageComparer
 {
     public static RetentionCoverageResult Compare(int? requiredRetentionDays, IReadOnlyCollection<BackupCopyLocation> copies, DateTime nowUtc, int staleAfterDays)

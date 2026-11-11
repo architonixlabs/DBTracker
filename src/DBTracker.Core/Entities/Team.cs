@@ -1,14 +1,7 @@
 namespace DBTracker.Core.Entities;
 
-/// <summary>
-/// An owning team (U21) — a reusable alternative/complement to a single free-text contact on a
-/// DatabaseInstance. Primary/backup contact fields here are a team-level default; an instance can
-/// still carry its own BackupContact* fields for an instance-specific backup contact.
-///
-/// NOTE: a Team is a personalization/grouping concept only. Membership narrows what a user sees as
-/// "mine" and which broadcast alerts reach them — it never grants or restricts access beyond what
-/// their ASP.NET Core Identity role already allows. This is not row-level security.
-/// </summary>
+/// <summary>An owning team with team-level default contacts.</summary>
+/// <remarks>Grouping and personalization only: membership never grants or restricts access beyond the user's role. Not row-level security.</remarks>
 public class Team
 {
     public int Id { get; set; }

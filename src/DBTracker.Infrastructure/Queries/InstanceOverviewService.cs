@@ -5,12 +5,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace DBTracker.Infrastructure.Queries;
 
-/// <summary>
-/// Uses its own short-lived DbContext per call (via the factory) rather than the ambient scoped
-/// one — pages that support manual/periodic refresh (U03) call this repeatedly while their own
-/// scoped context may be mid-mutation (e.g. logging a backup), so a shared context would race the
-/// same way NotificationService's comment elsewhere in this app describes.
-/// </summary>
+/// <summary>Uses a short-lived DbContext per call: refreshing pages call this while their own scoped context may be mid-save.</summary>
 public class InstanceOverviewService(IDbContextFactory<DBTrackerDbContext> factory)
 {
     public async Task<List<InstanceOverview>> GetAllAsync(bool includeArchived = false)
@@ -43,12 +38,7 @@ public class InstanceOverviewService(IDbContextFactory<DBTrackerDbContext> facto
             .ToList();
     }
 
-    /// <summary>
-    /// Lightweight projection for the dashboard/Instances list (U06/U05) — one correlated subquery
-    /// per instance for "the most recent record as-of now" and "the most recent successful record
-    /// as-of now" (exactly what BackupHealthCalculator needs), instead of loading every instance's
-    /// entire BackupRecords/RestoreEvents collection just to show a grid.
-    /// </summary>
+    /// <summary>Lightweight dashboard/list projection: one subquery each for the latest record and latest success, instead of loading every instance's history.</summary>
     public async Task<List<InstanceListRow>> GetAllSummariesAsync(bool includeArchived = false)
     {
         using var db = await factory.CreateDbContextAsync();
@@ -76,7 +66,7 @@ public class InstanceOverviewService(IDbContextFactory<DBTrackerDbContext> facto
         return projected.Select(p => ToRow(p.Instance, p.LatestRecord, p.LatestSuccessUtc, now, p.OwnerTeamName)).ToList();
     }
 
-    /// <summary>Filtered/sorted/paged Instances list (U05/U06) built from the same lightweight projection as <see cref="GetAllSummariesAsync"/>.</summary>
+    /// <summary>Filtered, sorted, paged Instances list from the same projection as <see cref="GetAllSummariesAsync"/>.</summary>
     public async Task<InstanceListResult> GetPagedAsync(InstanceListQuery query, bool includeArchived = false)
     {
         var rows = await GetAllSummariesAsync(includeArchived);

@@ -4,16 +4,10 @@ namespace DBTracker.Core.Services;
 
 public record FieldError(string Field, string Message);
 
-/// <summary>
-/// Shared validation for a DatabaseInstance — used by the create/edit form (U13) and the CSV
-/// importer (U17) so the two never drift: a row that would be rejected by one is rejected by the
-/// other. Pure (no I/O, no DB round-trip), returns every field error found rather than stopping at
-/// the first one, so a form can show field-level errors plus a summary in one pass.
-/// </summary>
+/// <summary>Validation shared by the instance form and the CSV importer so they can't drift. Returns every field error, not just the first.</summary>
 public static class InstanceValidator
 {
-    // Mirrors the HasMaxLength(...) values configured in DBTrackerDbContext — kept here instead of
-    // reading the model at runtime so this stays pure and testable without EF Core.
+    // Mirrors the HasMaxLength values in DBTrackerDbContext, kept here so validation stays testable without EF.
     private const int NameMaxLength = 200;
     private const int VersionMaxLength = 50;
     private const int ShortFieldMaxLength = 200;
@@ -80,7 +74,6 @@ public static class InstanceValidator
         MaxLen(nameof(instance.Tags), instance.Tags, TagsMaxLength, "Tags");
         MaxLen(nameof(instance.RunbookUrl), instance.RunbookUrl, UrlMaxLength, "Runbook / monitoring link");
 
-        // U21 additions.
         MaxLen(nameof(instance.BackupContactName), instance.BackupContactName, ShortFieldMaxLength, "Backup contact name");
         MaxLen(nameof(instance.BackupContactEmail), instance.BackupContactEmail, EmailMaxLength, "Backup contact email");
         MaxLen(nameof(instance.BackupContactPhone), instance.BackupContactPhone, PhoneMaxLength, "Backup contact phone");
@@ -121,7 +114,7 @@ public static class InstanceValidator
         return errors;
     }
 
-    /// <summary>Nonnegative-measurement validation for a backup/restore log entry — shared with the manual entry forms (U11/U13).</summary>
+    /// <summary>Nonnegative-measurement validation for manual backup/restore entries.</summary>
     public static IReadOnlyList<FieldError> ValidateMeasurements(decimal? sizeMb, int? durationMinutes)
     {
         var errors = new List<FieldError>();

@@ -2,14 +2,7 @@ using DBTracker.Core.Enums;
 
 namespace DBTracker.Core.Services;
 
-/// <summary>
-/// D15's planning report — built entirely from the SAME filtered row set the workspace shows
-/// (callers pass the identical <c>matchingRows</c> they're rendering), so an export can never drift
-/// from what the viewer is looking at. Sections keep support runway, patch-baseline coverage,
-/// expiring exceptions and blocked/late migrations as separate, explainable facts rather than one
-/// opaque score, and backup health is deliberately absent from this type entirely — it is tracked
-/// elsewhere and never blended in here.
-/// </summary>
+/// <summary>Lifecycle planning report built from the same rows the workspace shows, so an export can't drift from the screen. Runway, baseline coverage, expiring exceptions and blocked migrations stay separate facts; backup health is deliberately absent.</summary>
 public record LifecycleReport(
     int Denominator,
     int MatchingCount,

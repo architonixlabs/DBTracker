@@ -11,14 +11,7 @@ public record BackupChainCoverageResult(
     IReadOnlyList<ChainMemberCoverage> Members,
     IReadOnlyList<string> MissingReasons);
 
-/// <summary>
-/// D16 — pure computation of a database instance's backup-chain coverage against whatever
-/// BackupChainRequirement rows have actually been recorded for it. No requirements recorded means
-/// Unknown, not Complete — a chain concept is never forced onto an engine nobody has configured one
-/// for. A required Base that isn't satisfied always blocks a recoverable point entirely: a fresh
-/// TransactionLog/WalArchive/Binlog record is never, by itself, treated as proof of a valid base or
-/// end-to-end recoverability, however recent it is.
-/// </summary>
+/// <summary>Backup-chain coverage against the recorded requirements. No requirements means Unknown; an unsatisfied Base blocks any recoverable point, however recent the log/WAL/binlog evidence is.</summary>
 public static class BackupChainCoverageCalculator
 {
     public static ChainMemberType EffectiveChainRole(BackupRecord record) => record.ChainRole ?? MapFromType(record.Type);

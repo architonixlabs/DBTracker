@@ -4,15 +4,10 @@ using Microsoft.EntityFrameworkCore;
 
 namespace DBTracker.Infrastructure.Notifications;
 
-/// <summary>
-/// Open/close glue used by AlertCheckHostedService on its own scoped DbContext, so opening,
-/// closing and the LastNotifiedHealth update it sits alongside all land in one SaveChangesAsync.
-/// The actual decisions (when to escalate) live in the pure, unit-tested IncidentEscalationEvaluator;
-/// this is just the "is there already an open one" plumbing around it.
-/// </summary>
+/// <summary>Opens and closes incidents on the alert sweep's own DbContext, so they save in the same SaveChangesAsync as LastNotifiedHealth.</summary>
 public static class IncidentLifecycle
 {
-    /// <summary>Returns the existing open incident for this instance, or opens a new one — never two open at once for the same instance.</summary>
+    /// <summary>Returns the open incident for this instance or opens one; never two at once.</summary>
     public static async Task<Incident> OpenOrContinueAsync(DBTrackerDbContext db, int instanceId, BackupHealth triggerHealth, DateTime nowUtc)
     {
         var open = await db.Incidents.FirstOrDefaultAsync(i => i.DatabaseInstanceId == instanceId && i.ClosedAtUtc == null);

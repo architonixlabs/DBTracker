@@ -17,11 +17,7 @@ using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// ASP.NET Core only auto-loads Static Web Assets (how framework/RCL files like blazor.web.js are
-// served from unpublished build output) in the Development environment. Any other environment
-// name running unpublished output — e.g. this app's "Testing" environment, used for local E2E runs
-// — otherwise 500s on every framework asset with a FileNotFoundException. A real `dotnet publish`
-// copies these physically into wwwroot and doesn't need this.
+// Static Web Assets only auto-load in Development; unpublished runs in other environments (e.g. Testing) would 500 on every framework asset.
 if (!builder.Environment.IsProduction())
 {
     builder.WebHost.UseStaticWebAssets();
@@ -30,13 +26,8 @@ if (!builder.Environment.IsProduction())
 var connectionString = builder.Configuration.GetConnectionString("DBTracker")
     ?? throw new InvalidOperationException("Connection string 'DBTracker' not configured.");
 
-// A single registration path for DbContextOptions<DBTrackerDbContext>: the factory configures it
-// once, and the scoped context everything injects directly is created FROM that factory rather
-// than via a separate AddDbContext call (which would double-register the options and conflict).
-// NotificationBell renders on every page alongside that page's own ambient scoped context, so
-// NotificationService needs its own short-lived context via the factory to avoid "a second
-// operation was started on this context instance" — two components querying the same DbContext
-// concurrently, which is exactly the scenario the factory pattern exists for in Blazor Server.
+// One registration path for the options: the scoped context is created from the factory, since AddDbContext too would conflict.
+// NotificationService uses the factory directly because NotificationBell queries concurrently with each page's scoped context.
 builder.Services.AddDbContextFactory<DBTrackerDbContext>(options =>
     options.UseSqlServer(connectionString));
 builder.Services.AddScoped<DBTrackerDbContext>(sp =>
@@ -57,19 +48,15 @@ builder.Services.AddHostedService<ReportHostedService>();
 builder.Services.AddScoped<DeviceLinkService>();
 builder.Services.AddScoped<DBTracker.Infrastructure.Scanning.ConnectivityChecker>();
 
-// U19: append-only general audit trail, shared by instance lifecycle, account lifecycle, CSV
-// import/bulk edit and maintenance windows.
 builder.Services.AddScoped<AuditRecorder>();
 builder.Services.AddScoped<InstanceArchiveService>();
 builder.Services.AddScoped<InstanceBulkEditService>();
 builder.Services.AddScoped<AccountLifecycleService>();
 
-// U21: owner teams/memberships, reusable backup policies, and contact-correction requests.
 builder.Services.AddScoped<TeamService>();
 builder.Services.AddScoped<BackupPolicyService>();
 builder.Services.AddScoped<ContactCorrectionService>();
 
-// Epic 18 (D01-D06): database identity, releases and support lifecycle.
 builder.Services.AddScoped<VersionIdentityService>();
 builder.Services.AddScoped<ReleaseCatalogService>();
 builder.Services.AddScoped<SupportRunwayService>();
@@ -78,17 +65,12 @@ builder.Services.AddScoped<AdvisoryService>();
 builder.Services.AddScoped<VersionObservationService>();
 builder.Services.AddHostedService<SupportRunwayCheckHostedService>();
 
-// Epic 19 (D07-D10): technical dependencies, source-to-target path assessment, upgrade-readiness
-// checklists and migration campaigns. Manual mapping/evaluation only — no auto-discovery or
-// executable migration-script generation anywhere in this epic.
 builder.Services.AddScoped<DependencyService>();
 builder.Services.AddScoped<PathAssessmentService>();
 builder.Services.AddScoped<ReadinessChecklistService>();
 builder.Services.AddScoped<CampaignCompletionGateService>();
 builder.Services.AddScoped<CampaignService>();
 
-// Epic 20 (D11-D15): rehearsal/recovery evidence, scheduled change windows and cutover journal,
-// post-change validation, the generic D14 exception/waiver mechanism, and the lifecycle workspace.
 builder.Services.AddScoped<RehearsalService>();
 builder.Services.AddScoped<ChangeWindowService>();
 builder.Services.AddScoped<ChangeValidationService>();
@@ -96,10 +78,6 @@ builder.Services.AddScoped<ReadinessExceptionService>();
 builder.Services.AddHostedService<ReadinessExceptionExpiryCheckHostedService>();
 builder.Services.AddScoped<DBTracker.Infrastructure.Lifecycle.LifecycleWorkspaceService>();
 
-// Epic 21 (D16-D20): recovery objectives/backup-chain coverage, backup-copy availability and
-// retention evidence, integrity/HA/maintenance-job evidence, capacity/performance planning
-// evidence, and certificate/recovery-key dependency reminders. Record-keeping/evidence only — no
-// automatic restore execution, backup deletion, repairs, failovers or SQL jobs anywhere in here.
 builder.Services.AddScoped<DBTracker.Infrastructure.Recovery.RecoveryObjectiveService>();
 builder.Services.AddScoped<DBTracker.Infrastructure.Recovery.BackupCopyLocationService>();
 builder.Services.AddScoped<DBTracker.Infrastructure.Recovery.MaintenanceEvidenceService>();
@@ -107,14 +85,9 @@ builder.Services.AddScoped<DBTracker.Infrastructure.Recovery.CapacityPlanningSer
 builder.Services.AddScoped<DBTracker.Infrastructure.Recovery.CertificateDependencyService>();
 builder.Services.AddHostedService<DBTracker.Infrastructure.Recovery.CertificateExpiryCheckHostedService>();
 
-// Epic 22 (D21-D22): support entitlement/edition-cost readiness and the decommission/
-// source-retirement checklist. Record-keeping only — D22's CompleteRetirementAsync is the sole
-// path that retires an instance, and it does so purely by calling the pre-existing U14
-// InstanceArchiveService, never a second archive/delete mechanism of its own.
 builder.Services.AddScoped<DBTracker.Infrastructure.Entitlement.SupportEntitlementService>();
 builder.Services.AddScoped<DBTracker.Infrastructure.Retirement.RetirementChecklistService>();
 
-// Process-lifetime record of each background worker's last/next run (U15 setup/diagnostics page).
 builder.Services.AddSingleton<WorkerHeartbeatStore>();
 builder.Services.AddScoped<SetupDiagnosticsService>();
 builder.Services.Configure<SmtpOptions>(builder.Configuration.GetSection("Email:Smtp"));
@@ -133,8 +106,7 @@ switch (builder.Configuration["Email:Provider"])
         break;
 }
 
-// Generic outbound webhook (Slack/Teams/PagerDuty-style, via a plain JSON HTTP POST) alongside
-// email for Overdue/Failed alerts — disabled (NullWebhookSender) unless a URL is configured.
+// Webhook alerts alongside email; NullWebhookSender unless a URL is configured.
 builder.Services.Configure<WebhookOptions>(builder.Configuration.GetSection("Alerts:Webhook"));
 builder.Services.AddHttpClient<HttpWebhookSender>();
 if (!string.IsNullOrWhiteSpace(builder.Configuration["Alerts:Webhook:Url"]))
@@ -164,20 +136,8 @@ builder.Services.AddAuthentication(options =>
         });
     });
 
-// No global FallbackPolicy: every @page component declares its own [Authorize] (optionally
-// Roles=…) or [AllowAnonymous], and every minimal-API endpoint calls .RequireAuthorization() or
-// .AllowAnonymous() explicitly (see DeviceLinkEndpointRouteBuilderExtensions,
-// IdentityComponentsEndpointRouteBuilderExtensions). A FallbackPolicy requiring authentication
-// used to also catch the interactive-render-mode's own transport endpoints (/_blazor/negotiate,
-// /_blazor/initializers, the SignalR hub) — which have no authorization metadata of their own and
-// must stay reachable by an anonymous visitor — redirecting them to the login page instead of
-// returning the JSON/handshake the Blazor JS runtime expects. That silently broke the interactive
-// circuit on any genuinely anonymous page relying on normal C# event dispatch rather than a
-// named-form SSR post-back (the way Login.razor's form happens to be built): the browser fell back
-// to a real, un-enhanced POST with no antiforgery token, which UseAntiforgery() then rejected with
-// a 400. Found building U16's Forgot/Reset password pages — the first anonymous pages in this app
-// to rely on interactive OnValidSubmit. Making every page's authorization explicit (rather than
-// relying on an implicit catch-all) removes the footgun without weakening any existing RBAC check.
+// No global FallbackPolicy: every page and endpoint declares its authorization explicitly. A fallback also caught /_blazor transport
+// endpoints, redirecting them to login and breaking the circuit on anonymous pages (e.g. Forgot/Reset password).
 builder.Services.AddAuthorization();
 
 builder.Services.AddIdentityCore<ApplicationUser>(options =>
@@ -217,11 +177,8 @@ if (!app.Environment.IsDevelopment())
     app.UseExceptionHandler("/Error", createScopeForErrors: true);
 }
 
-// HSTS tells the browser to force https for this host for future requests — including upgrading
-// the Blazor Server SignalR websocket to wss://. That silently breaks interactivity wherever this
-// app is served over plain http without a TLS-terminating reverse proxy in front of it (e.g. local
-// Testing-environment E2E runs today, and possibly early on-prem deployment). Scope it to
-// Production, where TLS is expected to be in place.
+// HSTS upgrades the SignalR websocket to wss://, which breaks interactivity when served over plain http (e.g. Testing E2E runs).
+// Production only, where TLS is expected.
 if (app.Environment.IsProduction())
 {
     app.UseHsts();

@@ -3,7 +3,7 @@ using DBTracker.Core.Enums;
 
 namespace DBTracker.Core.Services;
 
-/// <summary>Pure summary of one instance's recorded technical dependencies (D07), as of right now — no persistence, no discovery, just arithmetic over what's already been manually recorded.</summary>
+/// <summary>Summary of one instance's recorded dependencies.</summary>
 public record DependencyImpactResult(
     int TotalCount,
     int UnresolvedCount,
@@ -12,12 +12,7 @@ public record DependencyImpactResult(
     IReadOnlyList<InstanceDependency> DownstreamConsumers,
     bool HasUnresolvedConcerns);
 
-/// <summary>
-/// Computes the "before you change a shared engine" view D07 asks for: downstream consumers and
-/// unresolved dependencies, both shown explicitly rather than folded into one score. A dependency
-/// that's never been reviewed (IsResolved == false, the default on a freshly recorded row) always
-/// counts as unresolved — nothing here infers resolution from silence.
-/// </summary>
+/// <summary>Downstream consumers and unresolved dependencies to review before changing a shared engine, listed separately rather than scored. An unreviewed row always counts as unresolved.</summary>
 public static class DependencyImpactAssessor
 {
     public static DependencyImpactResult Assess(IReadOnlyList<InstanceDependency> dependencies)

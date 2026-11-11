@@ -6,14 +6,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace DBTracker.Infrastructure.ChangeManagement;
 
-/// <summary>
-/// D12 — scheduled change windows and the cutover journal for a D10 MigrationCampaign. Creating a
-/// window, a runbook step, a journal entry or an approval request never executes anything and never
-/// sends any notification by itself — every write here is a plain recorded fact. Conflict detection
-/// (ChangeWindowConflictDetector) and the approval gate (ChangeWindowApprovalGate/
-/// ChangeWindowApprovalAuthorizer) are pure; this class only supplies them with what's actually in
-/// the database.
-/// </summary>
+/// <summary>Change windows and the cutover journal. Every write is a recorded fact that executes and sends nothing; conflict detection and the approval gate are pure and fed from here.</summary>
 public class ChangeWindowService(IDbContextFactory<DBTrackerDbContext> factory, AuditRecorder audit)
 {
     public async Task<List<ChangeWindow>> ListForCampaignAsync(int campaignId)
@@ -41,7 +34,7 @@ public class ChangeWindowService(IDbContextFactory<DBTrackerDbContext> factory, 
             .FirstOrDefaultAsync(w => w.Id == id);
     }
 
-    /// <summary>Freeze/conflict check against other scheduled windows sharing an affected instance, and against those instances' existing (Epic 12) maintenance windows — read-only, computed from whatever's recorded, nothing here blocks saving on its own.</summary>
+    /// <summary>Read-only conflict check against other scheduled windows and existing maintenance windows on the same instances. Never blocks saving.</summary>
     public async Task<ChangeWindowConflictResult> DetectConflictsAsync(int campaignId, DateTime startUtc, DateTime endUtc, int? excludingWindowId = null)
     {
         using var db = await factory.CreateDbContextAsync();
@@ -154,7 +147,7 @@ public class ChangeWindowService(IDbContextFactory<DBTrackerDbContext> factory, 
         return (true, "");
     }
 
-    /// <summary>The only path that changes ChangeWindow.Status. Advancing past Planned to Approved requires ChangeWindowApprovalGate to pass (every required approval Approved, or an active linked D14 emergency exception) — refuses with the outstanding list otherwise.</summary>
+    /// <summary>The only path that changes ChangeWindow.Status. Approved requires ChangeWindowApprovalGate to pass; otherwise it refuses with the outstanding approvals.</summary>
     public async Task<(bool Ok, string Reason)> SetStatusAsync(int windowId, ChangeWindowStatus toStatus, string actorName)
     {
         using var db = await factory.CreateDbContextAsync();

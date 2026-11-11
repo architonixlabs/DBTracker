@@ -6,14 +6,7 @@ namespace DBTracker.Infrastructure.ChangeManagement;
 
 public record CampaignCompletionGateView(bool CanComplete, IReadOnlyList<string> BlockingReasons, bool UsedException);
 
-/// <summary>
-/// The I/O glue CampaignService.TransitionAsync consults before allowing CampaignState.Completed —
-/// loads, for every instance linked to the campaign, its latest ChangeValidation/signoffs (D13) and
-/// latest rehearsal readiness (D11), runs each through the pure ChangeCompletionGateEvaluator, and
-/// requires every linked instance to pass. A single campaign-scoped, currently-Active D14
-/// ReadinessException (TargetType "MigrationCampaign") is the only bypass, applied uniformly to every
-/// instance's result rather than silently clearing any one of them.
-/// </summary>
+/// <summary>Loads each linked instance's latest validation, sign-offs and rehearsal and runs them through ChangeCompletionGateEvaluator; every instance must pass. An active campaign-scoped exception is the only bypass and applies to all of them.</summary>
 public class CampaignCompletionGateService(IDbContextFactory<DBTrackerDbContext> factory, IConfiguration configuration)
 {
     public async Task<CampaignCompletionGateView> EvaluateAsync(int campaignId)

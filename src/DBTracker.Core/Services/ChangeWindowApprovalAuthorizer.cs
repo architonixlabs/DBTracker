@@ -1,12 +1,7 @@
 namespace DBTracker.Core.Services;
 
-/// <summary>
-/// Pure role/scope authorization for D12 change-window approvals. Deliberately references role
-/// names as literal strings rather than DBTracker.Infrastructure.Identity.Roles, since
-/// DBTracker.Core cannot depend on DBTracker.Infrastructure — the literal values here must stay in
-/// sync with Roles.Admin/Dba/ItManager/Auditor if those ever change. Admin can always approve any
-/// scope; an unrecognized scope label requires Admin specifically rather than defaulting open.
-/// </summary>
+/// <summary>Role/scope check for change-window approvals. Admin can approve any scope; an unrecognized scope requires Admin.</summary>
+/// <remarks>Core can't reference Infrastructure's Roles, so these literals must stay in sync with Roles.Admin/Dba/ItManager/Auditor.</remarks>
 public static class ChangeWindowApprovalAuthorizer
 {
     private static readonly Dictionary<string, string[]> ScopeAllowedRoles = new(StringComparer.OrdinalIgnoreCase)

@@ -2,11 +2,7 @@ using Microsoft.AspNetCore.Identity;
 
 namespace DBTracker.Infrastructure.Identity;
 
-/// <summary>
-/// Dev/Testing-only seed accounts — one per backlog persona, plus an Admin. Passwords here are
-/// fixed demo values, never used outside Development/Testing environments. Change them (or wire up
-/// real accounts) before deploying anywhere else.
-/// </summary>
+/// <summary>Dev/Testing-only seed accounts with fixed demo passwords. Replace them before deploying anywhere else.</summary>
 public static class IdentitySeedData
 {
     private const string DemoPassword = "ArxDemo#2026!";

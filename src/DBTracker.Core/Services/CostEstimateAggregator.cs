@@ -12,13 +12,7 @@ public record CostEstimateSummary(
     DateTime? LatestEstimateDateUtc,
     IReadOnlyList<EditionCostEstimate> MissingReviewer);
 
-/// <summary>
-/// D21 — pure aggregation of an instance's reviewed cost estimates: totals by type, currency-mix
-/// flagging (summing mismatched currencies would be meaningless, so this only ever sums within one
-/// currency and flags the mix rather than silently combining figures), and which estimates still lack
-/// a reviewer. Never masks anything itself — CostEvidenceMasker is the separate, role-aware step
-/// callers apply to whatever this returns before it reaches a non-authorized viewer.
-/// </summary>
+/// <summary>Totals an instance's cost estimates by type, flags mixed currencies instead of summing them, and lists unreviewed estimates. Masking is done separately by CostEvidenceMasker.</summary>
 public static class CostEstimateAggregator
 {
     public static CostEstimateSummary Summarize(IReadOnlyCollection<EditionCostEstimate> estimates)
@@ -38,8 +32,7 @@ public static class CostEstimateAggregator
             {
                 return null;
             }
-            // Only sum when every matching estimate shares one currency — a mixed-currency set
-            // reports its total as unavailable rather than adding incompatible figures together.
+            // Mixed currencies report the total as unavailable rather than adding incompatible figures.
             var distinctCurrencies = matching.Select(e => e.Currency).Distinct(StringComparer.OrdinalIgnoreCase).Count();
             return distinctCurrencies == 1 ? matching.Sum(e => e.EstimatedAmount) : null;
         }

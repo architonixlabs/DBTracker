@@ -1,6 +1,6 @@
 namespace DBTracker.Core.Enums;
 
-/// <summary>D12 — a scheduled change window's own lifecycle. Creating a window at Planned never executes anything or sends any notification by itself; moving to Approved requires ChangeWindowApprovalGate to pass (or a linked, active D14 emergency exception).</summary>
+/// <summary>A change window's lifecycle. Planned triggers nothing; Approved requires ChangeWindowApprovalGate to pass or an active emergency exception.</summary>
 public enum ChangeWindowStatus
 {
     Planned,

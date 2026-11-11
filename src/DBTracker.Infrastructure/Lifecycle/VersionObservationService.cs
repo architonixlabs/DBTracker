@@ -6,15 +6,8 @@ using Microsoft.EntityFrameworkCore;
 
 namespace DBTracker.Infrastructure.Lifecycle;
 
-/// <summary>
-/// D06 — manual/import version-metadata observations and drift detection against the declared
-/// VersionIdentity. Manual attestation (VersionIdentityService.AttestAsync) and this documented
-/// import path are the first-class, shipped ways to get metadata in; RecordFutureCollectorPlaceholderAsync
-/// exists only to show where an explicitly-configured, read-only, least-privilege, bounded-schedule
-/// collector would plug in later — it is never invoked automatically and makes no network call.
-/// A permission-failure observation never overwrites the declared VersionIdentity and never touches
-/// DatabaseInstance.IsArchived.
-/// </summary>
+/// <summary>Manual and imported version observations with drift detection against the declared identity. A failed observation never overwrites the identity or archives the instance.</summary>
+/// <remarks>RecordFutureCollectorPlaceholderAsync marks where an optional read-only collector would plug in; it is never invoked automatically and makes no network call.</remarks>
 public class VersionObservationService(IDbContextFactory<DBTrackerDbContext> factory, AuditRecorder audit)
 {
     public async Task<List<VersionObservation>> ListForInstanceAsync(int instanceId)
@@ -61,7 +54,7 @@ public class VersionObservationService(IDbContextFactory<DBTrackerDbContext> fac
         return observation;
     }
 
-    /// <summary>A failed observation attempt — permission denied/unreachable. Recorded honestly; never overwrites VersionIdentity and never marks the instance retired/archived.</summary>
+    /// <summary>Records a failed attempt (permission denied or unreachable). Never overwrites VersionIdentity or archives the instance.</summary>
     public async Task<VersionObservation> RecordFailureAsync(int instanceId, ObservationOutcome outcome, string failureDetail, string attemptedBy)
     {
         if (outcome == ObservationOutcome.Success)

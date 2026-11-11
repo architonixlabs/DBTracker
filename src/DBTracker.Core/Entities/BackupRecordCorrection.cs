@@ -2,11 +2,7 @@ using DBTracker.Core.Enums;
 
 namespace DBTracker.Core.Entities;
 
-/// <summary>
-/// An append-only correction to a BackupRecord (U11) — the original record's Status/Notes are
-/// never overwritten in place. The "effective" value of a corrected field is the newest
-/// correction's New value; with none, it's the original record's own value.
-/// </summary>
+/// <summary>An append-only correction to a BackupRecord. The original is never overwritten; the newest correction's value is the effective one.</summary>
 public class BackupRecordCorrection
 {
     public int Id { get; set; }

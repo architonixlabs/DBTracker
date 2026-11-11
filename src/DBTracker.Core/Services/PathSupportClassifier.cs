@@ -3,20 +3,10 @@ using DBTracker.Core.Enums;
 
 namespace DBTracker.Core.Services;
 
-/// <summary>Pure classification result for one source-to-target pairing (D08).</summary>
 public record PathSupportClassificationResult(PathSupportStatus Status, PathSupportRule? MatchedRule, string Reasoning);
 
-/// <summary>
-/// Classifies a source-to-target migration pairing as Supported/Blocked/Unknown by matching it
-/// against a curated set of reviewed PathSupportRule rows. This is the one place D08's central rule
-/// lives: the absence of a matching rule is always Unknown, never Supported — there is no fallback
-/// that treats "nobody has said no" as "yes". Engine, AssessmentType and Method must all match
-/// exactly (a Relocation rule never answers a VersionUpgrade question, and vice versa); family,
-/// edition, platform and topology fields on a rule are optional constraints (blank = "no constraint
-/// on this dimension"), and build ranges are compared with VersionBuildComparer so "8.0.36" correctly
-/// falls inside "8.0.0"-"8.0.40" instead of ordering lexicographically. Multiple matching rules that
-/// disagree on status are reported as Unknown rather than picking one arbitrarily.
-/// </summary>
+/// <summary>Classifies a migration pairing as Supported, Blocked or Unknown against curated rules. No matching rule is always Unknown, and rules that disagree also give Unknown.</summary>
+/// <remarks>Engine, AssessmentType and Method must match exactly; other rule fields are optional constraints, and builds compare numerically ("8.0.36" falls inside "8.0.0"-"8.0.40").</remarks>
 public static class PathSupportClassifier
 {
     public static PathSupportClassificationResult Classify(

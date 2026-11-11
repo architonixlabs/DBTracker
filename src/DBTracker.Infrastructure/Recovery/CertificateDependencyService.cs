@@ -12,13 +12,7 @@ namespace DBTracker.Infrastructure.Recovery;
 
 public record CertificateRow(CertificateDependency Certificate, CertificateExpiryStatus ExpiryStatus, KeyRotationStatus RotationStatus);
 
-/// <summary>
-/// D20 — certificate and recovery-key dependency reminders. SecretStoreReference/Notes/
-/// RenewalEvidenceText are screened by SecretLeakGuard before they're ever persisted, so a pasted
-/// secret never reaches the database in the first place — not just masked later at export time.
-/// EvaluateAndNotifyAsync reuses D03's SupportRunwayNoticeEvaluator threshold/dedupe logic rather
-/// than a parallel implementation, routed through the same U07 subscription/notification plumbing.
-/// </summary>
+/// <summary>Certificate and recovery-key reminders. Free-text fields go through SecretLeakGuard before saving, so a pasted secret never reaches the database.</summary>
 public class CertificateDependencyService(
     IDbContextFactory<DBTrackerDbContext> factory,
     AuditRecorder audit,
@@ -105,12 +99,7 @@ public class CertificateDependencyService(
             reason: cert.Label);
     }
 
-    /// <summary>
-    /// One sweep: any certificate whose expiry has crossed a more urgent configured threshold than
-    /// last notified gets exactly one deduplicated in-app + email notice, routed to the instance's
-    /// contact plus any U07 subscribers. Safe to call from the hosted service or an explicit
-    /// "Evaluate now" action — both share this one method and its dedupe state.
-    /// </summary>
+    /// <summary>One sweep: one deduplicated notice per certificate that crossed a more urgent expiry threshold, to the contact and subscribers. Shared by the hosted service and the manual action.</summary>
     public async Task<int> EvaluateAndNotifyAsync(CancellationToken ct = default)
     {
         using var db = await factory.CreateDbContextAsync(ct);

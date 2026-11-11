@@ -1,6 +1,6 @@
 namespace DBTracker.Core.Entities;
 
-/// <summary>Per-user read receipt for a (still shared/broadcast) Notification (U07) — read state is personal, so one user marking a notification read never affects what another user sees as unread.</summary>
+/// <summary>Per-user read receipt for a shared notification, so one user's read never clears another's.</summary>
 public class NotificationReadState
 {
     public int Id { get; set; }

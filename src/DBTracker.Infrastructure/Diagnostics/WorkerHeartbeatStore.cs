@@ -4,12 +4,7 @@ namespace DBTracker.Infrastructure.Diagnostics;
 
 public record WorkerHeartbeat(string Name, bool Enabled, DateTime? LastRunUtc, DateTime? NextRunUtc, string? LastError, TimeSpan? Interval);
 
-/// <summary>
-/// In-memory record of each background worker's last/next run, for the Admin setup/diagnostics
-/// page (U15) — "is the scan/alert/report sweep actually running" shouldn't require reading the
-/// server's log file. Process-lifetime only (reset on restart); that's fine for "is it running right
-/// now", which is what the diagnostics page is answering.
-/// </summary>
+/// <summary>In-memory last/next run per background worker for the diagnostics page. Resets on restart, which is fine for "is it running now".</summary>
 public class WorkerHeartbeatStore
 {
     private readonly ConcurrentDictionary<string, WorkerHeartbeat> _heartbeats = new();

@@ -12,12 +12,7 @@ public record RestoreTestingRow(
     bool RestoreTested, DateTime? LastSuccessfulRestoreUtc, int TotalAttempts,
     RestoreTestRecency Recency, DateTime? NextDueUtc);
 
-/// <summary>
-/// Which instances have ever had a *successful* restore proven, not just backups taken, and (U12)
-/// whether that proof is still within its test-recency window. Serves the Auditor persona — an
-/// untested or expired-coverage backup is a known audit red flag. Untested/overdue instances sort
-/// first. Pure (no I/O).
-/// </summary>
+/// <summary>Which instances have a proven successful restore and whether it is still within the test window. Untested and overdue instances sort first.</summary>
 public static class RestoreTestingReportBuilder
 {
     public static IReadOnlyList<RestoreTestingRow> Build(IEnumerable<RestoreTestingInput> inputs, int defaultIntervalDays = 90, DateTime? nowUtc = null)

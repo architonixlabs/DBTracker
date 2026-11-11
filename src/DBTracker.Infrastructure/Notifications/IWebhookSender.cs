@@ -2,10 +2,7 @@ using DBTracker.Core.Services;
 
 namespace DBTracker.Infrastructure.Notifications;
 
-/// <summary>
-/// Outbound webhook delivery for alerts — a generic HTTP POST rather than a specific platform
-/// integration (Slack, Teams, PagerDuty, …), so any receiver that accepts JSON can be wired up.
-/// </summary>
+/// <summary>Outbound alert webhook as a plain JSON POST, so any receiver that accepts JSON works.</summary>
 public interface IWebhookSender
 {
     Task SendAsync(WebhookAlertPayload payload, CancellationToken ct = default);

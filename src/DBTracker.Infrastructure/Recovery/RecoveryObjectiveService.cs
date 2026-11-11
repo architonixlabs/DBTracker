@@ -13,12 +13,7 @@ public record RecoveryEvidenceView(
     BackupChainCoverageResult Coverage,
     IReadOnlyList<RestoreEvent> RecentRestores);
 
-/// <summary>
-/// D16 — business recovery objectives and backup-chain-coverage evidence. Coverage itself is always
-/// computed live from BackupChainCoverageCalculator (pure) over whatever BackupChainRequirement rows
-/// and BackupRecords actually exist — nothing here caches or pre-asserts a status, and an instance
-/// with no requirements recorded is reported Unknown rather than defaulted to any other state.
-/// </summary>
+/// <summary>Recovery objectives and chain coverage. Coverage is computed live from the recorded requirements and backups; none recorded is Unknown.</summary>
 public class RecoveryObjectiveService(IDbContextFactory<DBTrackerDbContext> factory, AuditRecorder audit)
 {
     public async Task<RecoveryEvidenceView?> GetForInstanceAsync(int instanceId)

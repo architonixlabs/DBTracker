@@ -1,6 +1,5 @@
 namespace DBTracker.Core.Entities;
 
-/// <summary>One affected deployment grouped into a D10 MigrationCampaign.</summary>
 public class CampaignInstanceLink
 {
     public int Id { get; set; }

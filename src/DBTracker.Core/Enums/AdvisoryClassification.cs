@@ -1,12 +1,6 @@
 namespace DBTracker.Core.Enums;
 
-/// <summary>
-/// How a security advisory applies to one instance (D05). Version matching alone can only ever
-/// produce Potential or NotApplicable/Unknown automatically — Confirmed requires a reviewer to set
-/// it explicitly, with evidence, because a build-range match does not by itself confirm exposure
-/// (distribution backports, managed-service patching, and config-dependent advisories can all mean
-/// a version match isn't actually exploitable, or that an older-looking build is already fixed).
-/// </summary>
+/// <summary>How a security advisory applies to one instance. Version matching alone can only suggest Potential, NotApplicable or Unknown; Confirmed needs a reviewer, since backports and managed patching can make a build-range match misleading.</summary>
 public enum AdvisoryClassification
 {
     Potential,

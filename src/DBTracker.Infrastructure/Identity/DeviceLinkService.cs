@@ -5,11 +5,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace DBTracker.Infrastructure.Identity;
 
-/// <summary>
-/// Backs the "scan a QR code on your phone to sign in" flow. Uses its own DbContext per call (via
-/// the factory) since it's hit from anonymous minimal-API endpoints with their own request scope,
-/// not an interactive circuit — no concurrency risk there, but consistent with the rest of the app.
-/// </summary>
+/// <summary>QR phone sign-in. Uses a DbContext per call because it's hit from anonymous minimal-API endpoints, not a circuit.</summary>
 public class DeviceLinkService(IDbContextFactory<DBTrackerDbContext> factory)
 {
     private static readonly TimeSpan TokenLifetime = TimeSpan.FromMinutes(5);
@@ -75,10 +71,7 @@ public class DeviceLinkService(IDbContextFactory<DBTrackerDbContext> factory)
         return true;
     }
 
-    /// <summary>
-    /// Called by the desktop once polling shows Approved. Single-use: immediately marks the token
-    /// Redeemed so it can never be used again, then hands back the user id to sign in as.
-    /// </summary>
+    /// <summary>Called by the desktop once polling shows Approved. Marks the token Redeemed immediately so it is single-use, then returns the user id.</summary>
     public async Task<string?> RedeemAsync(string token)
     {
         using var db = await factory.CreateDbContextAsync();

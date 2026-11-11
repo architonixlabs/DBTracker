@@ -2,7 +2,7 @@ using DBTracker.Core.Enums;
 
 namespace DBTracker.Core.Entities;
 
-/// <summary>Opts a user into a slice of alerts (U07) — scope only ever narrows what a broadcast notification already covers, it can never surface an instance the viewer wasn't already able to see.</summary>
+/// <summary>Opts a user into a slice of alerts. Scope only narrows; it never surfaces an instance the user couldn't already see.</summary>
 public class NotificationSubscription
 {
     public int Id { get; set; }
@@ -18,7 +18,7 @@ public class NotificationSubscription
     /// <summary>Set when Scope is Company.</summary>
     public string Company { get; set; } = string.Empty;
 
-    /// <summary>Set when Scope is Team (U21) — instances owned by this team.</summary>
+    /// <summary>Set when Scope is Team.</summary>
     public int? TeamId { get; set; }
     public Team? Team { get; set; }
 

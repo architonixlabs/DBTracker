@@ -2,11 +2,7 @@ using DBTracker.Core.Enums;
 
 namespace DBTracker.Core.Services;
 
-/// <summary>
-/// Classifies how complete/confirmed an instance's ownership information is (U21) — pure so the
-/// Missing/Unconfirmed/Confirmed rule is unit-testable without a database. Purely informational: it
-/// never changes what a role is authorized to do, only flags instances an owner should look at.
-/// </summary>
+/// <summary>How complete and confirmed an instance's ownership information is. Informational only.</summary>
 public static class OwnershipStatusClassifier
 {
     public static OwnershipStatus Classify(

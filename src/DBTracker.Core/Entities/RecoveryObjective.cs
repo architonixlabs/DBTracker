@@ -1,13 +1,6 @@
 namespace DBTracker.Core.Entities;
 
-/// <summary>
-/// D16 — the business recovery objectives for one instance (one row per instance, like
-/// VersionIdentity). RpoTargetMinutes/RtoTargetMinutes are what the business says it needs;
-/// BackupChainCoverageCalculator separately computes what the recorded evidence actually supports —
-/// nothing here claims RPO compliance from timestamps alone. EncryptionKeyReference/
-/// OffsiteCopyReference are reference/flag fields only for this epic; full detail lives in D20
-/// (CertificateDependency) and D17 (BackupCopyLocation) respectively.
-/// </summary>
+/// <summary>The business RPO/RTO targets for one instance. BackupChainCoverageCalculator computes what the evidence actually supports; nothing claims compliance from timestamps alone.</summary>
 public class RecoveryObjective
 {
     public int Id { get; set; }
@@ -18,10 +11,10 @@ public class RecoveryObjective
     public int? RpoTargetMinutes { get; set; }
     public int? RtoTargetMinutes { get; set; }
 
-    /// <summary>Reference only (e.g. "Vault: sql-prod-tde-key") — never the key/secret itself. Full tracking is D20's CertificateDependency; this is a lightweight pointer for this objective's own context.</summary>
+    /// <summary>Reference only (e.g. "Vault: sql-prod-tde-key"), never the key itself. Full tracking lives in CertificateDependency.</summary>
     public string EncryptionKeyReferenceNote { get; set; } = string.Empty;
 
-    /// <summary>Reference/flag only — full tracking is D17's BackupCopyLocation.</summary>
+    /// <summary>Reference only; full tracking lives in BackupCopyLocation.</summary>
     public string OffsiteCopyReferenceNote { get; set; } = string.Empty;
 
     public string Notes { get; set; } = string.Empty;

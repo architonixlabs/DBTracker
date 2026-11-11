@@ -8,16 +8,8 @@ namespace DBTracker.Infrastructure.Entitlement;
 
 public record EntitlementView(EntitlementResult Result, IReadOnlyList<SupportContract> Contracts);
 
-/// <summary>
-/// D21 — support-contract linking and reviewed edition-cost estimates. EntitlementStatusClassifier
-/// (pure) is always computed live from this instance's SupportContract assignments only — it never
-/// reads VersionIdentity/ReleaseCatalogEntry/SupportRunwayDecision, so the entitlement status reported
-/// here and the instance's D02/D03 lifecycle/support-phase status are always two independent facts
-/// that can legitimately disagree. Cost-estimate figures are commercial evidence: callers (the Web
-/// pages) are responsible for applying CostEvidenceMasker/Roles.CommercialEvidencePolicy before
-/// showing EstimatedAmount/Currency/Assumptions to a non-authorized role — this service itself returns
-/// the real values and does no masking, since masking is a presentation concern applied per-viewer.
-/// </summary>
+/// <summary>Support-contract links and cost estimates. Entitlement is computed from contracts only, independent of lifecycle phase.</summary>
+/// <remarks>Returns real cost figures; pages must apply CostEvidenceMasker for the viewer's role.</remarks>
 public class SupportEntitlementService(IDbContextFactory<DBTrackerDbContext> factory, AuditRecorder audit)
 {
     public async Task<EntitlementView> GetEntitlementForInstanceAsync(int instanceId)

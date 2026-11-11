@@ -4,10 +4,7 @@ namespace DBTracker.Core.Services;
 
 public record RestoreTestRecencyResult(RestoreTestRecency Status, DateTime? NextDueUtc);
 
-/// <summary>
-/// Restore-test recency (U12), kept distinct from ordinary backup health: a backup can be On Track
-/// while its restore-test coverage is Overdue or has never existed at all. Pure (no I/O).
-/// </summary>
+/// <summary>Restore-test recency, separate from backup health: backups can be On Track while restore tests are Overdue or missing.</summary>
 public static class RestoreTestRecencyCalculator
 {
     public static RestoreTestRecencyResult Compute(DateTime? lastSuccessfulRestoreUtc, int intervalDays, DateTime nowUtc)

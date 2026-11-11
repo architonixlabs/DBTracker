@@ -1,6 +1,6 @@
 namespace DBTracker.Core.Enums;
 
-/// <summary>D10 migration-campaign lifecycle state. Valid transitions are enforced by CampaignStateTransitionValidator, not by the enum itself.</summary>
+/// <summary>Migration campaign state. Valid transitions are enforced by CampaignStateTransitionValidator.</summary>
 public enum CampaignState
 {
     Proposed,

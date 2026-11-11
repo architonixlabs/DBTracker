@@ -4,11 +4,7 @@ namespace DBTracker.Core.Services;
 
 public record ConnectivityEndpoint(bool CanCheck, string Host, int Port, bool UsedHostOverride, bool UsedPortOverride, string? DisabledReason);
 
-/// <summary>
-/// Resolves the actual host:port a connectivity check (U18) will probe, given an instance's
-/// ServerIp/DatabaseIp plus optional host/port overrides. Pure (no sockets) so the override/fallback
-/// rules — and the "nothing to check" disabled case — are unit-testable without a live network.
-/// </summary>
+/// <summary>Resolves the host:port a connectivity check probes from ServerIp/DatabaseIp and optional overrides, including the nothing-to-check case.</summary>
 public static class ConnectivityEndpointResolver
 {
     public static ConnectivityEndpoint Resolve(string serverIp, string databaseIp, DatabaseEngine engine, string? hostOverride, int? portOverride)
@@ -32,7 +28,7 @@ public static class ConnectivityEndpointResolver
         {
             if (!IsValidPort(p))
             {
-                // Falls back to the engine default rather than probing an invalid port (U18).
+                // Falls back to the engine default rather than probing an invalid port.
                 port = defaultPort;
             }
             else

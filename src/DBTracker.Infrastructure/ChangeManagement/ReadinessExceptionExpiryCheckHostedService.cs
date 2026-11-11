@@ -6,11 +6,7 @@ using Microsoft.Extensions.Logging;
 
 namespace DBTracker.Infrastructure.ChangeManagement;
 
-/// <summary>
-/// Periodic sweep for D14's exception-expiry notices — same shape as SupportRunwayCheckHostedService.
-/// "ReadinessException:IntervalMinutes" (default 1440, once a day); &lt;= 0 disables it. Reachable the
-/// same way via ReadinessExceptionService.EvaluateAndNotifyExpiringAsync for an explicit admin action.
-/// </summary>
+/// <summary>Periodic sweep for exception-expiry notices. ReadinessException:IntervalMinutes (default 1440); &lt;= 0 disables it.</summary>
 public class ReadinessExceptionExpiryCheckHostedService(
     IServiceScopeFactory scopeFactory,
     IConfiguration configuration,

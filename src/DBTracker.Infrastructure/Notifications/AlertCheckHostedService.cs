@@ -10,13 +10,8 @@ using Microsoft.Extensions.Logging;
 
 namespace DBTracker.Infrastructure.Notifications;
 
-/// <summary>
-/// Periodically recomputes every active instance's backup health and raises an alert (in-app
-/// notification + email to the instance's contact and any matching Email/Both subscribers, U07)
-/// the moment it crosses into an alertable health. Also opens/escalates/closes the instance's
-/// Incident record (U08) in step with the same alert lifecycle.
-/// Interval: "Alerts:IntervalMinutes" (default 10); &lt;= 0 disables it.
-/// </summary>
+/// <summary>Recomputes every active instance's health and alerts (in-app, plus email to the contact and Email/Both subscribers) when it crosses into an alertable state, opening, escalating or closing the instance's incident in step.</summary>
+/// <remarks>Alerts:IntervalMinutes (default 10); &lt;= 0 disables it.</remarks>
 public class AlertCheckHostedService(
     IServiceScopeFactory scopeFactory,
     IConfiguration configuration,
@@ -87,10 +82,8 @@ public class AlertCheckHostedService(
         {
             var health = BackupHealthCalculator.Compute(instance, instance.BackupRecords.ToList(), now);
 
-            // A planned maintenance window suppresses the alert entirely — including the state
-            // update — so a still-bad health correctly re-alerts once the window ends instead of
-            // being remembered as already-notified. The open incident (if any) is left untouched:
-            // it stays open and visible, it just doesn't re-page anyone until maintenance ends.
+            // Maintenance suppresses the alert and the state update, so a still-bad health re-alerts when the window ends.
+            // Any open incident stays open; it just doesn't page anyone until then.
             if (AlertEvaluator.IsSuppressedByMaintenance(instance.MaintenanceUntilUtc, now))
             {
                 continue;

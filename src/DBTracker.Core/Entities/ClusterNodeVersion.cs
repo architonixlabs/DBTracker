@@ -2,13 +2,7 @@ using DBTracker.Core.Enums;
 
 namespace DBTracker.Core.Entities;
 
-/// <summary>
-/// One observed node's version within a clustered/replica-set instance (D01) — deliberately
-/// separate from Epic 17's Region/Cluster/ReplicaSet topology facets on DatabaseInstance. Topology
-/// says where a node lives; this says what version was observed running on it. A cluster can be
-/// mid-upgrade with members on different builds — this models that explicitly instead of collapsing
-/// the whole cluster into one version field.
-/// </summary>
+/// <summary>The version observed on one node of a cluster or replica set, so a mid-upgrade cluster isn't collapsed into one version.</summary>
 public class ClusterNodeVersion
 {
     public int Id { get; set; }

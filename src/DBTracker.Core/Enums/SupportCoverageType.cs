@@ -1,6 +1,6 @@
 namespace DBTracker.Core.Enums;
 
-/// <summary>What kind of paid support agreement a D21 SupportContract represents.</summary>
+/// <summary>Kind of paid support agreement a SupportContract represents.</summary>
 public enum SupportCoverageType
 {
     Standard,

@@ -1,6 +1,6 @@
 namespace DBTracker.Core.Entities;
 
-/// <summary>A named, per-user bookmark of a list/report's filter+sort query string (U05) — never grants access beyond what the owning user's role already allows, since applying it just re-runs the same query string through the same page.</summary>
+/// <summary>A per-user bookmark of a page's filter/sort query string. Applying it re-runs the same query, so it grants no extra access.</summary>
 public class SavedView
 {
     public int Id { get; set; }

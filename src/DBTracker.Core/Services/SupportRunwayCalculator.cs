@@ -3,7 +3,7 @@ using DBTracker.Core.Enums;
 
 namespace DBTracker.Core.Services;
 
-/// <summary>Result of evaluating one release-catalogue entry's support runway as of a point in time (D03).</summary>
+/// <summary>Support runway for one catalogue entry as of a point in time.</summary>
 public record SupportRunwayResult(
     SupportPhase Phase,
     string? NextMilestoneLabel,
@@ -16,13 +16,7 @@ public record SupportRunwayResult(
         new(SupportPhase.Unknown, null, null, null, true, reason);
 }
 
-/// <summary>
-/// Pure support-phase/runway math (D03) — no fixed universal EOL formula; it only walks the
-/// milestones a reviewed ReleaseCatalogEntry actually carries. TBD/conflicting dates and a missing
-/// catalogue match both produce an explicit Unknown rather than guessing. Once a milestone has
-/// passed, DaysToNextMilestone goes negative (overdue) rather than disappearing — overdue work must
-/// stay visible, not silently clear itself.
-/// </summary>
+/// <summary>Support-phase and runway math from the milestones an entry actually carries; no universal EOL formula. TBD dates and missing matches are Unknown, and passed milestones go negative instead of disappearing.</summary>
 public static class SupportRunwayCalculator
 {
     public static SupportRunwayResult Compute(ReleaseCatalogEntry? entry, DateTime nowUtc)

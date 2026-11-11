@@ -6,15 +6,8 @@ namespace DBTracker.Infrastructure.Ownership;
 public record TeamMemberInfo(string UserId, string DisplayName, string Email);
 public record TeamSummary(Team Team, int MemberCount, int InstanceCount);
 
-/// <summary>
-/// Owner teams and their explicit memberships (U21) — the basis for "My instances" and team-scoped
-/// notification subscriptions, instead of matching a user against a single free-text contact email.
-/// Uses its own short-lived DbContext via the factory, same isolation pattern as every other
-/// per-request lookup service in this app (NotificationService, InstanceOverviewService, …).
-///
-/// NOTE: membership here is personalization only — it narrows what a user sees as relevant, it
-/// never grants or restricts access beyond what their ASP.NET Core Identity role already allows.
-/// </summary>
+/// <summary>Teams and memberships, which drive My instances and team subscriptions. Uses a short-lived DbContext per call.</summary>
+/// <remarks>Membership is personalization only; it never grants or restricts access beyond the user's role.</remarks>
 public class TeamService(IDbContextFactory<DBTrackerDbContext> factory)
 {
     public async Task<List<TeamSummary>> ListAsync()
@@ -87,7 +80,7 @@ public class TeamService(IDbContextFactory<DBTrackerDbContext> factory)
         await db.TeamMemberships.Where(m => m.TeamId == teamId && m.UserId == userId).ExecuteDeleteAsync();
     }
 
-    /// <summary>Every team id a user belongs to — what InstanceListFilter.IsMine/MyTeamIds needs for "My instances" and team-scoped subscription matching.</summary>
+    /// <summary>Every team id a user belongs to, for My instances and team subscription matching.</summary>
     public async Task<HashSet<int>> GetUserTeamIdsAsync(string userId)
     {
         using var db = await factory.CreateDbContextAsync();

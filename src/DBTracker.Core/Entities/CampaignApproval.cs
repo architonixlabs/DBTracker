@@ -2,7 +2,7 @@ using DBTracker.Core.Enums;
 
 namespace DBTracker.Core.Entities;
 
-/// <summary>One recorded approval/rejection decision in a D10 MigrationCampaign's approval history — appended, never overwritten.</summary>
+/// <summary>One approval or rejection in a campaign's history. Appended, never overwritten.</summary>
 public class CampaignApproval
 {
     public int Id { get; set; }
