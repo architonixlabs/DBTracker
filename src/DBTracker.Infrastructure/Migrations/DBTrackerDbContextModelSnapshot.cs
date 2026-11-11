@@ -1538,6 +1538,9 @@ namespace DBTracker.Infrastructure.Migrations
                     b.Property<int>("LastScanStatus")
                         .HasColumnType("int");
 
+                    b.Property<DateTime?>("LastScanSuccessUtc")
+                        .HasColumnType("datetime2");
+
                     b.Property<DateTime?>("LastScanUtc")
                         .HasColumnType("datetime2");
 
@@ -1639,6 +1642,62 @@ namespace DBTracker.Infrastructure.Migrations
                     b.HasIndex("Region");
 
                     b.ToTable("DatabaseInstances");
+                });
+
+            modelBuilder.Entity("DBTracker.Core.Entities.DeliveryAttempt", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("AcceptedCount")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("AttemptedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Channel")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
+
+                    b.Property<string>("Error")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<int>("FailedCount")
+                        .HasColumnType("int");
+
+                    b.Property<int>("HeldForQuietHoursCount")
+                        .HasColumnType("int");
+
+                    b.Property<int>("Kind")
+                        .HasColumnType("int");
+
+                    b.Property<int>("Outcome")
+                        .HasColumnType("int");
+
+                    b.Property<int>("RecipientCount")
+                        .HasColumnType("int");
+
+                    b.Property<string>("ScopeDescription")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("TriggeredBy")
+                        .IsRequired()
+                        .HasMaxLength(320)
+                        .HasColumnType("nvarchar(320)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AttemptedAtUtc");
+
+                    b.ToTable("DeliveryAttempts");
                 });
 
             modelBuilder.Entity("DBTracker.Core.Entities.DeviceLinkToken", b =>
@@ -2217,6 +2276,47 @@ namespace DBTracker.Infrastructure.Migrations
                     b.HasKey("UserId");
 
                     b.ToTable("NotificationInboxStarts");
+                });
+
+            modelBuilder.Entity("DBTracker.Core.Entities.NotificationPreference", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<bool>("CriticalBypassesQuietHours")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("QuietEndMinute")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("QuietHoursEnabled")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("QuietStartMinute")
+                        .HasColumnType("int");
+
+                    b.Property<string>("TimeZoneId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId")
+                        .IsUnique();
+
+                    b.ToTable("NotificationPreferences");
                 });
 
             modelBuilder.Entity("DBTracker.Core.Entities.NotificationReadState", b =>
