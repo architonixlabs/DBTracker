@@ -2,6 +2,7 @@
 @inject NotificationService Notifications
 @inject AuthenticationStateProvider AuthProvider
 @inject NavigationManager Nav
+@inject ILogger<NotificationBell> Logger
 
 <div class="notif-bell-wrap" @onkeydown="OnKeyDown">
     <button type="button" class="notif-bell-btn" @ref="_bellButtonRef" @onclick="Toggle" aria-expanded="@(_open ? "true" : "false")" aria-controls="notif-dropdown" aria-label="Notifications@(_unreadCount > 0 ? $", {_unreadCount} unread" : "")">
@@ -88,13 +89,24 @@
         _lastUpdatedUtc = DateTime.UtcNow;
     }
 
+    // Runs on a thread-pool timer as async void: an escaping exception would crash the process.
     private async Task AutoRefreshTickAsync()
     {
-        await InvokeAsync(async () =>
+        try
         {
-            await Refresh();
-            StateHasChanged();
-        });
+            await InvokeAsync(async () =>
+            {
+                await Refresh();
+                StateHasChanged();
+            });
+        }
+        catch (ObjectDisposedException)
+        {
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Notification bell auto-refresh failed; retrying on the next tick.");
+        }
     }
 
     // Not disabled while busy: disabling the focused button would drop keyboard focus to <body>.

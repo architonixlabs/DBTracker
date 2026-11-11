@@ -13,6 +13,10 @@
     <PackageReference Include="QRCoder" Version="1.6.0" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Content Update="appsettings.Development.json;appsettings.Testing.json" CopyToPublishDirectory="Never" />
+  </ItemGroup>
+
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>

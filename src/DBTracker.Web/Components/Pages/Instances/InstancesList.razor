@@ -2,6 +2,7 @@
 @attribute [Authorize]
 @implements IDisposable
 @inject InstanceOverviewService OverviewService
+@inject ILogger<InstancesList> Logger
 @inject SavedViewService SavedViews
 @inject TeamService Teams
 @inject NavigationManager Nav
@@ -498,11 +499,22 @@ else
     private async Task AutoRefreshTickAsync()
     {
         if (_autoRefreshPaused) return;
-        await InvokeAsync(async () =>
+        // Runs on a thread-pool timer as async void: an escaping exception would crash the process.
+        try
         {
-            await Load();
-            StateHasChanged();
-        });
+            await InvokeAsync(async () =>
+            {
+                await Load();
+                StateHasChanged();
+            });
+        }
+        catch (ObjectDisposedException)
+        {
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Instance list auto-refresh failed; retrying on the next tick.");
+        }
     }
 
     private void ToggleAutoRefresh() => _autoRefreshPaused = !_autoRefreshPaused;
