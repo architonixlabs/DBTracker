@@ -1603,3 +1603,33 @@ that runs the MSI last.
   Every download comes from Microsoft with a pinned SHA-512 taken from Microsoft's own release
   metadata at build time, never a guessed URL. Restarts IIS after the Hosting Bundle. Runs the MSI last
   and ends by opening the setup wizard. Quiet mode for unattended installs. Install log in %TEMP%.
+
+2026-11-11 | NEW-005 | Added a system tray app installed with DBTracker after the owner asked for a
+background app that opens DBTracker and performs small tasks. Persona check: Sam (admin) gains a
+status light and admin controls without IIS Manager; Priya (DBA) wants an at-a-glance count of failed
+and overdue backups; Angela (auditor) needs any token the tray uses to expire, be revocable and be
+audited; Marcus and Dev mainly need "Open DBTracker". Owner chose all four task groups: open + status,
+admin controls, folders and logs, backup risk count. The risk count needs the tray to call DBTracker as
+a user, so personal access tokens are a separate web-app item (I06).
+
+- [ ] **2026-11-11 | I05 | NEW | P2 | L - DBTracker tray app.**
+  **Acceptance:** .NET Framework 4.6.2 WinForms tray app (no extra runtime on Windows Server 2016+)
+  installed by the MSI, started for every user at sign-in (can be turned off from its menu), launched
+  un-elevated at the end of Setup, closed and removed on uninstall. Reads the site port and folders the
+  MSI records under `HKLM\SOFTWARE\Architonix Labs\DBTracker`. Menu: Open DBTracker (or the setup
+  wizard while setup is pending); status light (green ok, amber degraded or setup pending, red no
+  response) from `/healthz` with a notification on each change; Start, Stop and Restart the app pool and
+  site through a UAC prompt; Copy setup key while setup is pending; open the install folder, App_Data,
+  the site's IIS log folder and the deployment guide; recent app errors from the Windows event log;
+  failed / overdue / never-backed-up counts with a notification for newly at-risk instances, using a
+  personal access token stored per Windows user with DPAPI. Pure logic in a netstandard2.0 library with
+  unit tests.
+
+- [ ] **2026-11-11 | I06 | NEW | P2 | M - Personal access tokens and the tray API.**
+  **Acceptance:** `/account/tokens` (any signed-in role) creates a named token with an expiry (default
+  90 days), shows it once, lists the user's tokens with created / last used / expires, and revokes them.
+  Only a SHA-256 hash is stored; tokens look like `dbt_<random>`. Create and revoke are audited.
+  Deactivating a user (U16) makes their tokens stop working. `GET /api/tray/summary` accepts only a
+  bearer token and returns read-only counts (Failed, Overdue, NeverBackedUp) plus the at-risk list,
+  401 otherwise. Anonymous `GET /healthz` returns status (ok, degraded, setup-required), whether setup
+  is done, database reachability and version, with no other details. Unit and E2E tests.
