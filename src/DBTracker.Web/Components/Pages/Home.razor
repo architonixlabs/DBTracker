@@ -49,8 +49,8 @@ else
             <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="RefreshNow" disabled="@_refreshing">
                 <i aria-hidden="true" class="bi bi-arrow-clockwise"></i> @(_refreshing ? "Refreshing…" : "Refresh")
             </button>
-            <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="ToggleAutoRefresh" title="Auto-refreshes every 30s while on">
-                <i aria-hidden="true" class="bi @(_autoRefreshPaused ? "bi-play-fill" : "bi-pause-fill")"></i> Auto-refresh @(_autoRefreshPaused ? "paused" : "on")
+            <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="ToggleAutoRefresh">
+                <i aria-hidden="true" class="bi @(_autoRefreshPaused ? "bi-play-fill" : "bi-pause-fill")"></i> Auto-refresh @(_autoRefreshPaused ? "paused" : "on, every 30s")
             </button>
         </div>
     </div>

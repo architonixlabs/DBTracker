@@ -63,38 +63,53 @@ else
                 @instance.Name <HealthBadge Health="_overview.Health" />
                 @if (instance.MaintenanceUntilUtc is { } maintUtc && maintUtc > DateTime.UtcNow)
                 {
-                    <span class="badge-health dot Overdue" title="Overdue/Failed alerts are suppressed until this window ends">
+                    <span class="badge-health dot Overdue">
                         <i class="bi bi-cone-striped" aria-hidden="true"></i> Maintenance until @maintUtc.ToLocalTime().ToString("MMM d, h:mm tt")
                     </span>
                 }
             </h1>
             <div class="subtitle">@instance.Engine @instance.Version · @instance.Environment · <span class="role-pill @instance.Role">@instance.Role</span></div>
+            @if (instance.MaintenanceUntilUtc is { } maintEnd && maintEnd > DateTime.UtcNow)
+            {
+                <div class="subtitle" data-testid="maintenance-note">Overdue and failed alerts are paused until this maintenance window ends.</div>
+            }
         </div>
         <div class="d-flex gap-2 flex-wrap">
             <nav class="d-flex gap-2 flex-wrap" aria-label="Instance sections">
-                <a class="btn btn-outline-secondary" href="/instances/@Id/lifecycle" title="Installed version, support runway, patch baseline and advisories">
+                <a class="btn btn-outline-secondary" href="/instances/@Id/lifecycle">
                     <i class="bi bi-signpost-split" aria-hidden="true"></i> Lifecycle
                 </a>
-                <a class="btn btn-outline-secondary" href="/instances/@Id/migration" title="Dependencies, migration path assessment and upgrade-readiness checklist">
+                <a class="btn btn-outline-secondary" href="/instances/@Id/migration">
                     <i class="bi bi-diagram-2" aria-hidden="true"></i> Migration
                 </a>
-                <a class="btn btn-outline-secondary" href="/instances/@Id/recovery" title="Recovery objectives, backup-chain coverage and backup copies">
+                <a class="btn btn-outline-secondary" href="/instances/@Id/recovery">
                     <i class="bi bi-shield-check" aria-hidden="true"></i> Recovery
                 </a>
-                <a class="btn btn-outline-secondary" href="/instances/@Id/assurance" title="Integrity, HA, maintenance-job and capacity evidence">
+                <a class="btn btn-outline-secondary" href="/instances/@Id/assurance">
                     <i class="bi bi-clipboard2-pulse" aria-hidden="true"></i> Assurance
                 </a>
-                <a class="btn btn-outline-secondary" href="/instances/@Id/certificates" title="Certificate and recovery-key reminders">
+                <a class="btn btn-outline-secondary" href="/instances/@Id/certificates">
                     <i class="bi bi-key" aria-hidden="true"></i> Certificates
                 </a>
-                <a class="btn btn-outline-secondary" href="/instances/@Id/entitlement" title="Support contracts and edition cost estimates">
+                <a class="btn btn-outline-secondary" href="/instances/@Id/entitlement">
                     <i class="bi bi-file-earmark-text" aria-hidden="true"></i> Entitlement
                 </a>
-                <a class="btn btn-outline-secondary" href="/instances/@Id/retirement" title="Decommission checklist that gates archiving">
+                <a class="btn btn-outline-secondary" href="/instances/@Id/retirement">
                     <i class="bi bi-door-closed" aria-hidden="true"></i> Retirement
                 </a>
+                <Toggletip Label="What each instance section covers" TestId="instance-sections-help">
+                    <dl class="toggletip-list">
+                        <dt>Lifecycle</dt><dd>Installed version, support runway, patch baseline and advisories.</dd>
+                        <dt>Migration</dt><dd>Dependencies, migration path assessment and the upgrade-readiness checklist.</dd>
+                        <dt>Recovery</dt><dd>Recovery objectives, backup-chain coverage and backup copies.</dd>
+                        <dt>Assurance</dt><dd>Integrity, HA, maintenance-job and capacity evidence.</dd>
+                        <dt>Certificates</dt><dd>Certificate and recovery-key reminders.</dd>
+                        <dt>Entitlement</dt><dd>Support contracts and edition cost estimates.</dd>
+                        <dt>Retirement</dt><dd>The decommission checklist that gates archiving.</dd>
+                    </dl>
+                </Toggletip>
             </nav>
-            <button type="button" class="btn btn-outline-secondary" @onclick="TestConnection" disabled="@(_testingConnection || !CanCheckConnectivity(instance))" title="@(CanCheckConnectivity(instance) ? "" : "No host/IP or override configured")">
+            <button type="button" class="btn btn-outline-secondary" @onclick="TestConnection" disabled="@(_testingConnection || !CanCheckConnectivity(instance))" aria-describedby="@(CanCheckConnectivity(instance) ? null : "connectivity-unavailable")">
                 <i class="bi bi-ethernet" aria-hidden="true"></i> @(_testingConnection ? "Testing…" : "Test connection")
             </button>
             <AuthorizeView Roles="@Roles.CanEditPolicy">
@@ -106,7 +121,8 @@ else
                         </button>
                     }
                     <a class="btn btn-outline-secondary" href="/instances/@Id/edit"><i class="bi bi-pencil" aria-hidden="true"></i> Edit</a>
-                    @if (!instance.IsArchived && !_showArchiveConfirm)
+                    @* Stays rendered while the dialog is open, so closing it returns focus here. *@
+                    @if (!instance.IsArchived)
                     {
                         <button type="button" class="btn btn-outline-danger" @onclick="OpenArchiveConfirm"><i class="bi bi-archive" aria-hidden="true"></i> Archive</button>
                     }
@@ -133,11 +149,16 @@ else
     {
         <p class="small text-muted mb-4" style="margin-top:-20px;">Connectivity check unavailable: @_connectivityDisabledReason</p>
     }
-
-    @if (_showArchiveConfirm && _archivePreview is not null)
+    else if (!CanCheckConnectivity(instance))
     {
-        <div class="dbt-card mb-4" style="border-color:var(--dbt-failed);">
-            <h2 class="h6 text-muted mb-3">Confirm archive</h2>
+        @* Says why Test connection is disabled; a title on a disabled button reaches neither touch nor keyboard users. *@
+        <p class="small text-muted mb-4" style="margin-top:-20px;" id="connectivity-unavailable">Test connection is off: no host, IP or connectivity override is configured.</p>
+    }
+
+    <ModalDialog Title="Confirm archive" @bind-Open="_showArchiveConfirm" CssClass="is-danger" data-testid="archive-dialog">
+        @if (_archivePreview is not null)
+        {
+            <p class="small text-muted mb-2">What archiving <strong class="text-body">@instance.Name</strong> changes:</p>
             <ul class="small mb-3">
                 @foreach (var line in _archivePreview)
                 {
@@ -159,33 +180,32 @@ else
             </fieldset>
             @if (_archiveKind == ArchiveKind.Retirement)
             {
-                <p class="small mb-3" role="status">
+                <p class="small mb-0" role="status">
                     A decommissioned database is archived through its retirement checklist, so consumers, jobs, final backups and
                     sign-offs are checked first. <a href="/instances/@Id/retirement">Open the retirement checklist</a>.
                 </p>
-                <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="() => _showArchiveConfirm = false">Cancel</button>
             }
             else if (_archiveKind == ArchiveKind.Mistake)
             {
-                <div class="mb-2">
+                <div class="mb-0">
                     <label class="form-label small" for="archive-reason">Reason (required)</label>
                     <input id="archive-reason" class="form-control form-control-sm" @bind="_archiveReason" @bind:event="oninput" placeholder="Duplicate of …, test entry, …" />
                 </div>
                 @if (_archiveError is not null)
                 {
-                    <p class="small mb-2" role="alert" style="color:var(--dbt-failed)">@_archiveError</p>
+                    <p class="small mt-2 mb-0" role="alert" style="color:var(--dbt-failed)">@_archiveError</p>
                 }
-                <div class="d-flex gap-2">
+            }
+            @* Cancel stays at the far end, so the Archive button appearing beside it never moves it under the pointer. *@
+            <div class="dbt-dialog-actions">
+                @if (_archiveKind == ArchiveKind.Mistake)
+                {
                     <button type="button" class="btn btn-danger btn-sm" @onclick="ConfirmArchive" disabled="@string.IsNullOrWhiteSpace(_archiveReason)">Archive this instance</button>
-                    <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="() => _showArchiveConfirm = false">Cancel</button>
-                </div>
-            }
-            else
-            {
-                <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="() => _showArchiveConfirm = false">Cancel</button>
-            }
-        </div>
-    }
+                }
+                <button type="button" class="btn btn-outline-secondary btn-sm" autofocus @onclick="() => _showArchiveConfirm = false">Cancel</button>
+            </div>
+        }
+    </ModalDialog>
 
     <div class="row g-0 mb-4">
         <div class="col-12">
@@ -247,7 +267,10 @@ else
             <div class="dbt-card h-100">
                 <div class="d-flex justify-content-between align-items-start mb-3">
                     <h2 class="h6 text-muted mb-0">Ownership &amp; contact</h2>
-                    <span class="badge-health dot @OwnershipClass(_ownershipStatus)" title="For personal views only. It never grants or restricts access beyond the viewer's role.">@_ownershipStatus</span>
+                    <span class="d-inline-flex align-items-center gap-1">
+                        <span class="badge-health dot @OwnershipClass(_ownershipStatus)">@_ownershipStatus</span>
+                        <Toggletip Label="About ownership status" TestId="ownership-status-help">Ownership status is for personal views only. It never grants or restricts access beyond the viewer's role.</Toggletip>
+                    </span>
                 </div>
                 <dl class="row mb-0 small">
                     <dt class="col-5">Application</dt><dd class="col-7">@instance.Application</dd>
@@ -619,7 +642,7 @@ else
                     <div class="table-responsive" role="region" aria-label="Backup history" tabindex="0">
                     <table class="table table-sm mb-0 dbt-table">
                         <thead>
-                            <tr><th scope="col">When</th><th scope="col">Entered</th><th scope="col">By</th><th scope="col">Type</th><th scope="col">Status</th><th scope="col">Size</th><th scope="col">Duration</th><th scope="col">Evidence</th><th scope="col">File</th><th scope="col">Notes</th></tr>
+                            <tr><th scope="col">When</th><th scope="col">Entered</th><th scope="col">By</th><th scope="col">Type</th><th scope="col">Status</th><th scope="col">Size</th><th scope="col">Duration</th><th scope="col">Evidence <Toggletip Label="About evidence levels" TestId="backup-evidence-help"><EvidenceLevelsHelp /></Toggletip></th><th scope="col">File</th><th scope="col">Notes</th></tr>
                         </thead>
                         <tbody>
                             @foreach (var r in BackupHistoryPage())
@@ -645,7 +668,7 @@ else
                                     <td class="small">
                                         @if (evidence is { } level)
                                         {
-                                            <span class="badge-health dot @EvidenceClass(level)" title="@EvidenceTooltip(level)">@BackupEvidenceClassifier.Describe(level)</span>
+                                            <span class="badge-health dot @EvidenceClass(level)">@BackupEvidenceClassifier.Describe(level)</span>
                                         }
                                         else
                                         {
@@ -1492,15 +1515,6 @@ else
         EvidenceLevel.RestoreTested => "OnTrack",
         EvidenceLevel.ReportedSuccess => "Overdue",
         _ => "NeverBackedUp"
-    };
-
-    private static string EvidenceTooltip(EvidenceLevel level) => level switch
-    {
-        EvidenceLevel.Imported => "Loaded from a history import. A copied claim, shown for context; it never counts as verified evidence.",
-        EvidenceLevel.Discovered => "A file was found on the shared drive. That shows it exists, not that anyone confirmed it.",
-        EvidenceLevel.ReportedSuccess => "Logged by hand as successful. A report, not file proof.",
-        EvidenceLevel.RestoreTested => "A restore has since succeeded from this instance, proving the chain recoverable.",
-        _ => ""
     };
 
     private static string ScannerFreshnessClass(ScannerFreshness freshness) => freshness switch

@@ -96,7 +96,13 @@ public class AccessTokenTests
 
         await WaitForCircuitAsync(_page);
         await row.Locator("button:has-text('Revoke')").ClickAsync();
+        // G29: revoking is confirmed in a modal dialog; the safe choice has focus first.
+        var dialog = _page.GetByRole(AriaRole.Dialog, new() { Name = $"Revoke token \"{tokenName}\"?" });
+        await Assertions.Expect(dialog).ToBeVisibleAsync();
+        await Assertions.Expect(dialog.Locator("button:has-text('Keep token')")).ToBeFocusedAsync();
+        await dialog.Locator("[data-testid=confirm-revoke-token]").ClickAsync();
         await Assertions.Expect(row).ToContainTextAsync("Revoked");
+        await Assertions.Expect(dialog).Not.ToBeVisibleAsync();
 
         using var afterRevoke = await GetSummaryAsync(token);
         Assert.That(afterRevoke.StatusCode, Is.EqualTo(HttpStatusCode.Unauthorized));

@@ -30,8 +30,8 @@
         <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="RefreshNow" disabled="@_refreshing">
             <i class="bi bi-arrow-clockwise" aria-hidden="true"></i> @(_refreshing ? "Refreshing…" : "Refresh")
         </button>
-        <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="ToggleAutoRefresh" aria-pressed="@(!_autoRefreshPaused)" title="Refreshes the list every 30 seconds while on">
-            <i class="bi @(_autoRefreshPaused ? "bi-play-fill" : "bi-pause-fill")" aria-hidden="true"></i> Auto-refresh @(_autoRefreshPaused ? "paused" : "on")
+        <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="ToggleAutoRefresh" aria-pressed="@(!_autoRefreshPaused)">
+            <i class="bi @(_autoRefreshPaused ? "bi-play-fill" : "bi-pause-fill")" aria-hidden="true"></i> Auto-refresh @(_autoRefreshPaused ? "paused" : "on, every 30s")
         </button>
         <AuthorizeView Roles="@Roles.CanEditPolicy">
             <div class="d-flex gap-2">

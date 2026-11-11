@@ -1,0 +1,83 @@
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+
+@* G29: a native <dialog> opened with showModal(). The browser makes the page inert, keeps focus inside,
+   closes on Esc and returns focus to the control that opened it; none of that is rebuilt here.
+   No role="dialog" or aria-modal: the native modal already exposes them. *@
+<dialog @ref="_el" class="dbt-dialog @CssClass" aria-labelledby="@_titleId" @attributes="Attributes">
+    @if (Open)
+    {
+        <h2 id="@_titleId" class="dbt-dialog-title">@Title</h2>
+        @ChildContent
+    }
+</dialog>
+
+@code {
+    private static int _counter;
+    private readonly string _titleId = "dbt-dialog-title-" + Interlocked.Increment(ref _counter);
+    private ElementReference _el;
+    private DotNetObjectReference<ModalDialog>? _ref;
+    private bool _shown;
+
+    [Parameter, EditorRequired] public string Title { get; set; } = "";
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter] public bool Open { get; set; }
+
+    /// <summary>Raised with false when the dialog closes itself (Esc, or the back gesture on a phone).</summary>
+    [Parameter] public EventCallback<bool> OpenChanged { get; set; }
+
+    /// <summary>
+    /// Where focus goes after closing when the confirmed action removed the control that opened the dialog
+    /// (for example, a revoked token's Revoke button). A CSS selector; usually a section heading.
+    /// </summary>
+    [Parameter] public string? FallbackFocusSelector { get; set; }
+
+    [Parameter] public string? CssClass { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)] public Dictionary<string, object>? Attributes { get; set; }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (Open && !_shown)
+        {
+            _shown = true;
+            _ref ??= DotNetObjectReference.Create(this);
+            await JS.InvokeVoidAsync("dbtracker.dialog.open", _el, _ref, FallbackFocusSelector);
+        }
+        else if (!Open && _shown)
+        {
+            _shown = false;
+            await JS.InvokeVoidAsync("dbtracker.dialog.close", _el);
+        }
+    }
+
+    [JSInvokable]
+    public async Task OnDialogClosed()
+    {
+        _shown = false;
+        if (Open)
+        {
+            await OpenChanged.InvokeAsync(false);
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            if (_shown)
+            {
+                await JS.InvokeVoidAsync("dbtracker.dialog.release", _el);
+            }
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+        catch (TaskCanceledException)
+        {
+        }
+        _ref?.Dispose();
+    }
+}

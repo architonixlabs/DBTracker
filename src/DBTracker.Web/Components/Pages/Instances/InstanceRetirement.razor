@@ -171,15 +171,35 @@ else
                 <div class="dbt-card mt-3">
                     <h2 class="h6 text-muted mb-3">Cancel this checklist</h2>
                     <p class="small text-muted">If it was started by mistake, or the database is staying. The checklist and its sign-offs are kept in history, and the instance stays active.</p>
-                    <label class="form-label small mb-1" for="cancel-reason">Reason (required)</label>
-                    <input id="cancel-reason" class="form-control form-control-sm mb-2" @bind="_cancelReason" @bind:event="oninput" data-testid="cancel-checklist-reason" />
-                    <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="CancelChecklist"
-                            disabled="@string.IsNullOrWhiteSpace(_cancelReason)" data-testid="cancel-checklist-button">Cancel checklist</button>
+                    <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="OpenCancelDialog" data-testid="open-cancel-checklist">Cancel checklist…</button>
                 </div>
             </AuthorizeView>
         </div>
     </div>
 }
+
+@* Outside the branches above, so it survives the re-render that follows a cancel and can hand focus to Start. *@
+<ModalDialog Title="Cancel this retirement checklist?" @bind-Open="_showCancelDialog" FallbackFocusSelector="[data-testid=start-retirement-checklist]" data-testid="cancel-checklist-dialog">
+    @if (_view is not null && _instance is not null)
+    {
+        <p class="small mb-3">
+            Cancelling closes checklist #@_view.Checklist.Id for <strong>@_instance.Name</strong>. The checklist and its sign-offs stay in
+            history, and the instance stays active. Use this if it was started by mistake, or the database is staying.
+        </p>
+        <label class="form-label small mb-1" for="cancel-reason">Reason (required)</label>
+        <input id="cancel-reason" class="form-control form-control-sm" @bind="_cancelReason" @bind:event="oninput" data-testid="cancel-checklist-reason" />
+        @if (_cancelError is not null)
+        {
+            @* Shown here, not as a toast: the page behind a modal is inert, so a toast there would go unannounced. *@
+            <p class="small mt-2 mb-0" role="alert" style="color:var(--dbt-failed)">@_cancelError</p>
+        }
+        <div class="dbt-dialog-actions">
+            <button type="button" class="btn btn-danger btn-sm" @onclick="CancelChecklist"
+                    disabled="@string.IsNullOrWhiteSpace(_cancelReason)" data-testid="cancel-checklist-button">Cancel checklist</button>
+            <button type="button" class="btn btn-outline-secondary btn-sm" autofocus @onclick="() => _showCancelDialog = false">Keep checklist</button>
+        </div>
+    }
+</ModalDialog>
 
 @code {
     [Parameter] public int Id { get; set; }
@@ -189,6 +209,15 @@ else
     private string? _userId, _userName;
     private RetirementChecklistView? _view;
     private bool _completing;
+    private bool _showCancelDialog;
+    private string? _cancelError;
+
+    private void OpenCancelDialog()
+    {
+        _cancelReason = "";
+        _cancelError = null;
+        _showCancelDialog = true;
+    }
 
     private bool _legalHoldReviewed, _costContractReviewed;
     private string _legalHoldNotes = "", _costContractNotes = "", _finalBackupNotes = "", _externalCleanupNotes = "";
@@ -276,12 +305,13 @@ else
         {
             Toasts.Success("Retirement checklist cancelled. The instance stays active.");
             _cancelReason = "";
+            _showCancelDialog = false;
+            await Load();
         }
         else
         {
-            Toasts.Error(reason);
+            _cancelError = reason;
         }
-        await Load();
     }
 
     private async Task CompleteRetirement()
