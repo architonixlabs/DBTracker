@@ -18,7 +18,7 @@
 </head>
 
 <body>
-    <Routes @rendermode="InteractiveServer" />
+    <Routes @rendermode="RenderModeForRequest" />
     <ReconnectModal />
     <script src="lib/bootstrap/js/bootstrap.bundle.min.js"></script>
     <script src="js/dbtracker.js"></script>
@@ -26,3 +26,17 @@
 </body>
 
 </html>
+
+@code {
+    // Login writes the auth cookie via SignInManager, which needs a live HTTP response. On an
+    // interactive circuit its form submits over SignalR (headers already sent) and its HttpContext
+    // is null, so it must stay static SSR. Only Login: the other Account pages (ForgotPassword,
+    // ResetPassword, /account/change-password) rely on interactive event dispatch.
+    [CascadingParameter]
+    private HttpContext HttpContext { get; set; } = default!;
+
+    private IComponentRenderMode? RenderModeForRequest =>
+        HttpContext.Request.Path.StartsWithSegments("/Account/Login", StringComparison.OrdinalIgnoreCase)
+            ? null
+            : RenderMode.InteractiveServer;
+}

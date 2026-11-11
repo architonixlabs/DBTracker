@@ -99,7 +99,10 @@
             var user = await SignInManager.UserManager.FindByEmailAsync(Input.Email);
             if (user?.MustChangePassword == true)
             {
+                // .NET 10 NavigateTo no longer throws during static SSR, so without the return the
+                // second redirect below silently wins.
                 RedirectManager.RedirectTo("/account/change-password?Required=true");
+                return;
             }
             RedirectManager.RedirectTo(ReturnUrl ?? "/");
         }

@@ -110,6 +110,52 @@ public class Epic16AccountLifecycleTests
         Assert.That(existingAccountText, Does.Contain("If an account exists"));
     }
 
+    // Guards the App.razor render-mode carve-out: only /Account/Login is static SSR. This page lives
+    // under /account too but needs the interactive circuit for its submit handler and toast.
+    [Test]
+    public async Task TemporaryPassword_ForcesChangePassword_AndTheNewPasswordSignsIn()
+    {
+        _page = await GlobalSetup.Server.Browser.NewPageAsync();
+        await LoginAsync("admin@architonixlabs.com");
+
+        await GotoAsync("/users");
+        await _page.WaitForSelectorAsync("button[type=submit]");
+        await WaitForCircuitAsync();
+        var email = $"e2e-chpw-{Guid.NewGuid():N}@architonixlabs.com";
+        await FillByLabel("Display name", "E2E Change Password User");
+        await FillByLabel("Email", email);
+        await FillByLabel("Temporary password", "Str0ngTempPass!");
+        await SelectByLabel("Role", "Viewer");
+        await _page.ClickAsync("button[type=submit]:text('Create user')");
+        await Assertions.Expect(_page.Locator("tr", new PageLocatorOptions { HasText = email })).ToBeVisibleAsync();
+
+        await LoginAsync(email, "Str0ngTempPass!");
+        await _page.WaitForURLAsync(url => url.Contains("/account/change-password"), new PageWaitForURLOptions { Timeout = 15000 });
+        await _page.WaitForSelectorAsync("text=choose your own before continuing");
+
+        await FillByLabel("Current password", "Str0ngTempPass!");
+        await FillByLabel("New password", "N3wOwnPassword!");
+        await _page.ClickAsync("button[type=submit]:text('Change password')");
+        await Assertions.Expect(_page.Locator(".dbt-toast")).ToContainTextAsync("Password changed");
+        await _page.WaitForURLAsync(url => !url.Contains("/account/change-password"), new PageWaitForURLOptions { Timeout = 15000 });
+
+        var fresh = await GlobalSetup.Server.Browser.NewPageAsync();
+        try
+        {
+            await fresh.GotoAsync(TestServerFixture.BaseUrl + "/Account/Login", new PageGotoOptions { WaitUntil = WaitUntilState.Load });
+            await fresh.FillAsync("input[autocomplete=username]", email);
+            await fresh.FillAsync("input[autocomplete=current-password]", "N3wOwnPassword!");
+            await fresh.ClickAsync("button[type=submit]");
+            await fresh.WaitForURLAsync(url => !url.Contains("/Account/Login") && !url.Contains("/account/change-password"),
+                new PageWaitForURLOptions { Timeout = 15000 });
+            await fresh.WaitForSelectorAsync(".notif-bell-btn", new PageWaitForSelectorOptions { Timeout = 15000 });
+        }
+        finally
+        {
+            await fresh.CloseAsync();
+        }
+    }
+
     private Task LoginAsync(string email) => LoginAsync(email, "ArxDemo#2026!");
 
     private async Task LoginAsync(string email, string password)
