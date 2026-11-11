@@ -29,6 +29,7 @@
     <Property Id="SQL_SERVER" Secure="yes" />
     <Property Id="SQL_GRANT_LOGIN" Secure="yes" />
     <Property Id="LAUNCH_WIZARD" Value="1" Secure="yes" />
+    <Property Id="LAUNCH_TRAY" Value="1" Secure="yes" />
     <Property Id="OPEN_SETUP_KEY" Value="1" Secure="yes" />
     <Property Id="REMOVE_DATA" Secure="yes" />
 
@@ -63,6 +64,9 @@
       <ComponentRef Id="AppDataFolder" />
       <ComponentRef Id="RememberSettings" />
       <ComponentGroupRef Id="IisConfiguration" />
+      <ComponentGroupRef Id="TrayFiles" />
+      <ComponentRef Id="TrayStartMenuShortcut" />
+      <ComponentRef Id="DeploymentGuide" />
     </Feature>
 
     <!-- Custom actions (installer/CustomActions). -->
@@ -76,6 +80,8 @@
     <CustomAction Id="GrantSqlLogin" BinaryRef="DBTrackerCA" DllEntry="GrantSqlLogin" Execute="deferred" Impersonate="yes" Return="check" />
     <CustomAction Id="RemoveAppData" BinaryRef="DBTrackerCA" DllEntry="RemoveAppData" Execute="deferred" Impersonate="no" Return="ignore" />
     <CustomAction Id="LaunchWizard" BinaryRef="DBTrackerCA" DllEntry="LaunchWizard" Execute="immediate" Return="ignore" />
+    <CustomAction Id="LaunchTray" BinaryRef="DBTrackerCA" DllEntry="LaunchTray" Execute="immediate" Return="ignore" />
+    <CustomAction Id="EndTrayProcesses" BinaryRef="DBTrackerCA" DllEntry="EndTrayProcesses" Execute="deferred" Impersonate="no" Return="ignore" />
 
     <SetProperty Id="StopAppPool" Value="Pool=[APPPOOL_NAME]" Before="StopAppPool" Sequence="execute" />
     <SetProperty Id="ConfigureAppPoolAndData" Value="Pool=[APPPOOL_NAME];AppData=[APPDATAFOLDER]" Before="ConfigureAppPoolAndData" Sequence="execute" />
@@ -90,12 +96,15 @@
       <Custom Action="DetectPrerequisites" After="AppSearch" />
       <Custom Action="ValidateSettingsExecute" After="CostFinalize" Condition="NOT (REMOVE~=&quot;ALL&quot;)" />
       <Custom Action="StopAppPool" After="InstallInitialize" Condition="Installed" />
+      <Custom Action="EndTrayProcesses" After="StopAppPool" />
       <!-- The IIS extension's ConfigureIIs runs just before RegisterUser, so these see the new pool. -->
       <Custom Action="ConfigureAppPoolAndData" After="RegisterUser" Condition="NOT (REMOVE~=&quot;ALL&quot;)" />
       <Custom Action="GrantSqlLogin" After="ConfigureAppPoolAndData" Condition="NOT (REMOVE~=&quot;ALL&quot;) AND SQL_GRANT_LOGIN=&quot;1&quot; AND SQL_SERVER" />
       <Custom Action="RemoveAppData" After="RegisterUser" Condition="REMOVE~=&quot;ALL&quot; AND REMOVE_DATA=&quot;1&quot; AND NOT UPGRADINGPRODUCTCODE" />
+      <!-- Started for the installing user right away; other users get it at their next sign-in. -->
+      <Custom Action="LaunchTray" After="InstallFinalize" Condition="LAUNCH_TRAY=&quot;1&quot; AND NOT (REMOVE~=&quot;ALL&quot;)" />
       <!-- Full UI opens the wizard from the exit dialog instead, which runs unelevated. -->
-      <Custom Action="LaunchWizard" After="InstallFinalize" Condition="LAUNCH_WIZARD=&quot;1&quot; AND UILevel &lt; 5 AND NOT (REMOVE~=&quot;ALL&quot;)" />
+      <Custom Action="LaunchWizard" After="LaunchTray" Condition="LAUNCH_WIZARD=&quot;1&quot; AND UILevel &lt; 5 AND NOT (REMOVE~=&quot;ALL&quot;)" />
     </InstallExecuteSequence>
 
     <Property Id="ARPHELPLINK" Value="https://github.com/architonixlabs/DBTracker" />

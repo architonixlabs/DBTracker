@@ -28,6 +28,34 @@ Both need administrator rights. When the install finishes, the browser opens
 default text editor, so you can paste the key straight into the wizard (section 6). On an upgrade the
 site's home page opens instead.
 
+### DBTracker Tray
+
+Both installers also install **DBTracker Tray** to `C:\Program Files\Architonix Labs\DBTracker Tray`
+(outside the site folder), add a "DBTracker Tray" Start menu shortcut, and start it for every user
+at sign-in. It starts for the installing user as soon as the install finishes. It runs as the signed-in
+user, needs nothing beyond the .NET Framework 4.6.2 that ships with Windows Server 2016 and later, and
+reads the site's port and folders from `HKLM\SOFTWARE\Architonix Labs\DBTracker`.
+
+The tray icon is green when DBTracker answers its health check, amber when it is running but needs
+attention (setup not finished, or the database unreachable) and red when it does not answer. The
+tooltip says which, and a notification appears when the state changes and stays changed. Its menu:
+
+- **Open DBTracker**, or **Open the setup wizard** while setup is pending. Clicking the icon does the same.
+- **Backups**: failed, overdue and never-backed-up counts, with a notification when an instance becomes
+  newly at risk. Choose **Connect to DBTracker...** and paste a personal access token created at
+  `/account/tokens`. The token is stored for that Windows user only, encrypted with Windows DPAPI, in
+  `%LOCALAPPDATA%\DBTracker\Tray`. **Disconnect** deletes it.
+- **Admin**: start, stop or restart the app pool, start or stop the site, and copy the setup key while
+  setup is pending. Each shows a Windows administrator prompt, then reports the result.
+- **Folders**: the install folder, `App_Data`, the site's IIS log folder (administrators get the
+  site's own `W3SVC<id>` folder; others get the parent log folder) and this guide.
+- **Recent errors**: the last 20 Application event log errors and warnings that mention this site.
+- **Start with Windows**: turn automatic start off or on for your own account.
+
+Install and upgrade close any running copy first, and uninstall removes the tray along with the site.
+If Windows shows an unknown-publisher warning or a long first start on Windows 11 with Smart App
+Control on, the installer and tray app are not code-signed; sign them before distributing widely.
+
 ### Setup.exe options
 
 The Options page has the install folder, the port, the SQL Server for the login, and **Install SQL
@@ -58,6 +86,7 @@ offers it at the end and never forces it. Logs: `%TEMP%\DBTracker-Setup_*.log` f
 | `SQL_SERVER` | empty | SQL Server to create the app pool's login on, for example `.` or `.\SQLEXPRESS`. |
 | `SQL_GRANT_LOGIN` | empty | `1` creates the login and adds it to `dbcreator`. |
 | `LAUNCH_WIZARD` | `1` | `0` skips opening the browser at the end. |
+| `LAUNCH_TRAY` | `1` | `0` skips starting DBTracker Tray for the installing user at the end. Setup.exe variable: `LaunchTray`. |
 | `OPEN_SETUP_KEY` | `1` | `0` skips opening the setup key file. |
 | `REMOVE_DATA` | empty | On uninstall only: `1` also deletes `App_Data`. |
 

@@ -1632,7 +1632,7 @@ audited; Marcus and Dev mainly need "Open DBTracker". Owner chose all four task 
 admin controls, folders and logs, backup risk count. The risk count needs the tray to call DBTracker as
 a user, so personal access tokens are a separate web-app item (I06).
 
-- [ ] **2026-11-11 | I05 | NEW | P2 | L - DBTracker tray app.**
+- [x] **2026-11-11 | I05 | NEW | P2 | L - DBTracker tray app.**
   **Acceptance:** .NET Framework 4.6.2 WinForms tray app (no extra runtime on Windows Server 2016+)
   installed by the MSI, started for every user at sign-in (can be turned off from its menu), launched
   un-elevated at the end of Setup, closed and removed on uninstall. Reads the site port and folders the

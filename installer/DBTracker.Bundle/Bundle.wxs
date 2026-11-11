@@ -35,6 +35,7 @@
     <!-- Server that gets a login for the app pool identity. Blank skips it (do it yourself, see DEPLOYMENT.md). -->
     <Variable Name="SqlLoginServer" Type="string" Value="" bal:Overridable="yes" />
     <Variable Name="LaunchWizard" Type="numeric" Value="1" bal:Overridable="yes" />
+    <Variable Name="LaunchTray" Type="numeric" Value="1" bal:Overridable="yes" />
     <!-- /uninstall RemoveData=1 also deletes App_Data (config, keys, setup key); the MSI ignores it otherwise. -->
     <Variable Name="RemoveData" Type="numeric" Value="0" bal:Overridable="yes" />
     <Variable Name="DotNetChannel" Type="string" Value="$(var.DotNetChannel)" />
@@ -136,6 +137,7 @@
         <MsiProperty Name="APPPOOL_NAME" Value="[AppPoolName]" />
         <MsiProperty Name="SITE_PORT" Value="[SitePort]" />
         <MsiProperty Name="LAUNCH_WIZARD" Value="[LaunchWizard]" />
+        <MsiProperty Name="LAUNCH_TRAY" Value="[LaunchTray]" />
         <MsiProperty Name="REMOVE_DATA" Value="[RemoveData]" />
         <!-- Grant only on a server that exists after this run: an existing local instance the user named,
              or the Express instance this run installed. -->

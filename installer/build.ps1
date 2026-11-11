@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Builds the DBTracker installer: publishes the web app, builds DBTracker.msi, then
+    Builds the DBTracker installer: publishes the web app, tests and builds the tray app, builds DBTracker.msi, then
     DBTracker-Setup.exe (the prerequisites bundle) when that project is present.
 
 .EXAMPLE
@@ -45,10 +45,19 @@ Invoke-Step "Publish DBTracker.Web $Version ($Configuration)" {
 $leaked = Get-ChildItem $publish -Filter "appsettings.*.json" | Where-Object { $_.Name -match '^appsettings\.(Development|Testing)\.json$' }
 if ($leaked) { throw "Publish output contains $($leaked.Name -join ', '); these must not ship." }
 
+$tray = Join-Path $out "tray"
+if (Test-Path $tray) { Remove-Item $tray -Recurse -Force }
+Invoke-Step "Test the tray app logic" {
+    dotnet test (Join-Path $root "tests\DBTracker.Tray.Tests\DBTracker.Tray.Tests.csproj") -c $Configuration --nologo
+}
+Invoke-Step "Build DBTracker Tray $Version ($Configuration)" {
+    dotnet build (Join-Path $root "src\DBTracker.Tray\DBTracker.Tray.csproj") -c $Configuration -o $tray -p:Version=$Version -p:DebugType=none --nologo
+}
+
 $msiProject = Join-Path $installer "DBTracker.Msi\DBTracker.Msi.wixproj"
 $msiBin = Join-Path $installer "DBTracker.Msi\bin"
 Invoke-Step "Build DBTracker.msi" {
-    dotnet build $msiProject -c $Configuration -p:ProductVersion=$Version -p:PublishDir="$publish\" -p:SuppressValidation=$(if ($Validate) { 'false' } else { 'true' }) --nologo
+    dotnet build $msiProject -c $Configuration -p:ProductVersion=$Version -p:PublishDir="$publish\" -p:TrayDir="$tray\" -p:SuppressValidation=$(if ($Validate) { 'false' } else { 'true' }) --nologo
 }
 $msi = Get-ChildItem $msiBin -Recurse -Filter "DBTracker.msi" | Sort-Object LastWriteTime -Descending | Select-Object -First 1
 if (-not $msi) { throw "DBTracker.msi was not produced under $msiBin." }

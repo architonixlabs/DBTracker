@@ -7,7 +7,9 @@
     <InstallerPlatform>x64</InstallerPlatform>
     <ProductVersion Condition="'$(ProductVersion)' == ''">1.0.0</ProductVersion>
     <PublishDir Condition="'$(PublishDir)' == ''">$(MSBuildThisFileDirectory)..\out\publish\</PublishDir>
-    <DefineConstants>ProductVersion=$(ProductVersion);PublishDir=$(PublishDir)</DefineConstants>
+    <TrayDir Condition="'$(TrayDir)' == ''">$(MSBuildThisFileDirectory)..\out\tray\</TrayDir>
+    <RepoRoot>$(MSBuildThisFileDirectory)..\..\</RepoRoot>
+    <DefineConstants>ProductVersion=$(ProductVersion);PublishDir=$(PublishDir);TrayDir=$(TrayDir);RepoRoot=$(RepoRoot)</DefineConstants>
     <Cultures>en-US</Cultures>
     <!-- ICE validation needs an elevated prompt (WIX1105 otherwise). build.ps1 -Validate turns it on. -->
     <SuppressValidation Condition="'$(SuppressValidation)' == ''">true</SuppressValidation>
