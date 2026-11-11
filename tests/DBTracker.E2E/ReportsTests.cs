@@ -38,7 +38,9 @@ public class ReportsTests
         await GotoAsync("/reports");
         await _page.WaitForSelectorAsync("text=Backup activity");
 
-        // Default tab is Backup activity, defaulting to the 7-day range.
+        // Default tab is Backup activity, defaulting to the 7-day range. The tab label renders
+        // before the report body finishes loading, so wait for the summary itself.
+        await _page.WaitForSelectorAsync(".stat-strip");
         Assert.That(await _page.Locator(".stat-strip").CountAsync(), Is.EqualTo(1));
         Assert.That(await _page.Locator(".dbt-table table").CountAsync(), Is.GreaterThanOrEqualTo(1));
     }

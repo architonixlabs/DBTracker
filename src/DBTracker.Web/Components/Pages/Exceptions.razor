@@ -79,7 +79,7 @@ else
             <NotAuthorized>
             <div class="dbt-card">
                 <h2 class="h6 text-muted mb-3">Record an exception</h2>
-                <div class="text-muted small">Recording a risk-acceptance exception is restricted to the Admin and DBA roles. You can view exceptions here but not record them.</div>
+                <div class="text-muted small">Recording a risk-acceptance exception is restricted to Admin/DBA users. You can view exceptions here but not record them.</div>
             </div>
             </NotAuthorized>
             </AuthorizeView>
@@ -202,7 +202,7 @@ else
     private async Task Revoke(int id)
     {
         await ExceptionSvc.RevokeAsync(id, _userName ?? "unknown", "Revoked from the exceptions hub.");
-        Toasts.Success("Exception revoked. The waived action is open again.");
+        Toasts.Success("Exception revoked. The waived action is reopened.");
         await Load();
     }
 

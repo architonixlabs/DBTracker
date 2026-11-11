@@ -157,13 +157,19 @@ authenticated role already, same as the rest of the app, so no separate "my apps
 - [x] ~~Editorial redesign: warm paper background, Fraunces serif + Inter, terracotta/teal accents~~
       — applied from the `/design` artifact, then superseded (see Progress log, 2026-11-10): user
       flagged it as itself a recognizable "AI redesign" look
-- [x] Current: dark ops-console theme — IBM Plex Mono for data/nav/headings, Inter for body prose,
+- [x] ~~Dark ops-console theme — IBM Plex Mono for data/nav/headings, Inter for body prose,
       amber/green/red status LEDs with a glow instead of pill badges, hairline dividers instead of
       boxed cards, grid-paper texture background, `// eyebrow` comment-style section labels, a
-      terminal-window login card (title bar, `>` prompt fields, blinking cursor)
-- [x] Motion: page fade-in, toast slide-in, skeleton shimmer loading states, blinking terminal
-      cursor on the brand wordmark, pulsing glow on Failed indicators (draws the eye to what needs
-      attention first)
+      terminal-window login card (title bar, `>` prompt fields, blinking cursor)~~: superseded by the
+      2026-11-11 antislop pass (see Progress log)
+- [x] ~~Motion: page fade-in, toast slide-in, skeleton shimmer loading states, blinking terminal
+      cursor on the brand wordmark, pulsing glow on Failed indicators~~: superseded, see below
+- [x] Current (2026-11-11): dark operations console, kept dark on purpose for long monitoring
+      sessions. Inter for interface text, IBM Plex Mono only for data values (IDs, IPs, sizes,
+      timestamps). Amber/green/red status lights are the identity motif; only Failed glows, and its
+      pulse plays twice then stops. Flat background, plain sign-in panels, plain section titles. All
+      text tokens meet WCAG AA; visible amber focus outline on every control. Motion: toast slide-in,
+      loading indicators, the Failed pulse; all of it stops under `prefers-reduced-motion`.
 - [x] Toast notifications on create/update/log-backup/archive actions
 - [ ] Further polish: empty/zero-state illustrations, a light-theme toggle (dark is currently the
       only theme, by design — not a gap, but a toggle isn't built), responsive mobile pass beyond
@@ -964,6 +970,31 @@ authenticated role already, same as the rest of the app, so no separate "my apps
   load wasn't independently measured. **Not addressed:** each test file still has its own copy of
   the `GotoAsync` and fixed 800ms `WaitForCircuitAsync` helpers (no shared base class). Consolidating
   them would stop this recurring but was left out to keep the change small.
+- 2026-11-11 · Antislop cleanup pass (mode: during), run as parallel agents on separate git
+  worktrees and merged into main. The owner delegated the pattern calls, so the terminal-window login
+  card, grid-paper background, monospace headings/nav, `//` section labels and blinking wordmark
+  cursor were all dropped (Design section above has the current look). **UI and layout:** plain
+  sign-in panels; three colour tokens raised to WCAG AA; visible focus outlines (Bootstrap's
+  `outline: 0` had been hiding them on fields); proper `aside`/`nav`/`main` landmarks; a page
+  `ErrorBoundary` in MainLayout so one failing page no longer kills the circuit; 360px phone pass
+  (wide `dbt-table` tables now scroll inside their container instead of widening the page,
+  instance-detail action buttons wrap, dashboard count cells form a 2x2 grid). **Pages (35 files):**
+  em dashes and internal backlog IDs (U21, D22, "Epic 20") removed from visible text; empty cells say
+  what they mean ("Never", "Unassigned", "No successful backup yet"); buttons name their action;
+  every input labelled (`for`/`id`), every table named; load-failure states with "Try again" on
+  instance pages; notification items are real buttons. **Code:** 1,744 comment lines removed from
+  236 C# files (restatements and epic/persona references); comments explaining a non-obvious reason
+  were kept. About 70 user-facing messages in Core/Infrastructure (archive previews, gate errors,
+  notifications, report email subjects) rewritten without em dashes. **Bugs found along the way:** a
+  failed lifecycle manual override showed a success toast; the sidebar clipped the notification
+  dropdown; the bell's refresh button dropped keyboard focus so Escape stopped closing it.
+  **Verified:** full headed run (`E2E_HEADED=1`), 546/546 unit and 94/94 E2E, zero exceptions in the
+  test server log. The first headed run after merging was 87/94: five tests pinned old wording or
+  markup that the pass had changed (restored where the test checks real behavior; the bell test now
+  targets the corrected `role="region"` instead of the old wrong `role="menu"`), one Reports test
+  counted the summary strip before the new loading state finished (now waits for it), and one was a
+  missing space in a heading introduced during the merge. **Not addressed:** a light-theme toggle and
+  the remaining em dashes inside code comments (not user-facing).
 
 ## Out of scope (future)
 - Automated backup execution/orchestration (this tracks status, doesn't run backups)
@@ -1213,6 +1244,7 @@ clarifies, extends, or supersedes the earlier entry. Earlier wording remains his
 - 2026-11-10 | UPDATE-008 | Supersedes the prioritization of the future custom report date-range item: it is now a proposed P2 item within U10. The original future entry is retained as history; implementation remains incomplete.
 - 2026-11-10 | UPDATE-009 | Tracking correction: the review log above describes corrections/refinements from the usability review. Their authoritative clarification is now recorded in these separate update entries; original backlog wording has been restored and preserved.
 - 2026-11-10 | NEW-001 | Added U01-U22 under Epics 13-17 as separate proposed features/refinements, with priorities, effort, persona rationale and acceptance criteria. These remain unimplemented; see USABILITY_REVIEW.md for supporting evidence.
+- 2026-11-11 | UPDATE-015 | Supersedes the Design section's "dark ops-console theme" and "Motion" entries: the antislop pass replaced the terminal login card, grid-paper background, monospace headings and `//` labels. The old entries are kept struck through; the new "Current (2026-11-11)" entry and the dated Progress log entry describe what shipped. The open "Further polish" item stays open (no light-theme toggle).
 - 2026-11-10 | UPDATE-015 | Epics 13 and 14 (U01-U08) are now implemented — see the Progress log entries dated 2026-11-10 for what shipped and any scope notes. This supersedes UPDATE-005 (U07 delivered, so Epic 8's preference item above is now marked done) and partially supersedes UPDATE-001/UPDATE-002/UPDATE-007 (U05's facets/shared filtering/sort and U02's staleness detection are delivered; U05's report/filter deep-linking and U06's full remaining scope are covered in the Epic 14 entry). U03/U04's items are also delivered per Epic 13. Earlier wording is preserved as history; U09-U22 remain open.
 
 ## DBA lifecycle roadmap - 2026-11-10

@@ -70,12 +70,12 @@ public class Epic17AccessibilityTests
 
         var bell = _page.Locator("button.notif-bell-btn");
         await bell.ClickAsync();
-        await Assertions.Expect(_page.Locator("[role=menu][aria-label=Notifications]")).ToBeVisibleAsync();
+        await Assertions.Expect(_page.Locator("[role=region][aria-label='Recent notifications']")).ToBeVisibleAsync();
 
         await _page.Keyboard.PressAsync("Escape");
         await _page.WaitForTimeoutAsync(200);
 
-        await Assertions.Expect(_page.Locator("[role=menu][aria-label=Notifications]")).Not.ToBeVisibleAsync();
+        await Assertions.Expect(_page.Locator("[role=region][aria-label='Recent notifications']")).Not.ToBeVisibleAsync();
         await Assertions.Expect(bell).ToBeFocusedAsync();
     }
 
