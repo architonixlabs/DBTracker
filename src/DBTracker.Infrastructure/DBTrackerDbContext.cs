@@ -70,6 +70,10 @@ public class DBTrackerDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<MigrationCapacityEstimate> MigrationCapacityEstimates => Set<MigrationCapacityEstimate>();
     public DbSet<WorkloadComparison> WorkloadComparisons => Set<WorkloadComparison>();
     public DbSet<CertificateDependency> CertificateDependencies => Set<CertificateDependency>();
+    public DbSet<CertificateRenewalEvent> CertificateRenewalEvents => Set<CertificateRenewalEvent>();
+    public DbSet<ChangeFreezePeriod> ChangeFreezePeriods => Set<ChangeFreezePeriod>();
+    public DbSet<MaintenanceCheckRequirement> MaintenanceCheckRequirements => Set<MaintenanceCheckRequirement>();
+    public DbSet<InstanceCapacityLimit> InstanceCapacityLimits => Set<InstanceCapacityLimit>();
 
     public DbSet<SupportContract> SupportContracts => Set<SupportContract>();
     public DbSet<SupportContractAssignment> SupportContractAssignments => Set<SupportContractAssignment>();
@@ -964,6 +968,7 @@ public class DBTrackerDbContext : IdentityDbContext<ApplicationUser>
         {
             entity.Property(e => e.ReviewerScope).HasMaxLength(200);
             entity.Property(e => e.ReviewerName).HasMaxLength(320);
+            entity.Property(e => e.ReviewerUserId).HasMaxLength(450);
             entity.Property(e => e.Notes).HasMaxLength(1000);
 
             entity.HasOne(e => e.ChangeValidation)
@@ -981,6 +986,7 @@ public class DBTrackerDbContext : IdentityDbContext<ApplicationUser>
             entity.Property(e => e.Reason).HasMaxLength(2000);
             entity.Property(e => e.CompensatingControls).HasMaxLength(2000);
             entity.Property(e => e.AccountableOwnerName).HasMaxLength(320);
+            entity.Property(e => e.AccountableOwnerEmail).HasMaxLength(320);
             entity.Property(e => e.PreparedByUserId).HasMaxLength(450);
             entity.Property(e => e.PreparedByUserName).HasMaxLength(320);
             entity.Property(e => e.PermittedApproverRole).HasMaxLength(100);
@@ -1154,6 +1160,7 @@ public class DBTrackerDbContext : IdentityDbContext<ApplicationUser>
         {
             entity.Property(e => e.Label).HasMaxLength(200);
             entity.Property(e => e.OwnerName).HasMaxLength(320);
+            entity.Property(e => e.OwnerEmail).HasMaxLength(320);
             entity.Property(e => e.SecretStoreReference).HasMaxLength(500);
             entity.Property(e => e.LastAccessCheckBy).HasMaxLength(320);
             entity.Property(e => e.AffectedReplicasOrClientsText).HasMaxLength(2000);
@@ -1173,6 +1180,57 @@ public class DBTrackerDbContext : IdentityDbContext<ApplicationUser>
 
             entity.HasIndex(e => new { e.DatabaseInstanceId, e.Kind });
             entity.HasIndex(e => e.ExpiresAtUtc);
+        });
+
+        modelBuilder.Entity<CertificateRenewalEvent>(entity =>
+        {
+            entity.Property(e => e.Evidence).HasMaxLength(2000);
+            entity.Property(e => e.ReplicasOrClientsUpdated).HasMaxLength(2000);
+            entity.Property(e => e.RecordedBy).HasMaxLength(320);
+
+            entity.HasOne(e => e.CertificateDependency)
+                .WithMany(c => c.History)
+                .HasForeignKey(e => e.CertificateDependencyId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(e => new { e.CertificateDependencyId, e.OccurredAtUtc });
+        });
+
+        modelBuilder.Entity<ChangeFreezePeriod>(entity =>
+        {
+            entity.Property(e => e.Name).HasMaxLength(200).IsRequired();
+            entity.Property(e => e.Reason).HasMaxLength(1000);
+            entity.Property(e => e.CancelledBy).HasMaxLength(320);
+            entity.Property(e => e.CreatedBy).HasMaxLength(320);
+
+            entity.HasIndex(e => new { e.StartUtc, e.EndUtc });
+        });
+
+        modelBuilder.Entity<MaintenanceCheckRequirement>(entity =>
+        {
+            entity.Property(e => e.NodeOrDeploymentLabel).HasMaxLength(200);
+            entity.Property(e => e.Notes).HasMaxLength(1000);
+            entity.Property(e => e.CreatedBy).HasMaxLength(320);
+
+            entity.HasOne(e => e.DatabaseInstance)
+                .WithMany()
+                .HasForeignKey(e => e.DatabaseInstanceId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(e => new { e.DatabaseInstanceId, e.CheckType, e.NodeOrDeploymentLabel }).IsUnique();
+        });
+
+        modelBuilder.Entity<InstanceCapacityLimit>(entity =>
+        {
+            entity.Property(e => e.Source).HasMaxLength(300);
+            entity.Property(e => e.UpdatedBy).HasMaxLength(320);
+
+            entity.HasOne(e => e.DatabaseInstance)
+                .WithMany()
+                .HasForeignKey(e => e.DatabaseInstanceId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(e => e.DatabaseInstanceId).IsUnique();
         });
 
         modelBuilder.Entity<SupportContract>(entity =>

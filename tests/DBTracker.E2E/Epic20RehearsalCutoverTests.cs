@@ -78,7 +78,7 @@ public class Epic20RehearsalCutoverTests
         await _page.WaitForTimeoutAsync(500);
 
         var conflictResult = _page.Locator("[data-testid=conflict-result]");
-        await Assertions.Expect(conflictResult).ToContainTextAsync("Freeze conflicts");
+        await Assertions.Expect(conflictResult).ToContainTextAsync("Overlapping change windows");
         await Assertions.Expect(conflictResult).ToContainTextAsync("First cutover window");
 
         // The conflict check never blocked saving the first window — exactly one exists so far, and
@@ -157,30 +157,59 @@ public class Epic20RehearsalCutoverTests
         await _page.WaitForTimeoutAsync(500);
 
         // Supply a fully-passing validation and both required sign-offs.
+        // G15/D13: a Passed backup/restore check needs a linked backup taken after the change started, so log one now.
+        await LogBackupNowAsync("AVALOKH-SALES-SQL");
+
         await GotoAsync($"/campaigns/{campaignId}/validation");
         await WaitForCircuitAsync();
         await _page.Locator("[data-testid=validation-instance-select]").SelectOptionAsync(new SelectOptionValue { Label = "AVALOKH-SALES-SQL" });
+        await _page.WaitForTimeoutAsync(400);
         await _page.FillAsync("input[placeholder='Observed target build']", "16.0.1000");
         await _page.Locator("[data-testid=app-tests-outcome]").SelectOptionAsync("Passed");
         await _page.Locator("[data-testid=integrity-outcome]").SelectOptionAsync("Passed");
         await _page.Locator("[data-testid=jobs-permissions-outcome]").SelectOptionAsync("Passed");
         await _page.Locator("[data-testid=ha-state-outcome]").SelectOptionAsync("Passed");
         await _page.Locator("[data-testid=backup-restore-evidence-outcome]").SelectOptionAsync("Passed");
+
+        // Passed with nothing linked is refused and nothing is recorded.
+        await _page.Locator("[data-testid=record-validation-button]").ClickAsync();
+        await _page.WaitForTimeoutAsync(500);
+        await Assertions.Expect(_page.Locator("[data-testid=record-validation-error]")).ToContainTextAsync("Link the new backup or restore");
+        await Assertions.Expect(_page.Locator("[data-testid=validation-row]")).ToHaveCountAsync(0);
+
+        await _page.Locator("[data-testid=linked-backup-select]").SelectOptionAsync(new SelectOptionValue { Index = 1 });
         await _page.Locator("[data-testid=record-validation-button]").ClickAsync();
         await _page.WaitForTimeoutAsync(500);
 
         var validationRow = _page.Locator("[data-testid=validation-row]").First;
-        await validationRow.Locator("select").First.SelectOptionAsync("DBA");
-        await validationRow.Locator("input[placeholder='Reviewer name']").FillAsync("Priya Nair");
+        await Assertions.Expect(validationRow.Locator("[data-testid=validation-linked-evidence]")).ToContainTextAsync("Backup #");
+
+        // Sign-offs are recorded as the signed-in account and checked against its role: no typed names.
+        await Assertions.Expect(validationRow.Locator("input[placeholder='Reviewer name']")).ToHaveCountAsync(0);
+        await validationRow.Locator("[data-testid=signoff-scope-select]").SelectOptionAsync("DBA");
         await validationRow.Locator("[data-testid=add-signoff-button]").ClickAsync();
         await _page.WaitForTimeoutAsync(500);
 
-        await validationRow.Locator("select").First.SelectOptionAsync("Application owner");
-        await validationRow.Locator("input[placeholder='Reviewer name']").FillAsync("Dev Patel");
+        // The same DBA signing the application-owner scope too is recorded, but the gate refuses one person for both.
+        await validationRow.Locator("[data-testid=signoff-scope-select]").SelectOptionAsync("Application owner");
         await validationRow.Locator("[data-testid=add-signoff-button]").ClickAsync();
         await _page.WaitForTimeoutAsync(500);
+        await Assertions.Expect(_page.Locator("[data-testid=validation-gate-reasons]")).ToContainTextAsync("different people");
+
+        // The IT manager signs the application-owner scope under their own account.
+        await LoginAsync("marcus.chen@architonixlabs.com");
+        await GotoAsync($"/campaigns/{campaignId}/validation");
+        await WaitForCircuitAsync();
+        await Assertions.Expect(_page.Locator("[data-testid=record-validation-button]")).ToHaveCountAsync(0);
+        var marcusRow = _page.Locator("[data-testid=validation-row]").First;
+        await marcusRow.Locator("[data-testid=signoff-scope-select]").SelectOptionAsync("Application owner");
+        await marcusRow.Locator("[data-testid=add-signoff-button]").ClickAsync();
+        await _page.WaitForTimeoutAsync(500);
+        await Assertions.Expect(marcusRow.Locator("[data-testid=signoff-row]", new LocatorLocatorOptions { HasText = "marcus.chen" })).ToHaveCountAsync(1);
 
         await Assertions.Expect(_page.Locator("[data-testid=validation-gate-banner]")).ToContainTextAsync("Ready to complete");
+
+        await LoginAsync("priya.nair@architonixlabs.com");
 
         // Now the same Completed transition succeeds.
         await GotoAsync($"/campaigns/{campaignId}");
@@ -206,8 +235,10 @@ public class Epic20RehearsalCutoverTests
         await WaitForCircuitAsync();
 
         var reference = $"D11 rehearsal evidence {Guid.NewGuid():N}"[..40];
-        await _page.FillAsync("input[placeholder='Target type (e.g. MigrationCampaign)']", "MigrationCampaign");
-        await _page.FillAsync("input[placeholder='Target id']", "1");
+        // G15/D14: the target is picked from records that exist, never typed as an id.
+        await _page.Locator("[data-testid=exception-target-type]").SelectOptionAsync("MigrationCampaign");
+        await _page.WaitForTimeoutAsync(400);
+        await _page.Locator("[data-testid=exception-target]").SelectOptionAsync(new SelectOptionValue { Index = 1 });
         await _page.FillAsync("input[placeholder='Waived check/policy reference']", reference);
         await _page.FillAsync("textarea[placeholder='Reason']", "Emergency patch window — rehearsal could not be completed in time.");
         await _page.FillAsync("input[placeholder='Permitted approver role (e.g. Admin, ITManager)']", "DBA");
@@ -226,16 +257,28 @@ public class Epic20RehearsalCutoverTests
         await Assertions.Expect(row.Locator("[data-testid=exception-status]")).ToContainTextAsync("Active");
 
         // Revoking reopens the waived action immediately — no sweep/delay required.
+        // A revocation needs a reason, and the accountable owner is told.
         await row.Locator("[data-testid=revoke-exception-button]").ClickAsync();
+        await _page.Locator("[data-testid=revoke-reason-input]").FillAsync("Rehearsal was completed after all.");
+        await _page.Locator("[data-testid=confirm-revoke-button]").ClickAsync();
         await _page.WaitForTimeoutAsync(500);
         await Assertions.Expect(_page.Locator(".dbt-toast").First).ToContainTextAsync("reopened");
+        await Assertions.Expect(_page.Locator(".dbt-toast").First).ToContainTextAsync("notice went to");
         await Assertions.Expect(row.Locator("[data-testid=exception-status]")).ToContainTextAsync("Revoked");
 
-        // History is preserved — renewing creates a new linked record rather than editing the old one.
+        // History is preserved: renewing creates a new linked record with an expiry the user chooses.
         await row.Locator("[data-testid=renew-exception-button]").ClickAsync();
+        await _page.Locator("[data-testid=renew-expires-input]").FillAsync(DateTime.UtcNow.AddDays(45).ToString("yyyy-MM-dd"));
+        await _page.Locator("[data-testid=confirm-renew-button]").ClickAsync();
         await _page.WaitForTimeoutAsync(500);
         await Assertions.Expect(_page.Locator(".dbt-toast").First).ToContainTextAsync("Renewal");
-        await Assertions.Expect(_page.Locator("[data-testid=exception-row]", new PageLocatorOptions { HasText = reference })).ToHaveCountAsync(2);
+        var rows = _page.Locator("[data-testid=exception-row]", new PageLocatorOptions { HasText = reference });
+        await Assertions.Expect(rows).ToHaveCountAsync(2);
+        await Assertions.Expect(rows.First).ToContainTextAsync(DateTime.UtcNow.AddDays(45).ToString("yyyy-MM-dd"));
+
+        await rows.First.Locator("[data-testid=exception-history-button]").ClickAsync();
+        await _page.WaitForTimeoutAsync(400);
+        await Assertions.Expect(_page.Locator("[data-testid=exception-history-item]")).ToHaveCountAsync(2);
     }
 
     [Test]
@@ -268,6 +311,17 @@ public class Epic20RehearsalCutoverTests
         var download = await downloadTask;
         Assert.That(download.SuggestedFilename, Does.StartWith("dbtracker-lifecycle-workspace-"));
         await Assertions.Expect(_page.Locator(".dbt-toast").First).ToContainTextAsync($"Exported {filteredRows}");
+    }
+
+    private async Task LogBackupNowAsync(string instanceSearchText)
+    {
+        await GotoAsync($"/instances?s={instanceSearchText}");
+        await _page.WaitForSelectorAsync(".dbt-table tbody tr");
+        var detailHref = await _page.Locator("a.instance-row-link").First.GetAttributeAsync("href");
+        await GotoAsync(detailHref!);
+        await WaitForCircuitAsync();
+        await _page.Locator("button[type=submit]:has-text('Log backup')").ClickAsync();
+        await Assertions.Expect(_page.Locator(".dbt-toast").First).ToContainTextAsync("Backup result logged", new LocatorAssertionsToContainTextOptions { Timeout = 10000 });
     }
 
     private async Task TransitionToAsync(string toState, string reason)

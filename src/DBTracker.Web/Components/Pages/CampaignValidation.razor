@@ -1,5 +1,5 @@
 @page "/campaigns/{Id:int}/validation"
-@attribute [Authorize(Roles = Roles.CanEditPolicy)]
+@attribute [Authorize]
 @using DBTracker.Core.Entities
 @using DBTracker.Core.Enums
 @using DBTracker.Core.Services
@@ -32,15 +32,19 @@ else
         <div>
             <h1>Post-change validation</h1>
             <div class="subtitle">
-                @_campaign.Name · <a href="/campaigns/@Id">Back to campaign</a> ·
-                Editing the Version text alone never completes a change. Completion requires the evidence below, every required sign-off, and current rehearsal evidence.
+                @_campaign.Name ·
+                @if (_canRecord)
+                {
+                    <a href="/campaigns/@Id">Back to campaign</a> <span>·</span>
+                }
+                Editing the Version text alone never completes a change. Completion requires the evidence below, every required sign-off from different people, and current rehearsal evidence.
             </div>
         </div>
     </div>
 
     @if (_gate is not null)
     {
-        <div class="dbt-card mb-3" data-testid="validation-gate-banner" style="border-color:@(_gate.CanComplete ? "var(--dbt-ontrack)" : "var(--dbt-overdue)");">
+        <div class="dbt-card mb-3" data-testid="validation-gate-banner" role="status" style="border-color:@(_gate.CanComplete ? "var(--dbt-ontrack)" : "var(--dbt-overdue)");">
             @if (_gate.CanComplete)
             {
                 <strong style="color:var(--dbt-ontrack);">Ready to complete.</strong>
@@ -59,11 +63,13 @@ else
     }
 
     <div class="row g-3">
+        @if (_canRecord)
+        {
         <div class="col-lg-6">
             <div class="dbt-card">
                 <h2 class="h6 text-muted mb-3">Record validation</h2>
                 <div class="mb-2">
-                    <label class="form-label small mb-1" for="validation-instance">Instance</label><select id="validation-instance" class="form-select form-select-sm" @bind="_instanceId" data-testid="validation-instance-select">
+                    <label class="form-label small mb-1" for="validation-instance">Instance</label><select id="validation-instance" class="form-select form-select-sm" @bind="_instanceId" @bind:after="LoadCandidates" data-testid="validation-instance-select">
                         <option value="0">Choose instance…</option>
                         @foreach (var link in _campaign.InstanceLinks)
                         {
@@ -127,17 +133,63 @@ else
                 </div>
                 <div class="row g-2 mb-2">
                     <div class="col-6">
+                        <label for="campaignvalidation-linked-backup" class="form-label small">Backup that proves it</label>
+                        <select id="campaignvalidation-linked-backup" class="form-select form-select-sm" @bind="_linkedBackupId" disabled="@(_instanceId == 0)" data-testid="linked-backup-select" aria-describedby="campaignvalidation-evidence-help">
+                            <option value="0">None</option>
+                            @foreach (var b in _candidates?.Backups ?? [])
+                            {
+                                <option value="@b.Id">#@b.Id @b.Type, @b.TimestampUtc.ToString("yyyy-MM-dd HH:mm") UTC</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-6">
+                        <label for="campaignvalidation-linked-restore" class="form-label small">Restore that proves it</label>
+                        <select id="campaignvalidation-linked-restore" class="form-select form-select-sm" @bind="_linkedRestoreId" disabled="@(_instanceId == 0)" data-testid="linked-restore-select" aria-describedby="campaignvalidation-evidence-help">
+                            <option value="0">None</option>
+                            @foreach (var r in _candidates?.Restores ?? [])
+                            {
+                                <option value="@r.Id">#@r.Id @r.Reason, @r.TimestampUtc.ToString("yyyy-MM-dd HH:mm") UTC</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="form-text" id="campaignvalidation-evidence-help">
+                        @if (_candidates?.ChangeStartedUtc is { } started)
+                        {
+                            <span>Lists successful backups and restores of this instance since the change started (@started.ToString("yyyy-MM-dd HH:mm") UTC). Log a new one on the instance page if none is listed.</span>
+                        }
+                        else
+                        {
+                            <span>Lists successful backups and restores of this instance. The change start isn't recorded yet, so older records are listed too.</span>
+                        }
+                        A Passed outcome needs one of them.
+                    </div>
+                </div>
+                <div class="row g-2 mb-2">
+                    <div class="col-6">
                         <label for="campaignvalidation-rollback-retention-deadline" class="form-label small">Rollback retention deadline</label>
                         <input id="campaignvalidation-rollback-retention-deadline" type="date" class="form-control form-control-sm" @bind="_rollbackRetentionDeadline" />
                     </div>
                 </div>
                 <button class="btn btn-primary btn-sm" @onclick="SaveValidation" disabled="@(_instanceId == 0)" data-testid="record-validation-button">Record validation</button>
+                @if (_recordError is not null)
+                {
+                    <p class="small mt-2 mb-0" role="alert" style="color:var(--dbt-failed);" data-testid="record-validation-error">@_recordError</p>
+                }
             </div>
         </div>
+        }
 
-        <div class="col-lg-6">
+        <div class="@(_canRecord ? "col-lg-6" : "col-12")">
             <div class="dbt-card">
                 <h2 class="h6 text-muted mb-3">Recorded validations &amp; sign-offs</h2>
+                @if (_signableScopes.Count > 0)
+                {
+                    <p class="small text-muted">You sign off as <strong>@_userName</strong>. Your role can sign: @string.Join(", ", _signableScopes).</p>
+                }
+                else
+                {
+                    <p class="small text-muted">Your role can't sign off any scope. You can still read the evidence.</p>
+                }
                 @if (_validations.Count == 0)
                 {
                     <div class="empty-state py-3"><i aria-hidden="true" class="bi bi-clipboard-check"></i> None recorded yet.</div>
@@ -148,27 +200,53 @@ else
                     {
                         <div class="mb-2 pb-2" style="border-bottom:1px solid var(--dbt-line);" data-testid="validation-row">
                             <strong class="small">@(v.DatabaseInstance?.Name ?? $"#{v.DatabaseInstanceId}")</strong>
-                            <span class="small text-muted"> · build @v.ObservedTargetBuildText, @v.RecordedAtUtc.ToString("yyyy-MM-dd")</span>
+                            <span class="small text-muted"> · build @v.ObservedTargetBuildText, @v.RecordedAtUtc.ToString("yyyy-MM-dd HH:mm") UTC by @v.RecordedBy</span>
                             <div class="small">App tests: @v.ApplicationTestsOutcome · Integrity: @v.IntegrityCheckOutcome · Backup/restore evidence: @v.NewBackupRestoreEvidenceOutcome</div>
-                            @foreach (var s in v.Signoffs)
-                            {
-                                <div class="small" data-testid="signoff-row">@s.ReviewerScope: @s.Outcome by @s.ReviewerName</div>
-                            }
-                            <div class="d-flex gap-2 mt-1">
-                                <label class="visually-hidden" for="validation-signoff-scope-@v.Id">Sign-off scope</label><select id="validation-signoff-scope-@v.Id" class="form-select form-select-sm" @bind="_signoffScope">
-                                    <option value="DBA">DBA</option>
-                                    <option value="Application owner">Application owner</option>
-                                    <option value="Security">Security</option>
-                                </select>
-                                <label class="visually-hidden" for="validation-signoff-outcome-@v.Id">Sign-off outcome</label><select id="validation-signoff-outcome-@v.Id" class="form-select form-select-sm" @bind="_signoffOutcome">
-                                    @foreach (var o in Enum.GetValues<SignoffOutcome>())
-                                    {
-                                        <option value="@o">@o</option>
-                                    }
-                                </select>
-                                <label class="visually-hidden" for="validation-signoff-reviewer-@v.Id">Reviewer name</label><input id="validation-signoff-reviewer-@v.Id" class="form-control form-control-sm" placeholder="Reviewer name" @bind="_signoffReviewer" @bind:event="oninput" />
-                                <button class="btn btn-outline-secondary btn-sm" @onclick="() => AddSignoff(v.Id)" disabled="@string.IsNullOrWhiteSpace(_signoffReviewer)" data-testid="add-signoff-button">Sign off</button>
+                            <div class="small text-muted" data-testid="validation-linked-evidence">
+                                @if (v.LinkedBackupRecord is { } lb)
+                                {
+                                    <span>Backup #@lb.Id (@lb.TimestampUtc.ToString("yyyy-MM-dd HH:mm") UTC). </span>
+                                }
+                                @if (v.LinkedRestoreEvent is { } lr)
+                                {
+                                    <span>Restore #@lr.Id (@lr.TimestampUtc.ToString("yyyy-MM-dd HH:mm") UTC). </span>
+                                }
+                                @if (v.LinkedBackupRecord is null && v.LinkedRestoreEvent is null)
+                                {
+                                    <span>No backup or restore linked.</span>
+                                }
                             </div>
+                            @if (v.BeforeEvidenceJson is not null || v.AfterEvidenceJson is not null)
+                            {
+                                <details class="small">
+                                    <summary>Before and after evidence</summary>
+                                    <div class="mt-1"><strong>Before (inventory as recorded):</strong> <code data-testid="before-evidence">@v.BeforeEvidenceJson</code></div>
+                                    <div class="mt-1"><strong>After (observed):</strong> <code data-testid="after-evidence">@v.AfterEvidenceJson</code></div>
+                                </details>
+                            }
+                            @foreach (var s in v.Signoffs.OrderBy(s => s.SignedAtUtc))
+                            {
+                                <div class="small" data-testid="signoff-row">@s.ReviewerScope: @s.Outcome by @s.ReviewerName, @s.SignedAtUtc.ToString("yyyy-MM-dd HH:mm") UTC@(string.IsNullOrWhiteSpace(s.Notes) ? "" : $" ({s.Notes})")</div>
+                            }
+                            @if (_signableScopes.Count > 0)
+                            {
+                                <div class="d-flex gap-2 mt-1 flex-wrap">
+                                    <label class="visually-hidden" for="validation-signoff-scope-@v.Id">Sign-off scope</label><select id="validation-signoff-scope-@v.Id" class="form-select form-select-sm" style="width:auto;" @bind="_signoffScope" data-testid="signoff-scope-select">
+                                        @foreach (var scope in _signableScopes)
+                                        {
+                                            <option value="@scope">@scope</option>
+                                        }
+                                    </select>
+                                    <label class="visually-hidden" for="validation-signoff-outcome-@v.Id">Sign-off outcome</label><select id="validation-signoff-outcome-@v.Id" class="form-select form-select-sm" style="width:auto;" @bind="_signoffOutcome">
+                                        @foreach (var o in Enum.GetValues<SignoffOutcome>())
+                                        {
+                                            <option value="@o">@o</option>
+                                        }
+                                    </select>
+                                    <label class="visually-hidden" for="validation-signoff-notes-@v.Id">Sign-off notes</label><input id="validation-signoff-notes-@v.Id" class="form-control form-control-sm" style="width:auto;flex:1;" placeholder="Notes (optional)" @bind="_signoffNotes" @bind:event="oninput" />
+                                    <button class="btn btn-outline-secondary btn-sm" @onclick="() => AddSignoff(v.Id)" data-testid="add-signoff-button">Sign off as me</button>
+                                </div>
+                            }
                         </div>
                     }
                 }
@@ -183,10 +261,13 @@ else
     private MigrationCampaign? _campaign;
     private List<ChangeValidation> _validations = new();
     private CampaignCompletionGateView? _gate;
-    private bool _loaded;
-    private string? _userName;
+    private PostChangeEvidenceCandidates? _candidates;
+    private bool _loaded, _canRecord;
+    private string _userName = "unknown", _userId = "";
+    private IReadOnlyCollection<string> _userRoles = [];
+    private IReadOnlyList<string> _signableScopes = [];
 
-    private int _instanceId;
+    private int _instanceId, _linkedBackupId, _linkedRestoreId;
     private string _observedBuild = "", _observedCompat = "", _perfNotes = "";
     private EvidenceCheckOutcome _appTests = EvidenceCheckOutcome.NotPerformed;
     private EvidenceCheckOutcome _integrity = EvidenceCheckOutcome.NotPerformed;
@@ -194,14 +275,23 @@ else
     private EvidenceCheckOutcome _haState = EvidenceCheckOutcome.NotPerformed;
     private EvidenceCheckOutcome _backupRestoreEvidence = EvidenceCheckOutcome.NotPerformed;
     private DateTime? _rollbackRetentionDeadline;
+    private string? _recordError;
 
-    private string _signoffScope = "DBA", _signoffReviewer = "";
+    private string _signoffScope = "", _signoffNotes = "";
     private SignoffOutcome _signoffOutcome = SignoffOutcome.Approved;
 
     protected override async Task OnInitializedAsync()
     {
         var state = await AuthProvider.GetAuthenticationStateAsync();
         _userName = state.User.Identity?.Name ?? "unknown";
+        _userId = state.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? "";
+        _userRoles = state.User.Claims.Where(c => c.Type == System.Security.Claims.ClaimTypes.Role).Select(c => c.Value).ToList();
+        _canRecord = state.User.IsInRole(Roles.Admin) || state.User.IsInRole(Roles.Dba);
+        _signableScopes = ChangeCompletionGateEvaluator.RequiredSignoffScopes
+            .Concat(["Security"])
+            .Where(s => ChangeWindowApprovalAuthorizer.IsAuthorized(s, _userRoles))
+            .ToList();
+        _signoffScope = _signableScopes.FirstOrDefault() ?? "";
         await Load();
         _loaded = true;
     }
@@ -213,24 +303,39 @@ else
         _gate = await CompletionGate.EvaluateAsync(Id);
     }
 
+    private async Task LoadCandidates()
+    {
+        _linkedBackupId = _linkedRestoreId = 0;
+        _candidates = _instanceId == 0 ? null : await Validations.ListEvidenceCandidatesAsync(Id, _instanceId);
+    }
+
     private async Task SaveValidation()
     {
         var validation = new ChangeValidation
         {
             MigrationCampaignId = Id,
             DatabaseInstanceId = _instanceId,
-            ObservedTargetBuildText = _observedBuild,
-            ObservedCompatibilityLevel = _observedCompat,
+            ObservedTargetBuildText = _observedBuild.Trim(),
+            ObservedCompatibilityLevel = _observedCompat.Trim(),
             ApplicationTestsOutcome = _appTests,
             IntegrityCheckOutcome = _integrity,
-            PerformanceComparisonNotes = _perfNotes,
+            PerformanceComparisonNotes = _perfNotes.Trim(),
             JobsPermissionsOutcome = _jobsPermissions,
             HaReplicationStateOutcome = _haState,
             NewBackupRestoreEvidenceOutcome = _backupRestoreEvidence,
+            LinkedBackupRecordId = _linkedBackupId == 0 ? null : _linkedBackupId,
+            LinkedRestoreEventId = _linkedRestoreId == 0 ? null : _linkedRestoreId,
             ValidationTimeUtc = DateTime.UtcNow,
-            RollbackRetentionDeadlineUtc = _rollbackRetentionDeadline
+            RollbackRetentionDeadlineUtc = _rollbackRetentionDeadline is { } d ? DateTime.SpecifyKind(d, DateTimeKind.Utc) : null
         };
-        await Validations.RecordAsync(validation, _userName ?? "unknown");
+        var (ok, reason, _) = await Validations.RecordAsync(validation, _userName, _userRoles);
+        if (!ok)
+        {
+            _recordError = reason;
+            return;
+        }
+
+        _recordError = null;
         Toasts.Success("Validation recorded.");
         _observedBuild = _observedCompat = _perfNotes = "";
         await Load();
@@ -238,14 +343,16 @@ else
 
     private async Task AddSignoff(int validationId)
     {
-        await Validations.AddSignoffAsync(validationId, new ChangeValidationSignoff
+        var (ok, reason) = await Validations.AddSignoffAsync(validationId, _signoffScope, _signoffOutcome, _signoffNotes, _userId, _userName, _userRoles);
+        if (ok)
         {
-            ReviewerScope = _signoffScope,
-            ReviewerName = _signoffReviewer,
-            Outcome = _signoffOutcome
-        }, _userName ?? "unknown");
-        Toasts.Success("Sign-off recorded.");
-        _signoffReviewer = "";
+            Toasts.Success($"{_signoffScope} sign-off recorded as {_userName}.");
+            _signoffNotes = "";
+        }
+        else
+        {
+            Toasts.Error($"Not recorded: {reason}");
+        }
         await Load();
     }
 }

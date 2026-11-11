@@ -3,8 +3,10 @@
 @using DBTracker.Core.Enums
 @using DBTracker.Core.Services
 @using DBTracker.Infrastructure.Lifecycle
+@using DBTracker.Infrastructure.Ownership
 @using Microsoft.AspNetCore.Components.Authorization
 @inject LifecycleWorkspaceService Workspace
+@inject TeamService Teams
 @inject IJSRuntime JS
 @inject DBTracker.Web.Services.ToastService Toasts
 
@@ -14,7 +16,7 @@
     <div>
         <h1>DBA lifecycle workspace</h1>
         <div class="subtitle">
-            One row per instance. Cluster nodes are counted within it, never as separate rows. Backup health is tracked
+            One row per instance. Cluster nodes, deployments and hosted databases are counted within it, never as separate rows. Backup health is tracked
             elsewhere and deliberately not blended in here; every view below shows its denominator and unknown counts.
         </div>
     </div>
@@ -26,12 +28,16 @@
 }
 else
 {
-    <div class="dbt-card mb-3" data-testid="workspace-summary">
+    <div class="dbt-card mb-3" data-testid="workspace-summary" role="status">
         <span class="small">Denominator: <strong data-testid="workspace-denominator">@_view.Summary.Denominator</strong> non-archived instance(s) ·
             Matching this filter: <strong data-testid="workspace-matching">@_view.Summary.MatchingCount</strong> ·
             Unknown/stale identity: <strong data-testid="workspace-unknown-identity">@_view.Summary.UnknownIdentityCount</strong> ·
             Unknown support phase: @_view.Summary.UnknownSupportPhaseCount ·
-            Oldest identity observation: @(_view.Summary.OldestObservedAtUtc?.ToString("yyyy-MM-dd") ?? "none recorded")</span>
+            Oldest identity observation: @(_view.Summary.OldestObservedAtUtc?.ToString("yyyy-MM-dd") ?? "none recorded")</span><br />
+        <span class="small">In the matching rows: <span data-testid="workspace-deployments">@_view.Summary.MatchingDeploymentCount</span> deployment(s),
+            <span data-testid="workspace-hosted-databases">@_view.Summary.MatchingHostedDatabaseCount</span> hosted database(s),
+            <span data-testid="workspace-late">@_view.Summary.MatchingLateCount</span> late migration(s).
+            Deployments and hosted databases come from the dependencies recorded on each instance's migration page.</span>
     </div>
 
     <div class="filter-bar" style="flex-wrap:wrap;gap:10px;">
@@ -42,6 +48,7 @@ else
                 <option value="@e">@e</option>
             }
         </select>
+        <label class="visually-hidden" for="workspace-branch">Family or branch</label><input id="workspace-branch" class="form-control form-control-sm" style="width:200px;" placeholder="Family or branch, e.g. PostgreSQL 13" @bind="_branchFilter" @bind:after="Apply" data-testid="workspace-branch-filter" />
         <label class="visually-hidden" for="workspace-phase">Support phase</label><select id="workspace-phase" class="form-select form-select-sm" style="width:auto;" @bind="_phaseFilter" @bind:after="Apply">
             <option value="">Support phase: any</option>
             @foreach (var p in Enum.GetValues<SupportPhase>())
@@ -63,6 +70,14 @@ else
                 <option value="@c">@c</option>
             }
         </select>
+        <label class="visually-hidden" for="workspace-owner">Owner team</label><select id="workspace-owner" class="form-select form-select-sm" style="width:auto;" @bind="_ownerFilter" @bind:after="Apply" data-testid="workspace-owner-filter">
+            <option value="">Owner: any</option>
+            <option value="@UnassignedOwner">Owner: unassigned</option>
+            @foreach (var t in _teamNames)
+            {
+                <option value="@t">@t</option>
+            }
+        </select>
         <label class="visually-hidden" for="workspace-campaign-state">Campaign state</label><select id="workspace-campaign-state" class="form-select form-select-sm" style="width:auto;" @bind="_campaignStateFilter" @bind:after="Apply">
             <option value="">Campaign state: any</option>
             @foreach (var s in Enum.GetValues<CampaignState>())
@@ -75,6 +90,10 @@ else
             <input class="form-check-input" type="checkbox" id="unknown-stale" @bind="_unknownOrStaleOnly" @bind:after="Apply" />
             <label class="form-check-label small" for="unknown-stale">Unknown/stale identity only</label>
         </div>
+        <div class="form-check">
+            <input class="form-check-input" type="checkbox" id="blocked-late" @bind="_blockedOrLateOnly" @bind:after="Apply" data-testid="workspace-blocked-late-filter" />
+            <label class="form-check-label small" for="blocked-late">Blocked or late only</label>
+        </div>
         <button class="btn btn-outline-secondary btn-sm" @onclick="Export" data-testid="export-workspace-button">Export CSV (this filtered view)</button>
     </div>
 
@@ -84,23 +103,34 @@ else
     }
     else
     {
-        <div class="table-responsive" role="region" aria-label="Lifecycle workspace">
+        <div class="table-responsive" role="region" aria-label="Lifecycle workspace" tabindex="0">
             <table class="table table-sm dbt-table" data-testid="workspace-table">
-                <thead><tr><th>Instance</th><th>Engine/family</th><th>Support phase</th><th>Days to milestone</th><th>Coverage</th><th>Criticality</th><th>Owner</th><th>Cluster nodes</th><th>Campaign</th><th>Expiring exceptions</th></tr></thead>
+                <thead><tr><th>Instance</th><th>Engine/branch</th><th>Support phase</th><th>Days to milestone</th><th>Coverage</th><th>Criticality</th><th>Owner</th><th>Nodes / deployments / hosted DBs</th><th>Campaign</th><th>Expiring exceptions</th><th>Identity observed</th></tr></thead>
                 <tbody>
                     @foreach (var r in _view.MatchingRows)
                     {
                         <tr data-testid="workspace-row">
-                            <td class="small">@r.InstanceName @(r.IsIdentityUnknownOrStale ? "⚠" : "")</td>
-                            <td class="small">@r.Engine / @(r.IdentityFamily ?? "Unknown")</td>
+                            <td class="small"><a href="/instances/@r.InstanceId/lifecycle">@r.InstanceName</a> @(r.IsIdentityUnknownOrStale ? "(identity unknown or stale)" : "")</td>
+                            <td class="small">@r.Engine / @(r.Branch ?? "Unknown")</td>
                             <td class="small">@r.SupportPhase</td>
                             <td class="small">@(r.DaysToNextMilestone?.ToString() ?? "No milestone")</td>
                             <td class="small">@r.Coverage</td>
                             <td class="small">@r.Criticality</td>
                             <td class="small">@(r.OwnerTeamName ?? "Unassigned")</td>
-                            <td class="small">@r.ClusterNodeCount</td>
-                            <td class="small">@(r.LatestCampaignState?.ToString() ?? "No campaign") @(r.IsBlockedOrLate ? "(blocked)" : "")</td>
+                            <td class="small">@r.ClusterNodeCount / @r.DeploymentCount / <span data-testid="workspace-row-hosted">@r.HostedDatabaseCount</span></td>
+                            <td class="small" data-testid="workspace-row-campaign">
+                                @(r.LatestCampaignState?.ToString() ?? "No campaign")
+                                @if (r.IsBlocked)
+                                {
+                                    <span style="color:var(--dbt-failed);">(blocked)</span>
+                                }
+                                @if (r.IsLate)
+                                {
+                                    <span style="color:var(--dbt-failed);" title="@r.LateReason">(late: @r.LateReason)</span>
+                                }
+                            </td>
                             <td class="small">@r.ExpiringExceptionCount</td>
+                            <td class="small">@(r.IdentityObservedAtUtc?.ToString("yyyy-MM-dd") ?? "Never")</td>
                         </tr>
                     }
                 </tbody>
@@ -129,31 +159,72 @@ else
         </div>
         <div class="col-lg-4">
             <div class="dbt-card h-100">
-                <h2 class="h6 text-muted mb-2">Expiring exceptions &amp; blocked migrations</h2>
+                <h2 class="h6 text-muted mb-2">Expiring exceptions &amp; blocked or late migrations</h2>
                 <div class="small" data-testid="expiring-exceptions-count">Expiring exceptions: @_report!.ExpiringExceptionRows.Count instance(s)</div>
-                <div class="small" data-testid="blocked-migrations-count">Blocked migrations: @_report!.BlockedOrLateRows.Count instance(s)</div>
+                <div class="small" data-testid="blocked-migrations-count">Blocked or late migrations: @_report!.BlockedOrLateRows.Count instance(s)</div>
+                <div class="small text-muted">Late means a change window's planned end passed without it completing, or support ended while the migration is still open.</div>
             </div>
         </div>
     </div>
 }
 
 @code {
+    private const string UnassignedOwner = "__unassigned__";
+
     private LifecycleWorkspaceView? _view;
     private LifecycleReport? _report;
+    private List<string> _teamNames = new();
 
-    private string _engineFilter = "", _phaseFilter = "", _coverageFilter = "", _criticalityFilter = "", _campaignStateFilter = "", _deadlineWithinDays = "";
-    private bool _unknownOrStaleOnly;
+    private string _engineFilter = "", _branchFilter = "", _phaseFilter = "", _coverageFilter = "", _criticalityFilter = "", _ownerFilter = "", _campaignStateFilter = "", _deadlineWithinDays = "";
+    private bool _unknownOrStaleOnly, _blockedOrLateOnly;
 
-    protected override async Task OnInitializedAsync() => await Apply();
+    protected override async Task OnInitializedAsync()
+    {
+        _teamNames = (await Teams.ListAsync()).Select(t => t.Team.Name).OrderBy(n => n).ToList();
+        await Apply();
+    }
 
     private LifecycleWorkspaceFilter BuildFilter() => new(
         Engine: string.IsNullOrWhiteSpace(_engineFilter) ? null : Enum.Parse<DatabaseEngine>(_engineFilter),
+        FamilyContains: string.IsNullOrWhiteSpace(_branchFilter) ? null : _branchFilter,
         SupportPhase: string.IsNullOrWhiteSpace(_phaseFilter) ? null : Enum.Parse<SupportPhase>(_phaseFilter),
         DeadlineWithinDays: int.TryParse(_deadlineWithinDays, out var d) ? d : null,
         Coverage: string.IsNullOrWhiteSpace(_coverageFilter) ? null : Enum.Parse<LifecycleCoverageStatus>(_coverageFilter),
         UnknownOrStaleIdentityOnly: _unknownOrStaleOnly,
         Criticality: string.IsNullOrWhiteSpace(_criticalityFilter) ? null : Enum.Parse<InstanceCriticality>(_criticalityFilter),
-        CampaignState: string.IsNullOrWhiteSpace(_campaignStateFilter) ? null : Enum.Parse<CampaignState>(_campaignStateFilter));
+        OwnerTeamNameContains: string.IsNullOrWhiteSpace(_ownerFilter) || _ownerFilter == UnassignedOwner ? null : _ownerFilter,
+        CampaignState: string.IsNullOrWhiteSpace(_campaignStateFilter) ? null : Enum.Parse<CampaignState>(_campaignStateFilter),
+        BlockedOrLateOnly: _blockedOrLateOnly,
+        UnassignedOwnerOnly: _ownerFilter == UnassignedOwner);
+
+    private string DescribeFilter()
+    {
+        var parts = new List<string>();
+        void Add(string name, string value)
+        {
+            if (!string.IsNullOrWhiteSpace(value))
+            {
+                parts.Add($"{name}={value.Trim()}");
+            }
+        }
+        Add("Engine", _engineFilter);
+        Add("FamilyOrBranch", _branchFilter);
+        Add("SupportPhase", _phaseFilter);
+        Add("Coverage", _coverageFilter);
+        Add("Criticality", _criticalityFilter);
+        Add("Owner", _ownerFilter == UnassignedOwner ? "unassigned" : _ownerFilter);
+        Add("CampaignState", _campaignStateFilter);
+        Add("DeadlineWithinDays", int.TryParse(_deadlineWithinDays, out var d) ? d.ToString() : "");
+        if (_unknownOrStaleOnly)
+        {
+            parts.Add("UnknownOrStaleIdentityOnly");
+        }
+        if (_blockedOrLateOnly)
+        {
+            parts.Add("BlockedOrLateOnly");
+        }
+        return string.Join("; ", parts);
+    }
 
     private async Task Apply()
     {
@@ -169,20 +240,8 @@ else
             return;
         }
 
-        var sb = new System.Text.StringBuilder();
-        sb.AppendLine("Instance,Engine,Family,SupportPhase,DaysToNextMilestone,Coverage,Criticality,Owner,ClusterNodes,CampaignState,ExpiringExceptions");
-        foreach (var r in _view.MatchingRows)
-        {
-            sb.AppendLine(string.Join(",", Csv(r.InstanceName), Csv(r.Engine.ToString()), Csv(r.IdentityFamily ?? ""), Csv(r.SupportPhase.ToString()),
-                Csv(r.DaysToNextMilestone?.ToString() ?? ""), Csv(r.Coverage.ToString()), Csv(r.Criticality.ToString()), Csv(r.OwnerTeamName ?? ""),
-                Csv(r.ClusterNodeCount.ToString()), Csv(r.LatestCampaignState?.ToString() ?? ""), Csv(r.ExpiringExceptionCount.ToString())));
-        }
-        await JS.InvokeVoidAsync("dbtracker.downloadCsv", $"dbtracker-lifecycle-workspace-{DateTime.UtcNow:yyyyMMdd-HHmm}.csv", sb.ToString());
-        Toasts.Success($"Exported {_view.MatchingRows.Count} row(s), exactly the filtered view shown above.");
+        var csv = LifecycleWorkspaceCsvWriter.Build(_view.Summary, _view.MatchingRows, DescribeFilter(), DateTime.UtcNow);
+        await JS.InvokeVoidAsync("dbtracker.downloadCsv", $"dbtracker-lifecycle-workspace-{DateTime.UtcNow:yyyyMMdd-HHmm}.csv", csv);
+        Toasts.Success($"Exported {_view.MatchingRows.Count} row(s) of {_view.Summary.Denominator}, exactly the filtered view shown above, with the denominator and freshness at the top of the file.");
     }
-
-    private static string Csv(string value) =>
-        value.Contains(',') || value.Contains('"')
-            ? $"\"{value.Replace("\"", "\"\"")}\""
-            : value;
 }

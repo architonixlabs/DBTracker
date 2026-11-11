@@ -41,6 +41,7 @@ builder.Services.AddHostedService<BackupScanHostedService>();
 
 builder.Services.AddScoped<NotificationService>();
 builder.Services.AddScoped<NotificationSubscriptionService>();
+builder.Services.AddScoped<DBTracker.Infrastructure.Notifications.OwnerNoticeSender>();
 builder.Services.AddScoped<IncidentService>();
 builder.Services.AddHostedService<AlertCheckHostedService>();
 builder.Services.AddScoped<ComplianceReportService>();

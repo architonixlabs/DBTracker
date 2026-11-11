@@ -1,0 +1,173 @@
+@page "/change-freezes"
+@attribute [Authorize]
+@using DBTracker.Core.Entities
+@using DBTracker.Core.Enums
+@using DBTracker.Infrastructure.ChangeManagement
+@using DBTracker.Infrastructure.Identity
+@using Microsoft.AspNetCore.Components.Authorization
+@inject ChangeWindowService Windows
+@inject AuthenticationStateProvider AuthProvider
+@inject DBTracker.Web.Services.ToastService Toasts
+
+<PageTitle>Change freezes · DBTracker</PageTitle>
+
+<div class="app-topbar">
+    <div>
+        <h1>Change freezes</h1>
+        <div class="subtitle">
+            Periods when no change window may be approved or started, such as a quarter close. A window inside a freeze can still be planned,
+            but needs an approved emergency exception to go ahead. Declaring a freeze changes no database and notifies nobody.
+        </div>
+    </div>
+</div>
+
+@if (!_loaded)
+{
+    <div class="spinner-ring" role="status"><span class="visually-hidden">Loading</span></div>
+}
+else
+{
+    <div class="row g-3">
+        <div class="col-lg-5">
+            <AuthorizeView Roles="@Roles.ChangeFreezePolicy">
+                <Authorized>
+                    <div class="dbt-card">
+                        <h2 class="h6 text-muted mb-3">Declare a freeze</h2>
+                        <div class="mb-2"><label class="form-label small mb-1" for="freeze-name">Name</label><input id="freeze-name" class="form-control form-control-sm" @bind="_name" @bind:event="oninput" data-testid="freeze-name" /></div>
+                        <div class="row g-2 mb-2">
+                            <div class="col-6">
+                                <label class="form-label small mb-1" for="freeze-start">Starts (UTC)</label>
+                                <input id="freeze-start" type="datetime-local" class="form-control form-control-sm" @bind="_start" data-testid="freeze-start" />
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label small mb-1" for="freeze-end">Ends (UTC)</label>
+                                <input id="freeze-end" type="datetime-local" class="form-control form-control-sm" @bind="_end" data-testid="freeze-end" />
+                            </div>
+                        </div>
+                        <div class="mb-2">
+                            <label class="form-label small mb-1" for="freeze-environment">Applies to</label>
+                            <select id="freeze-environment" class="form-select form-select-sm" @bind="_environment" data-testid="freeze-environment">
+                                <option value="">All environments</option>
+                                @foreach (var e in Enum.GetValues<EnvironmentTier>())
+                                {
+                                    <option value="@e">@e only</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="mb-2"><label class="form-label small mb-1" for="freeze-reason">Reason</label><input id="freeze-reason" class="form-control form-control-sm" @bind="_reason" @bind:event="oninput" /></div>
+                        <button class="btn btn-primary btn-sm" @onclick="Create" disabled="@(string.IsNullOrWhiteSpace(_name) || _start == default || _end == default)" data-testid="create-freeze-button">Declare freeze</button>
+                        @if (_error is not null)
+                        {
+                            <p class="small mt-2 mb-0" role="alert" style="color:var(--dbt-failed);">@_error</p>
+                        }
+                    </div>
+                </Authorized>
+                <NotAuthorized>
+                    <div class="dbt-card">
+                        <h2 class="h6 text-muted mb-2">Declare a freeze</h2>
+                        <p class="small text-muted mb-0">Change freezes are declared by Admin and IT manager users. You can see them here.</p>
+                    </div>
+                </NotAuthorized>
+            </AuthorizeView>
+        </div>
+        <div class="col-lg-7">
+            <div class="form-check mb-2">
+                <input class="form-check-input" type="checkbox" id="freeze-show-past" @bind="_showPast" @bind:after="Load" />
+                <label class="form-check-label small" for="freeze-show-past">Show ended and lifted freezes</label>
+            </div>
+            @if (_freezes.Count == 0)
+            {
+                <div class="empty-state"><i aria-hidden="true" class="bi bi-snow"></i> No current or upcoming change freezes.</div>
+            }
+            else
+            {
+                <table aria-label="Change freezes" class="table table-sm dbt-table" data-testid="freeze-table">
+                    <thead><tr><th>Name</th><th>When (UTC)</th><th>Applies to</th><th>State</th><th><span class="visually-hidden">Actions</span></th></tr></thead>
+                    <tbody>
+                        @foreach (var f in _freezes)
+                        {
+                            <tr data-testid="freeze-row">
+                                <td class="small">@f.Name @(string.IsNullOrWhiteSpace(f.Reason) ? "" : $"({f.Reason})")</td>
+                                <td class="small">@f.StartUtc.ToString("yyyy-MM-dd HH:mm") to @f.EndUtc.ToString("yyyy-MM-dd HH:mm")</td>
+                                <td class="small">@(f.AppliesToEnvironment?.ToString() ?? "All environments")</td>
+                                <td class="small">@StateLabel(f)</td>
+                                <td class="small">
+                                    @if (f.CancelledAtUtc is null && f.EndUtc > DateTime.UtcNow)
+                                    {
+                                        <AuthorizeView Roles="@Roles.ChangeFreezePolicy" Context="liftAuth">
+                                            <Authorized><button class="btn btn-link btn-sm p-0" @onclick="() => Lift(f.Id)" data-testid="lift-freeze-button">Lift</button></Authorized>
+                                        </AuthorizeView>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    private List<ChangeFreezePeriod> _freezes = new();
+    private bool _loaded, _showPast;
+    private string _userName = "unknown";
+    private IReadOnlyCollection<string> _userRoles = [];
+
+    private string _name = "", _reason = "", _environment = "";
+    private DateTime _start, _end;
+    private string? _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var state = await AuthProvider.GetAuthenticationStateAsync();
+        _userName = state.User.Identity?.Name ?? "unknown";
+        _userRoles = state.User.Claims.Where(c => c.Type == System.Security.Claims.ClaimTypes.Role).Select(c => c.Value).ToList();
+        await Load();
+        _loaded = true;
+    }
+
+    private async Task Load() => _freezes = await Windows.ListFreezesAsync(_showPast);
+
+    private async Task Create()
+    {
+        var (ok, reason) = await Windows.CreateFreezeAsync(new ChangeFreezePeriod
+        {
+            Name = _name,
+            StartUtc = DateTime.SpecifyKind(_start, DateTimeKind.Utc),
+            EndUtc = DateTime.SpecifyKind(_end, DateTimeKind.Utc),
+            AppliesToEnvironment = string.IsNullOrEmpty(_environment) ? null : Enum.Parse<EnvironmentTier>(_environment),
+            Reason = _reason.Trim()
+        }, _userName, _userRoles);
+        if (!ok)
+        {
+            _error = reason;
+            return;
+        }
+
+        _error = null;
+        Toasts.Success($"Change freeze \"{_name.Trim()}\" declared.");
+        _name = _reason = _environment = "";
+        await Load();
+    }
+
+    private async Task Lift(int id)
+    {
+        var (ok, reason) = await Windows.CancelFreezeAsync(id, _userName, _userRoles);
+        if (ok)
+        {
+            Toasts.Success("Freeze lifted. Windows in that period can now be approved as normal.");
+        }
+        else
+        {
+            Toasts.Error(reason);
+        }
+        await Load();
+    }
+
+    private static string StateLabel(ChangeFreezePeriod f) =>
+        f.CancelledAtUtc is { } lifted ? $"Lifted {lifted:yyyy-MM-dd} by {f.CancelledBy}"
+        : f.EndUtc <= DateTime.UtcNow ? "Ended"
+        : f.StartUtc <= DateTime.UtcNow ? "In effect"
+        : "Upcoming";
+}

@@ -14,5 +14,7 @@ public enum DependencyKind
     BackupTooling,
     /// <summary>A downstream consumer of this instance, not something it depends on.</summary>
     Consumer,
-    Other
+    Other,
+    /// <summary>A database hosted on this instance, e.g. one database on a shared SQL Server. Counted in the lifecycle workspace.</summary>
+    HostedDatabase
 }

@@ -16,6 +16,8 @@ public class CertificateDependency
     public int? OwnerTeamId { get; set; }
     public Team? OwnerTeam { get; set; }
     public string OwnerName { get; set; } = string.Empty;
+    /// <summary>Where expiry notices go first. The owner team's contacts are added; the instance contact is used only when neither is set.</summary>
+    public string OwnerEmail { get; set; } = string.Empty;
 
     public DateTime? ExpiresAtUtc { get; set; }
 
@@ -41,6 +43,8 @@ public class CertificateDependency
     /// <summary>Dedupe state for the expiry-notice sweep, so each threshold notifies once.</summary>
     public int? LastExpiryNoticeThresholdDays { get; set; }
     public DateTime? LastExpiryNoticeAtUtc { get; set; }
+
+    public ICollection<CertificateRenewalEvent> History { get; set; } = new List<CertificateRenewalEvent>();
 
     public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAtUtc { get; set; } = DateTime.UtcNow;
