@@ -109,7 +109,7 @@ else
 
     <div class="dbt-card mt-4" id="delivery-history">
         <h2 class="h6 text-muted mb-2">Delivery history</h2>
-        <p class="text-muted small mb-3">The last @_attempts.Count email send attempts: reports, alerts, recovery notices and test emails. "Accepted" means the provider took the message, not that it reached the inbox. Addresses aren't stored, only counts.</p>
+        <p class="text-muted small mb-3">The last @_attempts.Count send attempts: reports, alerts, recovery notices and test emails by email, and alerts by webhook. For email, "Accepted" means the provider took the message, not that it reached the inbox; for a webhook, it means the endpoint answered with a success status. Addresses and the webhook URL aren't stored, only counts.</p>
         @if (_attempts.Count == 0)
         {
             <div class="empty-state py-3" data-testid="delivery-history-empty"><i aria-hidden="true" class="bi bi-envelope"></i>No send attempts recorded yet. Send a test email above to check delivery.</div>
@@ -123,7 +123,7 @@ else
                         @foreach (var a in _attempts)
                         {
                             <tr data-testid="delivery-attempt-row">
-                                <td class="small">@a.AttemptedAtUtc.ToLocalTime().ToString("MMM d, h:mm tt")</td>
+                                <td class="small"><LocalTime Utc="a.AttemptedAtUtc" Format="MMM d, h:mm tt" ShowUtc="false" /></td>
                                 <td class="small">@DeliveryOutcomeSummarizer.Describe(a.Kind)</td>
                                 <td class="small">@a.Channel</td>
                                 <td class="small">@a.ScopeDescription</td>

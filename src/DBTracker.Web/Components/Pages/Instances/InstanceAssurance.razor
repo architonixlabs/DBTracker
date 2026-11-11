@@ -14,6 +14,9 @@
 @inject DependencyService Dependencies
 @inject AuthenticationStateProvider AuthProvider
 @inject DBTracker.Web.Services.ToastService Toasts
+@inject DBTracker.Web.Services.ViewerTimeZone Viewer
+@inject IJSRuntime JS
+@implements IDisposable
 
 <PageTitle>@(_instance?.Name ?? "Instance") operational assurance · DBTracker</PageTitle>
 
@@ -113,14 +116,14 @@ else
                 {
                     <div class="table-responsive mb-3" role="region" aria-label="Maintenance evidence" tabindex="0">
                         <table class="table table-sm dbt-table mb-0" data-testid="maintenance-evidence-table">
-                            <thead><tr><th scope="col">Type</th><th scope="col">Node/deployment</th><th scope="col">Ran at (UTC)</th><th scope="col">Outcome</th><th scope="col">Status</th><th scope="col">Source</th></tr></thead>
+                            <thead><tr><th scope="col">Type</th><th scope="col">Node/deployment</th><th scope="col">Ran at</th><th scope="col">Outcome</th><th scope="col">Status</th><th scope="col">Source</th></tr></thead>
                             <tbody>
                                 @foreach (var row in _maintenanceRows)
                                 {
                                     <tr data-testid="maintenance-evidence-row">
                                         <td class="small">@row.Record.CheckType</td>
                                         <td class="small">@(row.Record.RelatedDependency?.Name ?? row.Record.NodeOrDeploymentLabel)</td>
-                                        <td class="small">@(row.Record.RanAtUtc?.ToString("MMM d, yyyy HH:mm") ?? "never")</td>
+                                        <td class="small"><LocalTime Utc="row.Record.RanAtUtc" Format="MMM d, yyyy h:mm tt" ShowUtc="false" Empty="never" /></td>
                                         <td class="small">@row.Record.Outcome</td>
                                         <td class="small" data-testid="maintenance-evidence-status">
                                             <span class="badge-health dot @MaintenanceCssClass(row.Status)">@row.Status</span>
@@ -186,7 +189,19 @@ else
                             <input id="mx-source-ref" class="form-control form-control-sm" placeholder="Monitoring/ticket link (required for this source)" @bind="_sourceReference" @bind:event="oninput" />
                         </div>
                     }
-                    <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="RecordMaintenanceEvidence" data-testid="record-maintenance-evidence">Record result (now)</button>
+                    <div class="mb-2">
+                        <label class="form-label small mb-1" for="mx-ran-at">Ran at (@EventTimeZones.Label(RanAtZone, DateTime.UtcNow))</label>
+                        <div class="d-flex gap-1" style="max-width:420px;">
+                            <input id="mx-ran-at" type="datetime-local" class="form-control form-control-sm" @bind="_ranAtLocal" aria-describedby="mx-ran-at-help" data-testid="maintenance-ran-at" />
+                            <label class="visually-hidden" for="mx-ran-at-zone">Time zone of the run time</label>
+                            <select id="mx-ran-at-zone" class="form-select form-select-sm" style="max-width:150px;" @bind="_ranAtZone" data-testid="maintenance-ran-at-zone">
+                                <option value="viewer">Your time zone</option>
+                                <option value="UTC">UTC</option>
+                            </select>
+                        </div>
+                        <div class="form-text" id="mx-ran-at-help">Defaults to now. Set an earlier time when recording a check that already ran; future times are rejected.</div>
+                    </div>
+                    <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="RecordMaintenanceEvidence" data-testid="record-maintenance-evidence">Record result</button>
                     @if (!string.IsNullOrWhiteSpace(_maintenanceError))
                     {
                         <p class="small mt-1" role="alert" style="color:var(--dbt-failed);">@_maintenanceError</p>
@@ -448,6 +463,41 @@ else
     private MaintenanceOutcome _outcome = MaintenanceOutcome.Passed;
     private MaintenanceEvidenceSource _source = MaintenanceEvidenceSource.ManuallyEntered;
     private string _maintenanceError = "";
+    private DateTime _ranAtLocal, _ranAtDefaultLocal;
+    private string _ranAtZone = "viewer";
+
+    private TimeZoneInfo RanAtZone => _ranAtZone == EventTimeZones.Utc ? TimeZoneInfo.Utc : Viewer.Zone;
+
+    private void ResetRanAt()
+    {
+        var now = Viewer.ToViewer(DateTime.UtcNow);
+        _ranAtDefaultLocal = new DateTime(now.Year, now.Month, now.Day, now.Hour, now.Minute, 0);
+        _ranAtLocal = _ranAtDefaultLocal;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            Viewer.Changed += OnViewerZoneChanged;
+        }
+        if (!Viewer.Known)
+        {
+            await Viewer.EnsureLoadedAsync(JS);
+        }
+    }
+
+    /// <summary>Once the browser reports its zone, move an untouched "now" default into it.</summary>
+    private void OnViewerZoneChanged() => InvokeAsync(() =>
+    {
+        if (_ranAtLocal == _ranAtDefaultLocal)
+        {
+            ResetRanAt();
+        }
+        StateHasChanged();
+    });
+
+    public void Dispose() => Viewer.Changed -= OnViewerZoneChanged;
 
     private List<CapacityMeasurement> _measurements = new();
     private List<MigrationCapacityEstimate> _estimates = new();
@@ -481,6 +531,7 @@ else
         var state = await AuthProvider.GetAuthenticationStateAsync();
         _userName = state.User.Identity?.Name ?? "unknown";
         _userRoles = state.User.Claims.Where(c => c.Type == System.Security.Claims.ClaimTypes.Role).Select(c => c.Value).ToList();
+        ResetRanAt();
         await Retry();
     }
 
@@ -559,6 +610,14 @@ else
 
     private async Task RecordMaintenanceEvidence()
     {
+        var untouched = _ranAtLocal == _ranAtDefaultLocal && _ranAtZone != EventTimeZones.Utc;
+        var ranAt = EventTimeZones.FromEntryForm(_ranAtLocal, RanAtZone, untouched, DateTime.UtcNow);
+        if (!ranAt.Ok)
+        {
+            _maintenanceError = ranAt.Error ?? "Enter when the check ran.";
+            return;
+        }
+
         var (ok, error) = await Maintenance.RecordAsync(new MaintenanceEvidenceRecord
         {
             DatabaseInstanceId = Id,
@@ -566,11 +625,11 @@ else
             NodeOrDeploymentLabel = _nodeLabel,
             ToolName = _toolName,
             ExpectedIntervalHours = _expectedIntervalHours,
-            RanAtUtc = DateTime.UtcNow,
+            RanAtUtc = ranAt.Utc,
             Outcome = _outcome,
             Source = _source,
             SourceReference = _sourceReference
-        }, _userName);
+        }, _userName, ranAt.ZoneId);
 
         if (!ok)
         {
@@ -581,6 +640,7 @@ else
         _maintenanceError = "";
         Toasts.Success($"{_checkType} result recorded: {_outcome}.");
         _nodeLabel = _toolName = _sourceReference = "";
+        ResetRanAt();
         await Load();
     }
 

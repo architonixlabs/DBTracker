@@ -97,23 +97,23 @@ public class SupportRunwayService(
         var instances = await db.DatabaseInstances.Where(i => !i.IsArchived).ToListAsync(ct);
         var notifiedCount = 0;
 
+        // Instances with no version identity have no row to hold dedupe state. Rather than invent an identity nobody observed,
+        // the one Unknown notice each gets is recorded in the audit trail, and that record is the dedupe state.
+        var noIdentityNoticeSent = (await db.AuditEvents.AsNoTracking()
+                .Where(a => a.Action == SupportRunwayNoticeEvaluator.NoIdentityNoticeAuditAction && a.TargetType == "DatabaseInstance")
+                .Select(a => a.TargetId)
+                .ToListAsync(ct))
+            .ToHashSet();
+
         foreach (var instance in instances)
         {
             var identity = await db.VersionIdentities.FirstOrDefaultAsync(v => v.DatabaseInstanceId == instance.Id, ct);
-            // Dedupe state lives on the identity, so an instance with no identity at all has nothing to dedupe against.
-            // It shows as Unknown on its page and in the lifecycle workspace instead.
-            if (identity is null)
-            {
-                continue;
-            }
-
             var matched = await MatchCatalogEntryAsync(db, instance.Engine, identity);
             var runway = SupportRunwayCalculator.Evaluate(identity, matched, await ContractsForAsync(db, instance.Id), now);
 
-            var last = new RunwayNoticeState(identity.LastRunwayNoticeThresholdDays, identity.LastRunwayNoticeMilestoneUtc,
-                string.IsNullOrEmpty(identity.LastRunwayNoticeKind) ? null : identity.LastRunwayNoticeKind);
+            var last = SupportRunwayNoticeEvaluator.LastStateFor(identity, noIdentityNoticeSent.Contains(instance.Id.ToString()));
             var decision = SupportRunwayNoticeEvaluator.Decide(runway, thresholds, last);
-            if (decision.StateChanged)
+            if (identity is not null && decision.StateChanged)
             {
                 identity.LastRunwayNoticeThresholdDays = decision.NewState.ThresholdDays;
                 identity.LastRunwayNoticeMilestoneUtc = decision.NewState.MilestoneUtc;
@@ -162,7 +162,16 @@ public class SupportRunwayService(
                 await emailSender.SendAsync(email, $"DBTracker support-runway notice: {instance.Name}", message, ct);
             }
 
-            identity.LastRunwayNoticeAtUtc = now;
+            if (identity is not null)
+            {
+                identity.LastRunwayNoticeAtUtc = now;
+            }
+            else
+            {
+                await audit.RecordSystemActionAsync("SupportRunwayCheck", SupportRunwayNoticeEvaluator.NoIdentityNoticeAuditAction, "DatabaseInstance",
+                    instance.Id.ToString(), instance.Name, message, ct);
+                noIdentityNoticeSent.Add(instance.Id.ToString());
+            }
             notifiedCount++;
         }
 

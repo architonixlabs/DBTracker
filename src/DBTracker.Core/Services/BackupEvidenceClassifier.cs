@@ -7,10 +7,11 @@ namespace DBTracker.Core.Services;
 public static class BackupEvidenceClassifier
 {
     /// <summary>Null for Failed/Missed records; evidence level only describes claimed-successful backups.</summary>
-    public static EvidenceLevel? Classify(BackupRecord record, IReadOnlyCollection<RestoreEvent> restoreEvents)
+    /// <param name="correctionsKnownAsOfUtc">For an as-of view: only restore corrections made by then apply.</param>
+    public static EvidenceLevel? Classify(BackupRecord record, IReadOnlyCollection<RestoreEvent> restoreEvents, DateTime? correctionsKnownAsOfUtc = null)
     {
-        // Only verified restores (successful, not imported) can upgrade a backup to restore-tested.
-        var lastRestoreSuccessUtc = RestoreEvidence.LastVerifiedUtc(restoreEvents);
+        // Only verified restores (successful after corrections, not imported) can upgrade a backup to restore-tested.
+        var lastRestoreSuccessUtc = RestoreEvidence.LastVerifiedUtc(restoreEvents, correctionsKnownAsOfUtc);
         return Classify(record.Status, record.Source, record.TimestampUtc, lastRestoreSuccessUtc);
     }
 
@@ -51,7 +52,7 @@ public static class BackupEvidenceClassifier
 
         return latest is null
             ? null
-            : Classify(latest, restoreEvents.Where(r => r.TimestampUtc <= asOfUtc).ToList());
+            : Classify(latest, restoreEvents.Where(r => r.TimestampUtc <= asOfUtc).ToList(), asOfUtc);
     }
 
     /// <summary>Label for a CSV cell or report line; empty when there is no successful backup to describe.</summary>

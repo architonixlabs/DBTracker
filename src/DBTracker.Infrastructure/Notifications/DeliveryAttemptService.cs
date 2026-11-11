@@ -9,6 +9,8 @@ namespace DBTracker.Infrastructure.Notifications;
 public class DeliveryAttemptService(IDbContextFactory<DBTrackerDbContext> factory)
 {
     public const int DefaultHistorySize = 50;
+    public const string EmailChannel = "Email";
+    public const string WebhookChannel = "Webhook";
 
     public async Task<DeliveryAttempt> RecordAsync(
         DeliveryKind kind,
@@ -17,7 +19,8 @@ public class DeliveryAttemptService(IDbContextFactory<DBTrackerDbContext> factor
         string triggeredBy,
         int heldForQuietHours = 0,
         DateTime? attemptedAtUtc = null,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        string channel = EmailChannel)
     {
         var summary = DeliveryOutcomeSummarizer.Summarize(results.Select(r => new DeliveryRecipientResult(r.Outcome, r.Detail)).ToList());
 
@@ -25,7 +28,7 @@ public class DeliveryAttemptService(IDbContextFactory<DBTrackerDbContext> factor
         {
             AttemptedAtUtc = attemptedAtUtc ?? DateTime.UtcNow,
             Kind = kind,
-            Channel = "Email",
+            Channel = channel,
             ScopeDescription = Truncate(scopeDescription, 500),
             RecipientCount = summary.RecipientCount,
             AcceptedCount = summary.AcceptedCount,

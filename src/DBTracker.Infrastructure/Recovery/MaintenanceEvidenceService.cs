@@ -36,7 +36,8 @@ public class MaintenanceEvidenceService(IDbContextFactory<DBTrackerDbContext> fa
         return MaintenanceRequirementEvaluator.Evaluate(requirements, records, DateTime.UtcNow);
     }
 
-    public async Task<(bool Ok, string Error)> RecordAsync(MaintenanceEvidenceRecord record, string actorName)
+    /// <param name="enteredTimeZone">The zone the person stated the run time in, kept in the audit entry.</param>
+    public async Task<(bool Ok, string Error)> RecordAsync(MaintenanceEvidenceRecord record, string actorName, string enteredTimeZone = "")
     {
         if (record.Source != MaintenanceEvidenceSource.ManuallyEntered && string.IsNullOrWhiteSpace(record.SourceReference))
         {
@@ -57,7 +58,7 @@ public class MaintenanceEvidenceService(IDbContextFactory<DBTrackerDbContext> fa
 
         var instance = await db.DatabaseInstances.FirstAsync(i => i.Id == record.DatabaseInstanceId);
         await audit.RecordUserActionAsync("", actorName, "MaintenanceEvidenceRecorded", "DatabaseInstance", record.DatabaseInstanceId.ToString(), instance.Name,
-            reason: $"{record.CheckType}: {record.Outcome} ({record.Source})");
+            reason: $"{record.CheckType}: {record.Outcome} ({record.Source})", afterJson: EvidenceAuditSnapshot.Maintenance(record, enteredTimeZone));
         return (true, "");
     }
 

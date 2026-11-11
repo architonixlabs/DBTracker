@@ -18,29 +18,34 @@ public class NotificationService(IDbContextFactory<DBTrackerDbContext> factory)
         using var db = await factory.CreateDbContextAsync();
         await EnsureBackfilledAsync(db, userId);
 
-        var subscriptions = await db.NotificationSubscriptions.AsNoTracking().Where(s => s.UserId == userId).ToListAsync();
-        var readIds = await db.NotificationReadStates.AsNoTracking().Where(s => s.UserId == userId).Select(s => s.NotificationId).ToListAsync();
-        var readSet = readIds.ToHashSet();
+        var subscriptions = await SubscriptionsAsync(db, userId);
+        var visible = Visible(db, subscriptions);
 
-        var all = await db.Notifications.AsNoTracking().OrderByDescending(n => n.CreatedAtUtc).ToListAsync();
-        var visible = all.Where(n => NotificationSubscriptionMatcher.ShowsInInbox(subscriptions, n.DatabaseInstanceId ?? 0, n.Company, n.OwnerTeamId)).ToList();
+        // Filtering, counting and paging run in the database; only the requested page is loaded.
+        var totalCount = await visible.CountAsync();
+        var unreadCount = await Unread(db, visible, userId).CountAsync();
+        var pageItems = await visible
+            .OrderByDescending(n => n.CreatedAtUtc).ThenByDescending(n => n.Id)
+            .Skip(Math.Max(0, page - 1) * Math.Max(1, pageSize))
+            .Take(Math.Max(1, pageSize))
+            .Select(n => new NotificationInboxItem(n.Id, n.DatabaseInstanceId, n.InstanceName, n.Message, n.Severity, n.CreatedAtUtc,
+                db.NotificationReadStates.Any(r => r.UserId == userId && r.NotificationId == n.Id)))
+            .ToListAsync();
 
-        var unreadCount = visible.Count(n => !readSet.Contains(n.Id));
-        var pageItems = visible
-            .Skip(Math.Max(0, page - 1) * pageSize)
-            .Take(pageSize)
-            .Select(n => new NotificationInboxItem(n.Id, n.DatabaseInstanceId, n.InstanceName, n.Message, n.Severity, n.CreatedAtUtc, readSet.Contains(n.Id)))
-            .ToList();
-
-        return new NotificationInboxPage(pageItems, visible.Count, unreadCount, NotificationSubscriptionMatcher.InboxIsOptedOut(subscriptions));
+        return new NotificationInboxPage(pageItems, totalCount, unreadCount, NotificationSubscriptionMatcher.InboxIsOptedOut(subscriptions));
     }
 
     /// <summary>Bell-dropdown convenience: most recent page of this user's personal inbox.</summary>
     public async Task<List<NotificationInboxItem>> GetRecentAsync(string userId, int take = 20) =>
         (await GetInboxAsync(userId, page: 1, pageSize: take)).Items.ToList();
 
-    public async Task<int> UnreadCountAsync(string userId) =>
-        (await GetInboxAsync(userId, page: 1, pageSize: 1)).UnreadCount;
+    public async Task<int> UnreadCountAsync(string userId)
+    {
+        using var db = await factory.CreateDbContextAsync();
+        await EnsureBackfilledAsync(db, userId);
+        var subscriptions = await SubscriptionsAsync(db, userId);
+        return await Unread(db, Visible(db, subscriptions), userId).CountAsync();
+    }
 
     public async Task MarkReadAsync(string userId, int notificationId)
     {
@@ -58,18 +63,23 @@ public class NotificationService(IDbContextFactory<DBTrackerDbContext> factory)
         using var db = await factory.CreateDbContextAsync();
         await EnsureBackfilledAsync(db, userId);
 
-        var subscriptions = await db.NotificationSubscriptions.AsNoTracking().Where(s => s.UserId == userId).ToListAsync();
-        var readIds = await db.NotificationReadStates.AsNoTracking().Where(s => s.UserId == userId).Select(s => s.NotificationId).ToHashSetAsync();
-
-        var all = await db.Notifications.AsNoTracking().Select(n => new { n.Id, n.DatabaseInstanceId, n.Company, n.OwnerTeamId }).ToListAsync();
-        var visible = all.Where(n => NotificationSubscriptionMatcher.ShowsInInbox(subscriptions, n.DatabaseInstanceId ?? 0, n.Company, n.OwnerTeamId)).ToList();
+        var subscriptions = await SubscriptionsAsync(db, userId);
+        // Only the ids of this user's unread, visible notifications come back.
+        var unreadIds = await Unread(db, Visible(db, subscriptions), userId).Select(n => n.Id).ToListAsync();
 
         var now = DateTime.UtcNow;
-        var newlyRead = visible.Where(n => !readIds.Contains(n.Id))
-            .Select(n => new NotificationReadState { UserId = userId, NotificationId = n.Id, ReadAtUtc = now });
-        db.NotificationReadStates.AddRange(newlyRead);
+        db.NotificationReadStates.AddRange(unreadIds.Select(id => new NotificationReadState { UserId = userId, NotificationId = id, ReadAtUtc = now }));
         await db.SaveChangesAsync();
     }
+
+    private static Task<List<NotificationSubscription>> SubscriptionsAsync(DBTrackerDbContext db, string userId) =>
+        db.NotificationSubscriptions.AsNoTracking().Where(s => s.UserId == userId).ToListAsync();
+
+    private static IQueryable<Notification> Visible(DBTrackerDbContext db, IReadOnlyCollection<NotificationSubscription> subscriptions) =>
+        db.Notifications.AsNoTracking().Where(NotificationInboxFilter.For(subscriptions));
+
+    private static IQueryable<Notification> Unread(DBTrackerDbContext db, IQueryable<Notification> visible, string userId) =>
+        visible.Where(n => !db.NotificationReadStates.Any(r => r.UserId == userId && r.NotificationId == n.Id));
 
     public async Task<Notification> CreateAsync(DatabaseInstance instance, string message, NotificationSeverity severity)
     {

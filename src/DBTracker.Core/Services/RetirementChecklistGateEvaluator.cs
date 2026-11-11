@@ -63,17 +63,22 @@ public static class RetirementChecklistGateEvaluator
 
     private static RetirementGateResult ConsumersResolvedGate(IReadOnlyCollection<InstanceDependency> dependencies)
     {
-        var consumers = dependencies.Where(d => d.Direction == DependencyDirection.Downstream).ToList();
+        // A database hosted on this instance goes with it, whichever direction it was recorded in, so it must be moved or resolved too.
+        var consumers = dependencies.Where(d => d.Direction == DependencyDirection.Downstream || d.Kind == DependencyKind.HostedDatabase).ToList();
         if (consumers.Count == 0)
         {
             return new RetirementGateResult("ConsumersResolved", "Downstream consumers moved/confirmed resolved", RetirementGateStatus.Unknown,
                 "No downstream-consumer dependencies recorded. Confirm none exist before retiring.");
         }
 
-        var unresolved = consumers.Where(d => !d.IsResolved).Select(d => d.Name).ToList();
+        var unresolved = consumers.Where(d => !d.IsResolved)
+            .Select(d => d.Kind == DependencyKind.HostedDatabase ? $"hosted database {d.Name}" : d.Name).ToList();
+        var hostedCount = consumers.Count(d => d.Kind == DependencyKind.HostedDatabase);
         return unresolved.Count == 0
             ? new RetirementGateResult("ConsumersResolved", "Downstream consumers moved/confirmed resolved", RetirementGateStatus.Passed,
-                $"All {consumers.Count} recorded downstream consumer(s) resolved.")
+                hostedCount == 0
+                    ? $"All {consumers.Count} recorded downstream consumer(s) resolved."
+                    : $"All {consumers.Count} recorded downstream consumer(s) resolved, including {hostedCount} hosted database(s).")
             : new RetirementGateResult("ConsumersResolved", "Downstream consumers moved/confirmed resolved", RetirementGateStatus.Blocked,
                 $"Unresolved downstream consumer(s): {string.Join(", ", unresolved)}.");
     }

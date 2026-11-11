@@ -85,6 +85,24 @@ public static class SupportRunwayNoticeEvaluator
         return lastNotifiedThresholdDays is null || crossed < lastNotifiedThresholdDays;
     }
 
+    /// <summary>The audit action that records an Unknown notice for an instance with no version identity. With no identity row
+    /// to hold dedupe state, the audit trail is the record that the one notice was sent.</summary>
+    public const string NoIdentityNoticeAuditAction = "SupportRunwayUnknownNoticeRaised";
+
+    /// <summary>The dedupe state to compare against. An identity's own state wins once it has any; until then an Unknown notice
+    /// sent before the identity existed still counts, so creating an unresolved identity doesn't send a second Unknown notice.</summary>
+    public static RunwayNoticeState LastStateFor(Entities.VersionIdentity? identity, bool unknownNoticeSentWithoutIdentity)
+    {
+        var fallback = unknownNoticeSentWithoutIdentity ? new RunwayNoticeState(null, null, RunwayNoticeKinds.Unknown) : RunwayNoticeState.None;
+        if (identity is null || (string.IsNullOrEmpty(identity.LastRunwayNoticeKind) && identity.LastRunwayNoticeThresholdDays is null))
+        {
+            return fallback;
+        }
+
+        return new RunwayNoticeState(identity.LastRunwayNoticeThresholdDays, identity.LastRunwayNoticeMilestoneUtc,
+            string.IsNullOrEmpty(identity.LastRunwayNoticeKind) ? null : identity.LastRunwayNoticeKind);
+    }
+
     public static IReadOnlyList<int> ParseThresholds(string? configured)
     {
         if (string.IsNullOrWhiteSpace(configured))

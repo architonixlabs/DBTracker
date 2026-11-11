@@ -271,10 +271,10 @@ else
                                 <tr id="scan-row-@r.InstanceId" data-testid="scan-activity-row">
                                     <td class="fw-semibold"><a href="/instances/@r.InstanceId">@r.InstanceName</a></td>
                                     <td class="text-muted">@r.BackupFileLocation</td>
-                                    <td>@(r.LastScanUtc is null ? "Never" : r.LastScanUtc.Value.ToLocalTime().ToString("MMM d, h:mm tt"))</td>
-                                    <td>@(r.Scanner.LastSuccessUtc is null ? "Never" : r.Scanner.LastSuccessUtc.Value.ToLocalTime().ToString("MMM d, h:mm tt"))</td>
+                                    <td><LocalTime Utc="r.LastScanUtc" Format="MMM d, h:mm tt" ShowUtc="false" /></td>
+                                    <td><LocalTime Utc="r.Scanner.LastSuccessUtc" Format="MMM d, h:mm tt" ShowUtc="false" /></td>
                                     <td><span class="badge-health dot @ScannerFreshnessClass(r.Scanner.Freshness)">@ScannerStalenessClassifier.Describe(r.Scanner.Freshness)</span></td>
-                                    <td class="small text-muted">@(r.Scanner.NextExpectedCheckUtc is null ? "Not scheduled" : r.Scanner.NextExpectedCheckUtc.Value.ToLocalTime().ToString("MMM d, h:mm tt"))</td>
+                                    <td class="small text-muted"><LocalTime Utc="r.Scanner.NextExpectedCheckUtc" Format="MMM d, h:mm tt" ShowUtc="false" Empty="Not scheduled" /></td>
                                     <td class="small @(r.LastScanStatus == ScanStatus.Error ? "text-danger" : "text-muted")">
                                         @if (r.LastScanStatus == ScanStatus.Error)
                                         {
@@ -846,7 +846,8 @@ else
             .ToListAsync();
 
         var restoreTestTimestamps = await Db.RestoreEvents.AsNoTracking()
-            .Where(r => r.Outcome == RestoreOutcome.Success && r.Source != BackupSource.Imported && r.TimestampUtc >= fromUtc && r.TimestampUtc <= toUtc)
+            .Where(RestoreEvidence.IsVerified)
+            .Where(r => r.TimestampUtc >= fromUtc && r.TimestampUtc <= toUtc)
             .Select(r => r.TimestampUtc)
             .ToListAsync();
 

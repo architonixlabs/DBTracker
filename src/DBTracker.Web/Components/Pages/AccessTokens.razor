@@ -84,9 +84,9 @@
                             <tr>
                                 <td>@t.Name</td>
                                 <td class="small" style="font-family:var(--dbt-mono);">@(t.DisplayPrefix)…</td>
-                                <td class="small">@t.CreatedAtUtc.ToLocalTime().ToString("MMM d, yyyy")</td>
-                                <td class="small">@(t.LastUsedAtUtc is { } used ? used.ToLocalTime().ToString("MMM d, yyyy h:mm tt") : "Never")</td>
-                                <td class="small">@t.ExpiresAtUtc.ToLocalTime().ToString("MMM d, yyyy")</td>
+                                <td class="small"><LocalTime Utc="t.CreatedAtUtc" Format="MMM d, yyyy" ShowUtc="false" /></td>
+                                <td class="small"><LocalTime Utc="t.LastUsedAtUtc" Format="MMM d, yyyy h:mm tt" ShowUtc="false" /></td>
+                                <td class="small"><LocalTime Utc="t.ExpiresAtUtc" Format="MMM d, yyyy" ShowUtc="false" /></td>
                                 <td>
                                     @switch (state)
                                     {
@@ -123,7 +123,7 @@
     {
         <ul class="small mb-0">
             <li>Anything using it, such as the DBTracker tray app, stops working straight away.</li>
-            <li>It starts with <code>@(target.DisplayPrefix)…</code> and was last used @(target.LastUsedAtUtc is { } used ? used.ToLocalTime().ToString("MMM d, yyyy h:mm tt") : "never").</li>
+            <li>It starts with <code>@(target.DisplayPrefix)…</code> and was last used <LocalTime Utc="target.LastUsedAtUtc" Format="MMM d, yyyy h:mm tt" ShowUtc="false" Empty="never" />.</li>
             <li>This can't be undone. Create a new token if you still need one.</li>
         </ul>
         <div class="dbt-dialog-actions">

@@ -48,7 +48,7 @@ public static class SupportRunwayCalculator
     {
         if (identity is null)
         {
-            return SupportRunwayResult.Unknown("No version identity is recorded for this instance.");
+            return SupportRunwayResult.Unknown("No version identity is recorded for this instance. Record its version on the instance lifecycle page.");
         }
 
         if (identity.ResolutionStatus == VersionResolutionStatus.NeedsReview)

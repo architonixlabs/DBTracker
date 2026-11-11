@@ -53,8 +53,8 @@ public static class ComplianceSnapshotBuilder
                     .Where(b => b.Status == BackupStatus.Success && b.TimestampUtc <= asOfUtc)
                     .OrderByDescending(b => b.TimestampUtc).ThenByDescending(b => b.Id)
                     .FirstOrDefault();
-                var evidence = latestSuccess is null ? (EvidenceLevel?)null : BackupEvidenceClassifier.Classify(latestSuccess, restoresAsOf);
-                var lastVerified = RestoreEvidence.LastVerifiedUtc(restoresAsOf);
+                var evidence = latestSuccess is null ? (EvidenceLevel?)null : BackupEvidenceClassifier.Classify(latestSuccess, restoresAsOf, asOfUtc);
+                var lastVerified = RestoreEvidence.LastVerifiedUtc(restoresAsOf, asOfUtc);
                 var intervalDays = i.Instance.RestoreTestIntervalDaysOverride ?? defaultRestoreTestIntervalDays;
                 var recency = RestoreTestRecencyCalculator.Compute(lastVerified, intervalDays, asOfUtc);
 
