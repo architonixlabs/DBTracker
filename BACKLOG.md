@@ -2034,6 +2034,84 @@ verifiable downloads.*
   - Lifecycle evidence imports (catalogue, advisories, metadata, maintenance results) follow under
     G13 and G15.
 
+### Epic 27 - Modern web platform (Chrome Modern Web Guidance review, 2026-11-11)
+
+2026-11-11 | NEW-007 | The owner asked whether Chrome's Modern Web Guidance
+(developer.chrome.com/docs/modern-web-guidance) can be used in DBTracker. Each of its 11 topics was
+checked against the app and the personas. Adopted below.
+
+Not adopted:
+- Animated accordions: decorative motion the antislop pass removed on purpose.
+- A sliding tab highlight: cosmetic, and Priya wants the console look kept.
+- Hover preloading: Blazor Server navigates within one circuit, so speculative prerendering would
+  make the server render pages nobody opens.
+
+Browser target: Baseline "widely available". Newer features are used only as enhancements with a
+fallback.
+
+- [ ] **2026-11-11 | G25 | NEW | P1 | S - Security headers and a Content Security Policy.**
+  Angela and Sam: the app sends no CSP, frame, sniffing or referrer headers.
+  **Acceptance:**
+  - Send `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`,
+    `frame-ancestors 'none'` and `Permissions-Policy` (camera allowed only where the QR flow needs it).
+  - Ship a CSP in report-only mode first, then enforce it: `default-src 'self'`, `script-src
+    'self'`, `connect-src 'self'` (covers the Blazor websocket), and `style-src 'self'
+    'unsafe-inline'` until inline style attributes move to classes. `font-src` follows G27.
+  - Verify the setup wizard, sign-in, the QR flow and every page with the E2E suite and no CSP
+    console errors.
+
+- [ ] **2026-11-11 | G26 | NEW | P2 | M - Passkey sign-in.**
+  Dev forgets passwords, Sam wants fewer resets, Angela wants phishing-resistant sign-in, and Noor
+  signs in on a phone.
+  **Acceptance:**
+  - Use ASP.NET Core Identity's passkey support. Users register and remove passkeys on an account
+    page, and sign in with one as well as with a password.
+  - Registration and removal are audited, and deactivation (U16) blocks passkey sign-in.
+  - A temporary-password user must still change it first.
+  - The password stays as the fallback, and no passkey data is exported.
+  - Verify the API and options against the current .NET 10 documentation before building.
+
+- [ ] **2026-11-11 | G27 | NEW | P2 | S - Faster first paint: self-hosted fonts, no unused script.**
+  `bootstrap.bundle.min.js` (80 KB) loads on every page but nothing uses it, and fonts come from
+  Google Fonts. Priya (LCP), Angela (no third-party request from an internal tool) and Sam (offline
+  or locked-down servers render correctly) all gain.
+  **Acceptance:**
+  - Remove the unused script.
+  - Serve Inter and IBM Plex Mono (both OFL) from `wwwroot` as WOFF2, with only the weights in use,
+    preloaded, using `font-display: swap`.
+  - Record LCP before and after on the dashboard (see G28).
+
+- [ ] **2026-11-11 | G28 | NEW | P2 | S - Core Web Vitals baseline (LCP, INP, CLS).**
+  Measure before optimizing. This links to U06's never-run benchmark (G09).
+  **Acceptance:**
+  - Measure with Lighthouse or DevTools on the representative dataset: the dashboard, instance list,
+    reports, instance detail and one form, on desktop and a mobile profile (Noor).
+  - Record the numbers in the Progress log, list the long tasks and slow interactions found, and
+    open items for anything outside "good".
+
+- [ ] **2026-11-11 | G29 | NEW | P3 | M - Native dialogs for confirmations.**
+  Alex needs focus kept inside a confirmation, Esc to cancel, and focus returned afterwards. Noor
+  needs it to fit a phone. Covers archive, cancel retirement checklist, revoke token and similar
+  consequential actions.
+  **Acceptance:**
+  - Use `<dialog>` with `showModal()`, a labelled title, the preview text inside, and Esc or Cancel
+    to close.
+  - Existing data-testids keep working, and the E2E tests pass.
+
+- [ ] **2026-11-11 | G30 | NEW | P3 | M - Popover API for the notification menu and tooltips.**
+  The notification dropdown is hand-built, and 21 controls rely on `title` tooltips that touch and
+  keyboard users never see (Noor, Alex).
+  **Acceptance:**
+  - Use `popover` for the notification menu (light dismiss, top layer, focus return).
+  - Replace `title`-only explanations with visible text or a toggletip using `popover`.
+  - CSS anchor positioning only as an enhancement, with a plain fallback position.
+
+- [ ] **2026-11-11 | G31 | NEW | P3 | S - Container queries for cards and stat cells.**
+  Noor and Alex at 200% zoom: dashboard stat cells and detail cards should reflow by their own
+  width, not just the window's.
+  **Acceptance:** container queries on the stat row, detail cards and key-value lists, with the
+  existing media queries as fallback. Check at 360 px and at 200% zoom.
+
 ### Audit corrections to existing text
 
 - 2026-11-11 | UPDATE-017 | Clarifies the Epic 13-17 intro ("All items below are proposed and unimplemented"), the "planning checkboxes remain open" sentence, and the Epic 18-22 intro ("All D items below are proposed and unimplemented"): all are now ticked, with remaining gaps tracked as G09-G16. The original wording is kept as history.
