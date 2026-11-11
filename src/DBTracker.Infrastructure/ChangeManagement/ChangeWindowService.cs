@@ -77,7 +77,7 @@ public class ChangeWindowService(IDbContextFactory<DBTrackerDbContext> factory, 
 
         var campaign = await db.MigrationCampaigns.FirstAsync(c => c.Id == window.MigrationCampaignId);
         await audit.RecordUserActionAsync("", actorName, "ChangeWindowPlanned", "MigrationCampaign", window.MigrationCampaignId.ToString(), campaign.Name,
-            reason: $"\"{window.Title}\" {window.PlannedStartUtc:u}-{window.PlannedEndUtc:u} ({window.TimeZoneLabel}) — planning fact only, nothing executed.");
+            reason: $"\"{window.Title}\" {window.PlannedStartUtc:u}-{window.PlannedEndUtc:u} ({window.TimeZoneLabel}). Planning fact only, nothing executed.");
         return window;
     }
 
@@ -113,7 +113,7 @@ public class ChangeWindowService(IDbContextFactory<DBTrackerDbContext> factory, 
 
         var campaign = await db.MigrationCampaigns.FirstAsync(c => c.Id == window.MigrationCampaignId);
         await audit.RecordUserActionAsync("", actorName, "CutoverJournalEntryRecorded", "MigrationCampaign", window.MigrationCampaignId.ToString(), campaign.Name,
-            reason: $"\"{window.Title}\" — {entry.EntryType}: {entry.Description}");
+            reason: $"\"{window.Title}\" ({entry.EntryType}): {entry.Description}");
         return true;
     }
 

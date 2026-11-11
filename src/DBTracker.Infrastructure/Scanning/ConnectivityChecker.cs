@@ -19,7 +19,7 @@ public class ConnectivityChecker
 
         if (port <= 0)
         {
-            return new ConnectivityResult(false, "No known default port for this engine — configure one manually.", TimeSpan.Zero, checkedAtUtc, timeout);
+            return new ConnectivityResult(false, "No known default port for this engine. Configure one manually.", TimeSpan.Zero, checkedAtUtc, timeout);
         }
 
         var stopwatch = Stopwatch.StartNew();
@@ -36,7 +36,7 @@ public class ConnectivityChecker
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         {
             stopwatch.Stop();
-            return new ConnectivityResult(false, $"Timed out after {timeout.TotalSeconds:N0}s — host may be unreachable, firewalled, or not listening on this port.", stopwatch.Elapsed, checkedAtUtc, timeout);
+            return new ConnectivityResult(false, $"Timed out after {timeout.TotalSeconds:N0}s. The host may be unreachable, firewalled, or not listening on this port.", stopwatch.Elapsed, checkedAtUtc, timeout);
         }
         catch (SocketException ex)
         {

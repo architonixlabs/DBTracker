@@ -115,7 +115,7 @@ public class AlertCheckHostedService(
                 var hadOpenIncident = await IncidentLifecycle.CloseOpenAsync(db, instance.Id, now);
                 if (hadOpenIncident)
                 {
-                    await notifications.CreateAsync(instance, $"{instance.Name} has recovered — backup health is on track again.", Core.Enums.NotificationSeverity.Info);
+                    await notifications.CreateAsync(instance, $"{instance.Name} has recovered: backup health is on track again.", Core.Enums.NotificationSeverity.Info);
                 }
             }
 

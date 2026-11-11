@@ -40,7 +40,7 @@ public class ChangeValidationService(IDbContextFactory<DBTrackerDbContext> facto
 
         var instance = await db.DatabaseInstances.FirstAsync(i => i.Id == validation.DatabaseInstanceId);
         await audit.RecordUserActionAsync("", actorName, "ChangeValidationRecorded", "DatabaseInstance", validation.DatabaseInstanceId.ToString(), instance.Name,
-            reason: $"Observed build \"{validation.ObservedTargetBuildText}\" — a version-text edit alone is never treated as evidence this passed.");
+            reason: $"Observed build \"{validation.ObservedTargetBuildText}\". A version-text edit alone is never treated as evidence this passed.");
         return validation;
     }
 

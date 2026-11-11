@@ -31,7 +31,7 @@ public class SetupDiagnosticsService(
         if (string.IsNullOrWhiteSpace(provider) || provider == "None")
         {
             items.Add(new DiagnosticItem("Email", "Provider", DiagnosticSeverity.Warning,
-                "Email:Provider is unset (None) — alerts and reports are logged, not sent.", "/setup", "Configure Email:Provider in appsettings"));
+                "Email:Provider is unset (None), so alerts and reports are logged, not sent.", "/setup", "Configure Email:Provider in appsettings"));
         }
         else if (provider == "Smtp")
         {
@@ -49,24 +49,24 @@ public class SetupDiagnosticsService(
         var scanMinutes = configuration.GetValue("BackupScan:IntervalMinutes", 15);
         items.Add(scanMinutes > 0
             ? new DiagnosticItem("Scanning", "Background scan", DiagnosticSeverity.Ok, $"Every {scanMinutes} minute(s).")
-            : new DiagnosticItem("Scanning", "Background scan", DiagnosticSeverity.Warning, "Disabled (BackupScan:IntervalMinutes <= 0) — manual \"Scan now\" still works."));
+            : new DiagnosticItem("Scanning", "Background scan", DiagnosticSeverity.Warning, "Disabled (BackupScan:IntervalMinutes <= 0). Manual \"Scan now\" still works."));
 
         var alertMinutes = configuration.GetValue("Alerts:IntervalMinutes", 10);
         items.Add(alertMinutes > 0
             ? new DiagnosticItem("Alerting", "Alert sweep", DiagnosticSeverity.Ok, $"Every {alertMinutes} minute(s).")
-            : new DiagnosticItem("Alerting", "Alert sweep", DiagnosticSeverity.Warning, "Disabled (Alerts:IntervalMinutes <= 0) — no Overdue/Failed alerts will fire automatically."));
+            : new DiagnosticItem("Alerting", "Alert sweep", DiagnosticSeverity.Warning, "Disabled (Alerts:IntervalMinutes <= 0). No Overdue/Failed alerts will fire automatically."));
 
         var reportDays = configuration.GetValue("Reports:IntervalDays", 7);
         var distList = configuration["Reports:DistributionList"];
         if (reportDays > 0 && string.IsNullOrWhiteSpace(distList))
         {
-            items.Add(new DiagnosticItem("Reporting", "Distribution list", DiagnosticSeverity.Problem, "Scheduled reports are enabled but Reports:DistributionList is empty — nothing will be sent.", "/setup", "Configure Reports:DistributionList"));
+            items.Add(new DiagnosticItem("Reporting", "Distribution list", DiagnosticSeverity.Problem, "Scheduled reports are enabled but Reports:DistributionList is empty, so nothing will be sent.", "/setup", "Configure Reports:DistributionList"));
         }
         else
         {
             items.Add(reportDays > 0
                 ? new DiagnosticItem("Reporting", "Scheduled report", DiagnosticSeverity.Ok, $"Every {reportDays} day(s) to {distList}.")
-                : new DiagnosticItem("Reporting", "Scheduled report", DiagnosticSeverity.Warning, "Disabled (Reports:IntervalDays <= 0) — on-demand \"Send report\" still works."));
+                : new DiagnosticItem("Reporting", "Scheduled report", DiagnosticSeverity.Warning, "Disabled (Reports:IntervalDays <= 0). On-demand \"Send report\" still works."));
         }
 
         foreach (var worker in new[] { "Backup scan", "Alert check", "Scheduled report" })
@@ -74,7 +74,7 @@ public class SetupDiagnosticsService(
             var hb = heartbeats.Get(worker);
             if (hb is null)
             {
-                items.Add(new DiagnosticItem("Workers", worker, DiagnosticSeverity.Warning, "No heartbeat recorded yet — it may not have run its first sweep."));
+                items.Add(new DiagnosticItem("Workers", worker, DiagnosticSeverity.Warning, "No heartbeat recorded yet. It may not have run its first sweep."));
             }
             else if (!hb.Enabled)
             {

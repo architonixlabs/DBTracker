@@ -51,7 +51,7 @@ public static class SeedData
                 DatabaseIp = "192.168.1.8", ServerIp = "192.168.1.8", ExpectedBackupIntervalHours = 24,
                 BackupFileLocation = @"\\192.168.1.8\backups\contoso-hr",
                 LastScanStatus = ScanStatus.Error, LastScanUtc = now.AddHours(-26),
-                LastScanError = "Network path not found — \\\\192.168.1.8\\backups\\contoso-hr unreachable"
+                LastScanError = "Network path not found: \\\\192.168.1.8\\backups\\contoso-hr is unreachable"
             },
             new()
             {
@@ -166,7 +166,7 @@ public static class SeedData
             PerformedBy = "Priya Nair",
             Reason = RestoreReason.DrDrill,
             Outcome = RestoreOutcome.Success,
-            Notes = "Quarterly DR drill — restored to staging, verified row counts."
+            Notes = "Quarterly DR drill: restored to staging, verified row counts."
         });
 
         // Seeded directly so the bell has something to show before the first alert sweep.
@@ -283,7 +283,7 @@ public static class SeedData
             Engine = DatabaseEngine.MySql, Family = "MySQL",
             TargetReleaseCatalogEntryId = mysqlNewerPatch.Id,
             ReviewedBy = "Angela Price", ReviewedAtUtc = now.AddDays(-10),
-            Notes = "Approved same-branch patch target — not a major-version migration."
+            Notes = "Approved same-branch patch target, not a major-version migration."
         });
 
         db.AdvisoryRecords.Add(new AdvisoryRecord

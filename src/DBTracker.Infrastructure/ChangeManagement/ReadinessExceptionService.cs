@@ -78,7 +78,7 @@ public class ReadinessExceptionService(IDbContextFactory<DBTrackerDbContext> fac
         }
         if (!ExceptionApprovalAuthorizer.IsAuthorized(exception.PermittedApproverRole, approverRoles))
         {
-            return (false, "Not authorized to decide this exception — permitted approver role doesn't match.");
+            return (false, "Not authorized to decide this exception: the permitted approver role doesn't match.");
         }
         if (approve && !ReadinessExceptionEvaluator.CanApprove(exception, approverUserId))
         {
@@ -137,7 +137,7 @@ public class ReadinessExceptionService(IDbContextFactory<DBTrackerDbContext> fac
         foreach (var exception in candidates)
         {
             var ownerLabel = !string.IsNullOrWhiteSpace(exception.AccountableOwnerName) ? exception.AccountableOwnerName : "accountable owner not recorded";
-            var message = $"Readiness exception expired: {exception.TargetType} #{exception.TargetId} — \"{exception.WaivedCheckReference}\" is no longer waived. Owner: {ownerLabel}. The underlying action is reopened.";
+            var message = $"Readiness exception expired: {exception.TargetType} #{exception.TargetId}: \"{exception.WaivedCheckReference}\" is no longer waived. Owner: {ownerLabel}. The underlying action is reopened.";
             db.Notifications.Add(new Notification
             {
                 DatabaseInstanceId = null,

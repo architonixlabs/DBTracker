@@ -125,7 +125,7 @@ public class CertificateDependencyService(
             }
 
             var daysDescription = daysRemaining <= 0 ? $"{Math.Abs(daysRemaining)} day(s) overdue" : $"{daysRemaining} day(s) remaining";
-            var message = $"{instance.Name}: certificate \"{cert.Label}\" ({cert.Kind}) expires — {daysDescription}.";
+            var message = $"{instance.Name}: certificate \"{cert.Label}\" ({cert.Kind}) expiry: {daysDescription}.";
             await notifications.CreateAsync(instance, message, daysRemaining <= 0 ? NotificationSeverity.Critical : NotificationSeverity.Warning);
 
             var recipientEmails = new HashSet<string>(StringComparer.OrdinalIgnoreCase);

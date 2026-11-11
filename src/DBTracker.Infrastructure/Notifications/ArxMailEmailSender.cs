@@ -12,7 +12,7 @@ public class ArxMailEmailSender(HttpClient http, IOptions<ArxMailOptions> option
         var o = options.Value;
         if (string.IsNullOrWhiteSpace(o.FromAddress))
         {
-            logger.LogWarning("ArxMail email provider selected but FromAddress not configured — skipping send to {To}.", toAddress);
+            logger.LogWarning("ArxMail email provider selected but FromAddress not configured, skipping send to {To}.", toAddress);
             return EmailSendResult.Disabled;
         }
 

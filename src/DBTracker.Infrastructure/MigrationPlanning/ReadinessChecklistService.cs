@@ -123,7 +123,7 @@ public class ReadinessChecklistService(IDbContextFactory<DBTrackerDbContext> fac
         foreach (var item in checklist.Items.Where(i => i.Status != ReadinessCheckStatus.Unknown))
         {
             item.IsInvalidated = true;
-            item.InvalidationReason = $"Target changed from \"{previousTarget}\" to \"{newTargetLabel}\" — re-review required.";
+            item.InvalidationReason = $"Target changed from \"{previousTarget}\" to \"{newTargetLabel}\". Re-review required.";
             item.UpdatedAtUtc = DateTime.UtcNow;
         }
 
@@ -131,7 +131,7 @@ public class ReadinessChecklistService(IDbContextFactory<DBTrackerDbContext> fac
 
         await audit.RecordUserActionAsync("", actorName, "ReadinessChecklistTargetChanged", "DatabaseInstance",
             checklist.DatabaseInstanceId.ToString(), checklist.DatabaseInstance?.Name ?? "",
-            reason: $"Target changed from \"{previousTarget}\" to \"{newTargetLabel}\" — affected checks invalidated.");
+            reason: $"Target changed from \"{previousTarget}\" to \"{newTargetLabel}\". Affected checks invalidated.");
         return true;
     }
 }
