@@ -161,6 +161,7 @@ public class DBTrackerDbContext : IdentityDbContext<ApplicationUser>
         modelBuilder.Entity<BackupRecord>(entity =>
         {
             entity.Property(e => e.RecordedByUserName).HasMaxLength(320);
+            entity.Property(e => e.OccurredTimeZone).HasMaxLength(64);
         });
 
         modelBuilder.Entity<RestoreEvent>(entity =>
@@ -168,6 +169,8 @@ public class DBTrackerDbContext : IdentityDbContext<ApplicationUser>
             entity.Property(e => e.PerformedBy).HasMaxLength(200);
             entity.Property(e => e.Notes).HasMaxLength(2000);
             entity.Property(e => e.RecordedByUserName).HasMaxLength(320);
+            entity.Property(e => e.EvidenceReference).HasMaxLength(500);
+            entity.Property(e => e.OccurredTimeZone).HasMaxLength(64);
 
             entity.HasOne(r => r.DatabaseInstance)
                 .WithMany(i => i.RestoreEvents)

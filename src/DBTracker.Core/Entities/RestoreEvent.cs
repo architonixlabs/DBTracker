@@ -30,5 +30,14 @@ public class RestoreEvent
 
     public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
 
+    /// <summary>Manual for entries logged in the app; Imported for history loaded from a CSV, which never counts as restore-test evidence.</summary>
+    public BackupSource Source { get; set; } = BackupSource.Manual;
+
+    /// <summary>Where the proof lives: a ticket, change record, report path or link. Empty when none was given.</summary>
+    public string EvidenceReference { get; set; } = string.Empty;
+
+    /// <summary>The time zone the occurrence time was entered or imported in (IANA or "UTC"). Empty for older entries.</summary>
+    public string OccurredTimeZone { get; set; } = string.Empty;
+
     public ICollection<RestoreEventCorrection> Corrections { get; set; } = new List<RestoreEventCorrection>();
 }

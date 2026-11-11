@@ -79,7 +79,7 @@ public class ComplianceReportService(
                 o.Instance,
                 o.Health,
                 o.LastBackupUtc,
-                o.Instance.RestoreEvents.Any(r => r.Outcome == Core.Enums.RestoreOutcome.Success)))
+                RestoreEvidence.AnyVerified(o.Instance.RestoreEvents)))
             .ToList();
     }
 

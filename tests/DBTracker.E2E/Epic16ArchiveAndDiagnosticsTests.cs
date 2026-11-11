@@ -62,6 +62,10 @@ public class Epic16ArchiveAndDiagnosticsTests
 
         // Unarchiving puts it back, and the instance detail no longer shows the archived banner.
         await archivedRow.Locator("button:has-text('Unarchive')").ClickAsync();
+        // G12/U14: unarchive needs a reason, and the confirm stays disabled until one is given.
+        await Assertions.Expect(_page.Locator("[data-testid=unarchive-confirm]")).ToBeDisabledAsync();
+        await _page.FillAsync("[data-testid=unarchive-reason]", "Archived by mistake in an E2E test");
+        await _page.ClickAsync("[data-testid=unarchive-confirm]");
         await _page.WaitForTimeoutAsync(600);
         await Assertions.Expect(_page.Locator(".dbt-table tbody tr", new PageLocatorOptions { HasText = "DIFY-PLUGIN-PG" })).ToHaveCountAsync(0);
 

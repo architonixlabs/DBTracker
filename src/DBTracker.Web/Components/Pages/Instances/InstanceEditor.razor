@@ -44,14 +44,41 @@ else
 
         @if (_concurrencyConflict)
         {
-            <div class="alert alert-danger" role="alert">
+            <div class="alert alert-danger" role="alert" data-testid="edit-conflict">
                 <strong>This record changed since you opened it.</strong> Someone else saved an update in the
-                meantime. Your edits below are kept. Reload to see the latest version (you'll lose these
-                edits), or save again to overwrite it with your changes.
-                <div class="mt-2 d-flex gap-2">
-                    <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="ReloadDiscardingEdits">Reload latest, discard my edits</button>
-                    <button type="button" class="btn btn-sm btn-outline-danger" @onclick="() => SaveInternal(overwrite: true)">Save anyway (overwrite)</button>
+                meantime@(_conflictBy is null ? "" : $" ({_conflictBy})"). Your edits below are kept. Compare the two versions before choosing.
+                @if (_conflict is not null)
+                {
+                    <div class="table-responsive mt-2" role="region" aria-label="Your changes compared with the other saved change" tabindex="0">
+                        <table class="table table-sm mb-2" data-testid="edit-conflict-table">
+                            <thead><tr><th scope="col">Field</th><th scope="col">When you opened it</th><th scope="col">Their saved value</th><th scope="col">Your value</th><th scope="col">Result</th></tr></thead>
+                            <tbody>
+                                @foreach (var row in _conflict.Changed)
+                                {
+                                    <tr>
+                                        <td class="small">@row.Field</td>
+                                        <td class="small text-muted">@Shown(row.WhenOpened)</td>
+                                        <td class="small">@Shown(row.TheirValue)</td>
+                                        <td class="small">@Shown(row.YourValue)</td>
+                                        <td class="small">@(row.Conflicts ? "Both changed: pick one" : row.TheyChanged && row.YouChanged ? "Same change" : row.TheyChanged ? "Only they changed" : "Only you changed")</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+                <div class="mt-2 d-flex gap-2 flex-wrap">
+                    @if (_conflict is { HasConflicts: false })
+                    {
+                        <button type="button" class="btn btn-sm btn-primary" data-testid="edit-conflict-merge" @onclick="MergeAndSave">Keep their changes and save mine</button>
+                    }
+                    <button type="button" class="btn btn-sm btn-outline-secondary" data-testid="edit-conflict-reload" @onclick="ReloadDiscardingEdits">Reload latest, discard my edits</button>
+                    <button type="button" class="btn btn-sm btn-outline-danger" data-testid="edit-conflict-overwrite" @onclick="() => SaveInternal(overwrite: true)">Save mine over theirs</button>
                 </div>
+                @if (_conflict is { HasConflicts: true })
+                {
+                    <p class="small mb-0 mt-2">You both changed the same field to different values, so they can't be combined. "Save mine over theirs" replaces every field with your version.</p>
+                }
             </div>
         }
 
@@ -348,6 +375,9 @@ else
     };
     private IReadOnlyList<FieldError> _fieldErrors = [];
     private byte[] _loadedRowVersion = [];
+    private IReadOnlyList<(string Name, string Value)> _openedFields = [];
+    private ConcurrentEditComparison? _conflict;
+    private string? _conflictBy;
     private IDisposable? _navigationLock;
     private string? _userDisplayName;
     private List<Team> _teams = new();
@@ -390,6 +420,7 @@ else
             _model = existing;
             _confirmOwnership = existing.OwnershipConfirmedAtUtc is not null;
             _loadedRowVersion = existing.RowVersion;
+            _openedFields = InstanceChangeLogBuilder.Fields(existing);
         }
 
         _editContext = new EditContext(_model);
@@ -463,13 +494,15 @@ else
             _model.OwnershipConfirmedBy = "";
         }
 
+        IReadOnlyList<InstanceChangeLog> changes = [];
         try
         {
             if (Id is null)
             {
                 Db.DatabaseInstances.Add(_model);
                 await Db.SaveChangesAsync();
-                await Audit.RecordUserActionAsync(await CurrentUserIdAsync(), _userDisplayName ?? "unknown", "InstanceCreated", "DatabaseInstance", _model.Id.ToString(), _model.Name);
+                await Audit.RecordUserActionAsync(await CurrentUserIdAsync(), _userDisplayName ?? "unknown", "InstanceCreated", "DatabaseInstance", _model.Id.ToString(), _model.Name,
+                    afterJson: AuditDiffJson.ForCreate(_model));
             }
             else
             {
@@ -480,7 +513,7 @@ else
                 if (before is not null)
                 {
                     var changedBy = _userDisplayName ?? "unknown";
-                    var changes = InstanceChangeLogBuilder.Diff(before, _model, changedBy, now);
+                    changes = InstanceChangeLogBuilder.Diff(before, _model, changedBy, now);
                     if (changes.Count > 0)
                     {
                         Db.InstanceChangeLogs.AddRange(changes);
@@ -506,7 +539,9 @@ else
                 }
                 Db.DatabaseInstances.Update(_model);
                 await Db.SaveChangesAsync();
-                await Audit.RecordUserActionAsync(await CurrentUserIdAsync(), _userDisplayName ?? "unknown", "InstanceEdited", "DatabaseInstance", _model.Id.ToString(), _model.Name);
+                var (beforeJson, afterJson) = AuditDiffJson.FromChanges(changes);
+                await Audit.RecordUserActionAsync(await CurrentUserIdAsync(), _userDisplayName ?? "unknown", "InstanceEdited", "DatabaseInstance", _model.Id.ToString(), _model.Name,
+                    reason: overwrite ? "Saved over a newer change after reviewing it" : "", beforeJson: beforeJson, afterJson: afterJson);
             }
         }
         catch (DbUpdateConcurrencyException)
@@ -514,6 +549,7 @@ else
             Db.ChangeTracker.Clear();
             _concurrencyConflict = true;
             _saving = false;
+            await LoadConflictAsync();
             return;
         }
         catch (DbUpdateException)
@@ -536,9 +572,62 @@ else
         Nav.NavigateTo($"/instances/{_model.Id}");
     }
 
+    /// <summary>Loads the version someone else saved and compares it field by field with what this form opened with and holds now.</summary>
+    private async Task LoadConflictAsync()
+    {
+        if (Id is null)
+        {
+            return;
+        }
+
+        var latest = await Db.DatabaseInstances.AsNoTracking().FirstOrDefaultAsync(i => i.Id == Id.Value);
+        _conflict = latest is null ? null : ConcurrentEditComparer.Compare(_openedFields, latest, _model);
+        _conflictBy = latest is null ? null : await Db.InstanceChangeLogs.AsNoTracking()
+            .Where(c => c.DatabaseInstanceId == Id.Value)
+            .OrderByDescending(c => c.ChangedAtUtc)
+            .Select(c => "last saved by " + c.ChangedBy)
+            .FirstOrDefaultAsync();
+    }
+
+    /// <summary>Applies only the fields this form changed on top of the other person's saved version, then saves normally,
+    /// so their changes stay and a further concurrent save is still caught.</summary>
+    private async Task MergeAndSave()
+    {
+        if (Id is null || _conflict is null)
+        {
+            return;
+        }
+
+        var latest = await Db.DatabaseInstances.AsNoTracking().FirstOrDefaultAsync(i => i.Id == Id.Value);
+        if (latest is null)
+        {
+            _notFound = true;
+            return;
+        }
+
+        var comparison = ConcurrentEditComparer.Compare(_openedFields, latest, _model);
+        if (!ConcurrentEditComparer.TryMerge(comparison, latest, _model))
+        {
+            _conflict = comparison;
+            return;
+        }
+
+        _model = latest;
+        _loadedRowVersion = latest.RowVersion;
+        _openedFields = InstanceChangeLogBuilder.Fields(latest);
+        _editContext = new EditContext(_model);
+        _messageStore = new ValidationMessageStore(_editContext);
+        _editContext.OnFieldChanged += (_, _) => _dirty = true;
+        _conflict = null;
+        await SaveInternal(overwrite: false);
+    }
+
+    private static string Shown(string value) => value.Length == 0 ? "(empty)" : value;
+
     private async Task ReloadDiscardingEdits()
     {
         _concurrencyConflict = false;
+        _conflict = null;
         _dirty = false;
         _loading = true;
         var existing = await Db.DatabaseInstances.AsNoTracking().FirstOrDefaultAsync(i => i.Id == Id!.Value);
@@ -550,6 +639,7 @@ else
         {
             _model = existing;
             _loadedRowVersion = existing.RowVersion;
+            _openedFields = InstanceChangeLogBuilder.Fields(existing);
             _editContext = new EditContext(_model);
             _messageStore = new ValidationMessageStore(_editContext);
             _editContext.OnFieldChanged += (_, _) => _dirty = true;

@@ -4,6 +4,7 @@
 @inject AuditRecorder AuditService
 @inject IJSRuntime JS
 @inject AuthenticationStateProvider AuthProvider
+@inject ViewerTimeZone Viewer
 
 <PageTitle>Audit trail · DBTracker</PageTitle>
 
@@ -15,8 +16,15 @@
             direct database access; it records normal application activity, not a cryptographic chain of custody.
         </div>
     </div>
-    <button class="btn btn-outline-secondary" @onclick="Export"><i aria-hidden="true" class="bi bi-download"></i> Export CSV</button>
+    <button class="btn btn-outline-secondary" data-testid="audit-export" @onclick="Export" disabled="@_exporting">
+        <i aria-hidden="true" class="bi bi-download"></i> @(_exporting ? "Exporting…" : "Export CSV (all matching)")
+    </button>
 </div>
+
+<p class="small text-muted mb-3" data-testid="audit-retention">
+    Retention: entries are kept indefinitely. DBTracker has no purge job, so the trail only shrinks if someone deletes rows directly in the database.
+    The page shows the newest @PageSize matching entries; the export includes every entry that matches the filters, with before and after values.
+</p>
 
 <div class="filter-bar mb-3">
     <label class="visually-hidden" for="audit-search">Search audit entries</label><input id="audit-search" class="form-control" style="max-width:260px;" placeholder="Search actor, action, target, reason…" value="@_search" @oninput="OnSearch" />
@@ -26,7 +34,10 @@
         <option value="System">System</option>
     </select>
     <label class="visually-hidden" for="audit-target-type">Target type</label><input id="audit-target-type" class="form-control" style="max-width:200px;" placeholder="Target type (e.g. DatabaseInstance)" value="@_targetType" @oninput="OnTargetTypeChanged" />
+    <label class="small text-muted" for="audit-from">From</label><input id="audit-from" data-testid="audit-from" type="date" class="form-control" style="max-width:160px;" value="@(_from?.ToString("yyyy-MM-dd"))" @onchange="OnFromChanged" aria-describedby="audit-range-help" />
+    <label class="small text-muted" for="audit-to">To</label><input id="audit-to" data-testid="audit-to" type="date" class="form-control" style="max-width:160px;" value="@(_to?.ToString("yyyy-MM-dd"))" @onchange="OnToChanged" aria-describedby="audit-range-help" />
 </div>
+<p class="small text-muted mb-3" id="audit-range-help">Dates are whole days in @Viewer.ZoneId, both inclusive. Leave them empty for all time.</p>
 
 @if (_rows is null)
 {
@@ -34,18 +45,19 @@
 }
 else if (_rows.Count == 0)
 {
-    <div class="empty-state"><i aria-hidden="true" class="bi bi-journal-x"></i> No audit events match this filter.</div>
+    <div class="empty-state" role="status"><i aria-hidden="true" class="bi bi-journal-x"></i> No audit events match this filter.</div>
 }
 else
 {
-    <div class="dbt-table">
-        <table aria-label="Audit entries" class="table">
-            <thead><tr><th>When</th><th>Actor</th><th>Action</th><th>Target</th><th>Reason</th></tr></thead>
+    <div class="dbt-table" role="region" aria-label="Audit entries" tabindex="0">
+        <table class="table">
+            <thead><tr><th scope="col">When</th><th scope="col">Actor</th><th scope="col">Action</th><th scope="col">Target</th><th scope="col">Reason</th><th scope="col">Change</th></tr></thead>
             <tbody>
                 @foreach (var e in _rows)
                 {
+                    var pairs = ChangePairs(e);
                     <tr>
-                        <td class="small">@e.TimestampUtc.ToLocalTime().ToString("MMM d, yyyy h:mm:ss tt")</td>
+                        <td class="small"><LocalTime Utc="e.TimestampUtc" Format="MMM d, yyyy h:mm:ss tt" ShowUtc="false" /></td>
                         <td class="small">
                             <span class="badge-health dot @(e.ActorType == AuditActorType.System ? "NeverBackedUp" : "OnTrack")">@e.ActorType</span>
                             @e.ActorName
@@ -53,39 +65,93 @@ else
                         <td class="small">@e.Action</td>
                         <td class="small">@e.TargetType@(string.IsNullOrEmpty(e.TargetName) ? "" : $": {e.TargetName}")</td>
                         <td class="small text-muted">@CommercialAuditMasker.Reason(e.Action, e.Reason, _canSeeCommercial)</td>
+                        <td class="small">
+                            @if (pairs.Count == 0)
+                            {
+                                <span class="text-muted">None recorded</span>
+                            }
+                            else
+                            {
+                                <details data-testid="audit-change">
+                                    <summary>@pairs.Count field(s)</summary>
+                                    <table class="table table-sm mb-0 mt-1">
+                                        <thead><tr><th scope="col">Field</th><th scope="col">Before</th><th scope="col">After</th></tr></thead>
+                                        <tbody>
+                                            @foreach (var p in pairs)
+                                            {
+                                                <tr><td>@(p.Field.Length == 0 ? "(value)" : p.Field)</td><td class="text-muted">@(p.Before.Length == 0 ? "(empty)" : p.Before)</td><td>@(p.After.Length == 0 ? "(empty)" : p.After)</td></tr>
+                                            }
+                                        </tbody>
+                                    </table>
+                                </details>
+                            }
+                        </td>
                     </tr>
                 }
             </tbody>
         </table>
     </div>
-    <p class="small text-muted mt-2">Showing the most recent @_rows.Count matching event(s).</p>
+    <p class="small text-muted mt-2" role="status">Showing the most recent @_rows.Count matching event(s).@(_rows.Count >= PageSize ? " Narrow the dates or search to see older ones, or export them all." : "")</p>
 }
 
 @code {
+    private const int PageSize = 200;
+
     private List<AuditEvent>? _rows;
     private bool _canSeeCommercial;
+    private bool _exporting;
     private string _search = "";
     private string _actorType = "";
     private string _targetType = "";
+    private DateTime? _from;
+    private DateTime? _to;
     private Timer? _debounce;
 
     protected override async Task OnInitializedAsync()
     {
         var state = await AuthProvider.GetAuthenticationStateAsync();
         _canSeeCommercial = Roles.CommercialEvidencePolicy.Split(',').Any(state.User.IsInRole);
+        Viewer.Changed += OnViewerZoneChanged;
         await Load();
     }
 
-    private async Task Load()
+    protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        AuditActorType? actorType = _actorType switch
+        if (!Viewer.Known)
         {
-            "User" => AuditActorType.User,
-            "System" => AuditActorType.System,
-            _ => null
-        };
-        _rows = (await AuditService.SearchAsync(_search, actorType, _targetType.Length > 0 ? _targetType : null, includeCommercialReasons: _canSeeCommercial)).ToList();
+            await Viewer.EnsureLoadedAsync(JS);
+        }
     }
+
+    private void OnViewerZoneChanged() => InvokeAsync(async () => { await Load(); StateHasChanged(); });
+
+    private AuditActorType? ActorType => _actorType switch
+    {
+        "User" => AuditActorType.User,
+        "System" => AuditActorType.System,
+        _ => null
+    };
+
+    /// <summary>The From/To dates as whole days in the viewer's zone, as UTC bounds.</summary>
+    private (DateTime? FromUtc, DateTime? ToUtc) RangeUtc()
+    {
+        DateTime Start(DateTime day) => Viewer.FromViewer(day.Date) is { Ok: true } r ? r.Utc!.Value : DateTime.SpecifyKind(day.Date, DateTimeKind.Utc);
+        return (_from is { } f ? Start(f) : null, _to is { } t ? Start(t.AddDays(1)).AddTicks(-1) : null);
+    }
+
+    private Task<IReadOnlyList<AuditEvent>> Query(int? take)
+    {
+        var (fromUtc, toUtc) = RangeUtc();
+        return AuditService.SearchAsync(_search, ActorType, _targetType.Length > 0 ? _targetType : null, take,
+            includeCommercialReasons: _canSeeCommercial, fromUtc: fromUtc, toUtc: toUtc);
+    }
+
+    private async Task Load() => _rows = (await Query(PageSize)).ToList();
+
+    private IReadOnlyList<(string Field, string Before, string After)> ChangePairs(AuditEvent e) =>
+        CommercialAuditMasker.HidesChange(e.Action, _canSeeCommercial)
+            ? [("", CommercialAuditMasker.HiddenText, CommercialAuditMasker.HiddenText)]
+            : AuditDiffJson.Pair(e.BeforeJson, e.AfterJson);
 
     private async Task OnSearch(ChangeEventArgs e)
     {
@@ -106,22 +172,50 @@ else
         await Load();
     }
 
+    private async Task OnFromChanged(ChangeEventArgs e)
+    {
+        _from = DateTime.TryParse(e.Value?.ToString(), out var d) ? d : null;
+        await Load();
+    }
+
+    private async Task OnToChanged(ChangeEventArgs e)
+    {
+        _to = DateTime.TryParse(e.Value?.ToString(), out var d) ? d : null;
+        await Load();
+    }
+
     private async Task Export()
     {
-        var csv = new System.Text.StringBuilder();
-        csv.AppendLine("TimestampUtc,ActorType,ActorName,Action,TargetType,TargetId,TargetName,Reason");
-        foreach (var e in _rows ?? [])
+        _exporting = true;
+        try
         {
-            csv.AppendLine(string.Join(",", new[]
+            var all = await Query(take: null);
+            var csv = new System.Text.StringBuilder();
+            csv.AppendLine("TimestampUtc,ActorType,ActorName,Action,TargetType,TargetId,TargetName,Reason,BeforeJson,AfterJson");
+            foreach (var e in all)
             {
-                e.TimestampUtc.ToString("O"), e.ActorType.ToString(), Csv(e.ActorName), Csv(e.Action),
-                Csv(e.TargetType), Csv(e.TargetId), Csv(e.TargetName), Csv(CommercialAuditMasker.Reason(e.Action, e.Reason, _canSeeCommercial))
-            }));
+                var hide = CommercialAuditMasker.HidesChange(e.Action, _canSeeCommercial);
+                csv.AppendLine(string.Join(",", new[]
+                {
+                    e.TimestampUtc.ToString("O"), e.ActorType.ToString(), Csv(e.ActorName), Csv(e.Action),
+                    Csv(e.TargetType), Csv(e.TargetId), Csv(e.TargetName), Csv(CommercialAuditMasker.Reason(e.Action, e.Reason, _canSeeCommercial)),
+                    Csv(hide ? CommercialAuditMasker.HiddenText : e.BeforeJson ?? ""), Csv(hide ? CommercialAuditMasker.HiddenText : e.AfterJson ?? "")
+                }));
+            }
+            var suffix = _from is null && _to is null ? "all" : $"{_from:yyyyMMdd}-{_to:yyyyMMdd}";
+            await JS.InvokeVoidAsync("dbtracker.downloadCsv", $"dbtracker-audit-trail-{suffix}.csv", csv.ToString());
         }
-        await JS.InvokeVoidAsync("dbtracker.downloadCsv", "dbtracker-audit-trail.csv", csv.ToString());
+        finally
+        {
+            _exporting = false;
+        }
     }
 
     private static string Csv(string value) => "\"" + (value ?? "").Replace("\"", "\"\"") + "\"";
 
-    public void Dispose() => _debounce?.Dispose();
+    public void Dispose()
+    {
+        _debounce?.Dispose();
+        Viewer.Changed -= OnViewerZoneChanged;
+    }
 }

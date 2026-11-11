@@ -10,5 +10,8 @@ public enum EvidenceLevel
     ReportedSuccess,
 
     /// <summary>A restore has since succeeded from this instance, proving the backup chain recoverable.</summary>
-    RestoreTested
+    RestoreTested,
+
+    /// <summary>Loaded from a history import. Kept for context only; a later restore never upgrades it to RestoreTested.</summary>
+    Imported
 }

@@ -5,7 +5,10 @@ public record ArchiveImpactCounts(
     bool BackgroundScanConfigured,
     bool AlertableNow,
     int OpenIncidentCount,
-    bool IncludedInScheduledReports);
+    bool IncludedInScheduledReports,
+    int ScheduledReportIntervalDays = 0,
+    bool DistributionListConfigured = false,
+    int SavedSnapshotCount = 0);
 
 public record ArchiveImpactLine(string Text);
 
@@ -31,9 +34,26 @@ public static class ArchivePreviewBuilder
             var n => new ArchiveImpactLine($"{n} open incidents exist for this instance. They are preserved but stop escalating once the instance is archived.")
         });
 
-        lines.Add(counts.IncludedInScheduledReports
-            ? new ArchiveImpactLine("This instance currently appears in reports and the Compliance view. It drops out of new reports once archived; past reports and snapshots are unaffected.")
-            : new ArchiveImpactLine("This instance is already excluded from the current reporting scope."));
+        if (!counts.IncludedInScheduledReports)
+        {
+            lines.Add(new ArchiveImpactLine("This instance is already excluded from the current reporting scope."));
+        }
+        else
+        {
+            var scheduled = counts.ScheduledReportIntervalDays <= 0
+                ? "Scheduled report emails are turned off, so no email changes."
+                : counts.DistributionListConfigured
+                    ? $"It is also in the scheduled report emailed every {counts.ScheduledReportIntervalDays} day(s) and drops out from the next send."
+                    : "Scheduled reports are on but have no distribution list, so no email changes.";
+            lines.Add(new ArchiveImpactLine($"It appears in the Compliance view and Reports today and drops out of new reports once archived. {scheduled}"));
+        }
+
+        lines.Add(counts.SavedSnapshotCount switch
+        {
+            0 => new ArchiveImpactLine("No saved Compliance snapshot includes it."),
+            1 => new ArchiveImpactLine("1 saved Compliance snapshot includes it. Saved snapshots keep their frozen rows."),
+            var n => new ArchiveImpactLine($"{n} saved Compliance snapshots include it. Saved snapshots keep their frozen rows.")
+        });
 
         return lines;
     }

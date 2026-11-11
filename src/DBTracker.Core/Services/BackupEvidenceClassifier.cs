@@ -14,8 +14,14 @@ public static class BackupEvidenceClassifier
             return null;
         }
 
+        // Imported history is context only: it is never upgraded, and an imported restore never proves anything.
+        if (record.Source == BackupSource.Imported)
+        {
+            return EvidenceLevel.Imported;
+        }
+
         var provenRestorable = restoreEvents.Any(r =>
-            r.Outcome == RestoreOutcome.Success && r.TimestampUtc >= record.TimestampUtc);
+            RestoreEvidence.CountsAsVerified(r) && r.TimestampUtc >= record.TimestampUtc);
 
         if (provenRestorable)
         {
@@ -33,6 +39,7 @@ public static class BackupEvidenceClassifier
         EvidenceLevel.Discovered => "Discovered",
         EvidenceLevel.ReportedSuccess => "Reported success",
         EvidenceLevel.RestoreTested => "Restore-tested",
+        EvidenceLevel.Imported => "Imported",
         _ => level.ToString()
     };
 }

@@ -6,13 +6,14 @@
 @inject AuthenticationStateProvider AuthProvider
 @inject ToastService Toasts
 @inject IJSRuntime JS
+@inject IConfiguration Configuration
 
 <PageTitle>Compliance · DBTracker</PageTitle>
 
 <div class="app-topbar">
     <div>
         <h1>Compliance snapshot</h1>
-        <div class="subtitle">Last-backup age per instance as of @_asOf.ToLocalTime().ToString("MMM d, yyyy h:mm tt")</div>
+        <div class="subtitle">Last-backup age per instance as of <LocalTime Utc="_asOf" /></div>
     </div>
     <div class="d-flex gap-2">
         <AuthorizeView Roles="@Roles.ReportingPolicy">
@@ -71,13 +72,13 @@ else
             <tbody>
                 @foreach (var o in Filtered())
                 {
-                    var restoreTested = o.Instance.RestoreEvents.Any(r => r.Outcome == RestoreOutcome.Success);
+                    var restoreTested = RestoreEvidence.AnyVerified(o.Instance.RestoreEvents);
                     <tr>
                         <td class="fw-semibold">@o.Instance.Name</td>
                         <td>@o.Instance.Company / @o.Instance.Department</td>
                         <td><span class="role-pill @o.Instance.Role">@o.Instance.Role</span></td>
                         <td>@o.Instance.Environment</td>
-                        <td>@(o.LastBackupUtc is null ? "Never" : o.LastBackupUtc.Value.ToLocalTime().ToString("MMM d, yyyy h:mm tt"))</td>
+                        <td><LocalTime Utc="o.LastBackupUtc" ShowUtc="false" /></td>
                         <td>@Age(o.LastBackupUtc)</td>
                         <td><HealthBadge Health="o.Health" /></td>
                         <td>
@@ -100,7 +101,7 @@ else
         <div class="col-12">
             <div class="dbt-card">
                 <h2 class="h6 text-muted mb-3">Saved snapshots</h2>
-                <p class="text-muted small mb-3">A snapshot freezes the rows above at the moment it's saved. Reopening it later reproduces those exact values even if instances are since edited, archived or backdated. Evidence for an audit period, not a live view.</p>
+                <p class="text-muted small mb-3">A snapshot freezes the rows above at the moment it's saved, with each row's evidence level, restore-test recency and the policy in force. Reopening it later reproduces those exact values even if instances are since edited, archived or backdated. Evidence for an audit period, not a live view. "Restore tested" counts only successful restores logged in DBTracker; imported history never counts.</p>
                 @if (_snapshots.Count == 0)
                 {
                     <div class="empty-state py-3"><i aria-hidden="true" class="bi bi-camera"></i>No snapshots saved yet.</div>
@@ -108,14 +109,15 @@ else
                 else
                 {
                     <table aria-label="Saved compliance snapshots" class="table table-sm mb-0 dbt-table">
-                        <thead><tr><th>Generated</th><th>By</th><th>Scope</th><th>Rows</th><th><span class="visually-hidden">Actions</span></th></tr></thead>
+                        <thead><tr><th>Generated</th><th>By</th><th>Scope</th><th>Policy version</th><th>Rows</th><th><span class="visually-hidden">Actions</span></th></tr></thead>
                         <tbody>
                             @foreach (var s in _snapshots)
                             {
                                 <tr>
-                                    <td class="small">@s.GeneratedAtUtc.ToLocalTime().ToString("MMM d, yyyy h:mm tt")</td>
+                                    <td class="small"><LocalTime Utc="s.GeneratedAtUtc" /></td>
                                     <td class="small">@s.GeneratedByUserName</td>
                                     <td class="small">@s.ScopeDescription</td>
+                                    <td class="small text-muted">@s.PolicyVersion</td>
                                     <td class="small">@s.RowCount</td>
                                     <td class="small"><a href="/compliance/snapshots/@s.Id">View</a></td>
                                 </tr>
@@ -199,7 +201,7 @@ else
         foreach (var o in Filtered())
         {
             var ageHours = o.LastBackupUtc is null ? "" : ((_asOf - o.LastBackupUtc.Value).TotalHours).ToString("N1");
-            var restoreTested = o.Instance.RestoreEvents.Any(r => r.Outcome == RestoreOutcome.Success);
+            var restoreTested = RestoreEvidence.AnyVerified(o.Instance.RestoreEvents);
             sb.AppendLine(string.Join(",", new[]
             {
                 Csv(o.Instance.Name), Csv(o.Instance.Engine.ToString()), Csv(o.Instance.Company), Csv(o.Instance.Department),
@@ -221,10 +223,11 @@ else
     {
         _savingSnapshot = true;
 
-        var rows = Filtered().Select(o => new ComplianceReportRow(
-            o.Instance, o.Health, o.LastBackupUtc,
-            o.Instance.RestoreEvents.Any(r => r.Outcome == RestoreOutcome.Success)));
-        var snapshotRows = ComplianceSnapshotBuilder.BuildRows(rows);
+        var policyNames = await Db.BackupPolicies.AsNoTracking().ToDictionaryAsync(p => p.Id, p => p.Name);
+        var inputs = Filtered().Select(o => new ComplianceSnapshotInput(
+            o.Instance, o.Health, o.LastBackupUtc, o.Instance.BackupRecords.ToList(), o.Instance.RestoreEvents.ToList(),
+            o.Instance.AppliedPolicyId is { } pid && policyNames.TryGetValue(pid, out var policyName) ? policyName : null));
+        var snapshotRows = ComplianceSnapshotBuilder.BuildRows(inputs, _asOf, Configuration.GetValue("RestoreTest:IntervalDays", 90));
 
         var scopeDescription = _role.Length == 0 && _envTier.Length == 0
             ? "Full inventory"
@@ -238,7 +241,8 @@ else
             EffectiveAsOfUtc = _asOf,
             GeneratedByUserName = username,
             ScopeDescription = scopeDescription,
-            EvidenceProvenance = "BackupHealthCalculator.Compute + RestoreEvents, via the Compliance view",
+            PolicyVersion = ComplianceSnapshotBuilder.PolicyVersionLabel(snapshotRows),
+            EvidenceProvenance = ComplianceSnapshotBuilder.DescribeProvenance(snapshotRows, "Compliance view"),
             RowsJson = ComplianceSnapshotBuilder.Serialize(snapshotRows),
             RowCount = snapshotRows.Count
         };

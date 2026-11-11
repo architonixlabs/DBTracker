@@ -7,6 +7,9 @@
 @inject IConfiguration Configuration
 @inject DBTrackerDbContext Db
 @inject IncidentService Incidents
+@inject AuditRecorder AuditLog
+@inject ViewerTimeZone Viewer
+@implements IDisposable
 
 <PageTitle>Reports · DBTracker</PageTitle>
 
@@ -52,14 +55,15 @@ else
             {
                 <div class="d-flex gap-2 align-items-end mb-3" style="flex-wrap:wrap;">
                     <div class="field">
-                        <label for="reports-from-local-time" class="form-label small">From (local time)</label>
-                        <input id="reports-from-local-time" type="date" class="form-control form-control-sm" @bind="_customFrom" />
+                        <label for="reports-from-local-time" class="form-label small">From (@ZoneName)</label>
+                        <input id="reports-from-local-time" type="date" class="form-control form-control-sm" @bind="_customFrom" aria-describedby="reports-range-zone" />
                     </div>
                     <div class="field">
-                        <label for="reports-to-local-time-inclusive" class="form-label small">To (local time, inclusive)</label>
-                        <input id="reports-to-local-time-inclusive" type="date" class="form-control form-control-sm" @bind="_customTo" />
+                        <label for="reports-to-local-time-inclusive" class="form-label small">To (@ZoneName, inclusive)</label>
+                        <input id="reports-to-local-time-inclusive" type="date" class="form-control form-control-sm" @bind="_customTo" aria-describedby="reports-range-zone" />
                     </div>
                 </div>
+                <p class="small text-muted mb-3" id="reports-range-zone">Dates are whole days in @ZoneName, from 00:00 on the first day to the end of the last day.</p>
             }
 
             var (fromUtc, toUtc) = CurrentRangeUtc();
@@ -75,7 +79,7 @@ else
             </div>
 
             <div class="d-flex justify-content-between align-items-center mb-3">
-                <span class="small text-muted">Exports all @rowsInRange.Count matching row(s) in the last @_rangeDays day(s), not just the rows rendered on screen.</span>
+                <span class="small text-muted" data-testid="backup-activity-caption">Exports all @rowsInRange.Count matching row(s) @RangeCaption(fromUtc, toUtc), not just the rows rendered on screen.</span>
                 <button class="btn btn-outline-primary" @onclick="() => ExportBackupActivity(rowsInRange)" disabled="@(rowsInRange.Count == 0)">
                     <i aria-hidden="true" class="bi bi-download"></i> Export CSV
                 </button>
@@ -94,7 +98,7 @@ else
                             @foreach (var r in rowsInRange)
                             {
                                 <tr>
-                                    <td>@r.TimestampUtc.ToLocalTime().ToString("MMM d, h:mm tt")</td>
+                                    <td><LocalTime Utc="r.TimestampUtc" Format="MMM d, h:mm tt" ShowUtc="false" /></td>
                                     <td class="fw-semibold">@r.InstanceName</td>
                                     <td>@r.Company / @r.Department</td>
                                     <td>@r.Engine</td>
@@ -102,7 +106,7 @@ else
                                     <td><span class="badge-health dot @StatusClass(r.Status)">@r.Status</span></td>
                                     <td>@(r.SizeMb is null ? "Not recorded" : $"{r.SizeMb:N0} MB")</td>
                                     <td>@(r.DurationMinutes is null ? "Not recorded" : $"{r.DurationMinutes:N0} min")</td>
-                                    <td class="text-muted">@(r.Source == BackupSource.Discovered ? "Discovered" : "Logged")</td>
+                                    <td class="text-muted">@SourceLabel(r.Source)</td>
                                 </tr>
                             }
                         </tbody>
@@ -146,10 +150,10 @@ else
                                 <td><span class="role-pill @r.Role">@r.Role</span></td>
                                 <td>@r.Environment</td>
                                 <td><span class="badge-health dot @(r.RestoreTested ? "OnTrack" : "Overdue")">@(r.RestoreTested ? "Yes" : "No")</span></td>
-                                <td>@(r.LastSuccessfulRestoreUtc is null ? "Never" : r.LastSuccessfulRestoreUtc.Value.ToLocalTime().ToString("MMM d, yyyy h:mm tt"))</td>
+                                <td><LocalTime Utc="r.LastSuccessfulRestoreUtc" ShowUtc="false" /></td>
                                 <td>@r.TotalAttempts</td>
                                 <td><span class="badge-health dot @RecencyClass(r.Recency)">@RecencyLabel(r.Recency)</span></td>
-                                <td class="small text-muted">@(r.NextDueUtc is null ? "Not scheduled" : r.NextDueUtc.Value.ToLocalTime().ToString("MMM d, yyyy h:mm tt"))</td>
+                                <td class="small text-muted"><LocalTime Utc="r.NextDueUtc" ShowUtc="false" Empty="Not scheduled" /></td>
                             </tr>
                         }
                     </tbody>
@@ -255,6 +259,8 @@ else
                 re-running today's health calculator against old data, which would misrepresent instances that didn't exist
                 yet or whose policy has since changed. A period with no snapshot is flagged explicitly, not interpolated.
                 Retention-days values alone are not evidence that backup files still exist on disk (tracked separately, future scope).
+                Only a snapshot saved during a period counts as that period's evidence; an older one describes an earlier time.
+                Dates are whole days in @ZoneName.
             </p>
 
             <div class="row g-3 mb-3">
@@ -335,6 +341,16 @@ else
                                 <td class="small">@EvidenceCell(b, r => r.RestoreTestedPct is { } p ? $"{p:N0}%" : null)</td>
                             </tr>
                             <tr>
+                                <td class="small fw-semibold">Restore-test coverage at snapshot (current / expired / never tested)</td>
+                                <td class="small" data-testid="trend-a-recency">@RecencyCell(a)</td>
+                                <td class="small" data-testid="trend-b-recency">@RecencyCell(b)</td>
+                            </tr>
+                            <tr>
+                                <td class="small fw-semibold">Backup policy changes in period</td>
+                                <td class="small">@a.PolicyChanges.Count</td>
+                                <td class="small">@b.PolicyChanges.Count</td>
+                            </tr>
+                            <tr>
                                 <td class="small fw-semibold">Restore tests performed in period</td>
                                 <td class="small">@a.RestoreTestsPerformed</td>
                                 <td class="small">@b.RestoreTestsPerformed</td>
@@ -365,10 +381,11 @@ else
 
                 @if (a.MissingEvidence || b.MissingEvidence)
                 {
-                    <div class="alert alert-danger mb-4">
+                    <div class="alert alert-danger mb-4" role="status" data-testid="trend-missing-evidence">
                         <i aria-hidden="true" class="bi bi-exclamation-triangle"></i>
-                        @(a.MissingEvidence && b.MissingEvidence ? "Neither period has a Compliance snapshot at or before its end date" : a.MissingEvidence ? "Period A has no Compliance snapshot at or before its end date" : "Period B has no Compliance snapshot at or before its end date").
-                        Health-coverage and restore-tested percentages are not shown for that period rather than inferred from today's live inventory. Save a snapshot on the <a href="/compliance">Compliance page</a> to establish evidence for future comparisons.
+                        @if (a.MissingEvidence) { <span>Period A: @a.MissingEvidenceReason </span> }
+                        @if (b.MissingEvidence) { <span>Period B: @b.MissingEvidenceReason </span> }
+                        Health-coverage and restore-tested percentages are not shown for that period rather than inferred from today's live inventory. Save a snapshot on the <a href="/compliance">Compliance page</a> during each period you want to compare.
                     </div>
                 }
 
@@ -387,12 +404,14 @@ else
                                     <tbody>
                                         @foreach (var row in a.AtRiskRows)
                                         {
-                                            <tr><td class="small">@row.InstanceName</td><td class="small">@row.Health</td></tr>
+                                            <tr><td class="small">@InstanceLink(row.InstanceName, row.InstanceId)</td><td class="small">@row.Health</td></tr>
                                         }
                                     </tbody>
                                 </table>
                             </div>
                         }
+
+                        @TrendExtras(a, "A")
 
                         <h3 class="h6 text-muted mb-2 mt-3">Period A: repeated failures</h3>
                         @if (a.RepeatedFailureRows.Count == 0)
@@ -407,7 +426,7 @@ else
                                     <tbody>
                                         @foreach (var row in a.RepeatedFailureRows)
                                         {
-                                            <tr><td class="small">@row.InstanceName</td><td class="small">@row.FailureCount</td></tr>
+                                            <tr><td class="small">@InstanceLink(row.InstanceName, null)</td><td class="small">@row.FailureCount</td></tr>
                                         }
                                     </tbody>
                                 </table>
@@ -427,7 +446,7 @@ else
                                     <tbody>
                                         @foreach (var row in a.OutstandingRiskRows)
                                         {
-                                            <tr><td class="small">@row.InstanceName</td><td class="small">@row.OpenedAtUtc.ToLocalTime().ToString("MMM d, yyyy h:mm tt")</td><td class="small">@row.TriggerHealth</td></tr>
+                                            <tr><td class="small">@InstanceLink(row.InstanceName, null)</td><td class="small"><LocalTime Utc="row.OpenedAtUtc" ShowUtc="false" /></td><td class="small">@row.TriggerHealth</td></tr>
                                         }
                                     </tbody>
                                 </table>
@@ -448,12 +467,14 @@ else
                                     <tbody>
                                         @foreach (var row in b.AtRiskRows)
                                         {
-                                            <tr><td class="small">@row.InstanceName</td><td class="small">@row.Health</td></tr>
+                                            <tr><td class="small">@InstanceLink(row.InstanceName, row.InstanceId)</td><td class="small">@row.Health</td></tr>
                                         }
                                     </tbody>
                                 </table>
                             </div>
                         }
+
+                        @TrendExtras(b, "B")
 
                         <h3 class="h6 text-muted mb-2 mt-3">Period B: repeated failures</h3>
                         @if (b.RepeatedFailureRows.Count == 0)
@@ -468,7 +489,7 @@ else
                                     <tbody>
                                         @foreach (var row in b.RepeatedFailureRows)
                                         {
-                                            <tr><td class="small">@row.InstanceName</td><td class="small">@row.FailureCount</td></tr>
+                                            <tr><td class="small">@InstanceLink(row.InstanceName, null)</td><td class="small">@row.FailureCount</td></tr>
                                         }
                                     </tbody>
                                 </table>
@@ -488,7 +509,7 @@ else
                                     <tbody>
                                         @foreach (var row in b.OutstandingRiskRows)
                                         {
-                                            <tr><td class="small">@row.InstanceName</td><td class="small">@row.OpenedAtUtc.ToLocalTime().ToString("MMM d, yyyy h:mm tt")</td><td class="small">@row.TriggerHealth</td></tr>
+                                            <tr><td class="small">@InstanceLink(row.InstanceName, null)</td><td class="small"><LocalTime Utc="row.OpenedAtUtc" ShowUtc="false" /></td><td class="small">@row.TriggerHealth</td></tr>
                                         }
                                     </tbody>
                                 </table>
@@ -562,7 +583,56 @@ else
         }
 
         _overviews = await OverviewService.GetAllAsync();
+        Viewer.Changed += OnViewerZoneChanged;
     }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!Viewer.Known)
+        {
+            await Viewer.EnsureLoadedAsync(JS);
+        }
+    }
+
+    private void OnViewerZoneChanged() => InvokeAsync(StateHasChanged);
+
+    public void Dispose() => Viewer.Changed -= OnViewerZoneChanged;
+
+    private string ZoneName => Viewer.ZoneId;
+
+    /// <summary>Plain caption for the active window: "in the last 7 day(s)" for a preset, or the custom dates and zone.</summary>
+    private string RangeCaption(DateTime fromUtc, DateTime toUtc) =>
+        _useCustomRange
+            ? $"from {_customFrom:MMM d, yyyy} to {_customTo:MMM d, yyyy} ({ZoneName})"
+            : $"in the last {_rangeDays} day(s)";
+
+    private static string SourceLabel(BackupSource source) => source switch
+    {
+        BackupSource.Discovered => "Discovered",
+        BackupSource.Imported => "Imported",
+        _ => "Logged"
+    };
+
+    private RenderFragment InstanceLink(string name, int? id) => builder =>
+    {
+        var resolved = id ?? _overviews?.FirstOrDefault(o => string.Equals(o.Instance.Name, name, StringComparison.OrdinalIgnoreCase))?.Instance.Id;
+        if (resolved is { } instanceId)
+        {
+            builder.OpenElement(0, "a");
+            builder.AddAttribute(1, "href", $"/instances/{instanceId}");
+            builder.AddContent(2, name);
+            builder.CloseElement();
+        }
+        else
+        {
+            builder.AddContent(3, name);
+        }
+    };
+
+    private static string RecencyCell(TrendPeriodResult r) =>
+        r.MissingEvidence ? "No snapshot: missing evidence"
+        : r.RestoreCurrentCount is null ? "Not recorded in this snapshot"
+        : $"{r.RestoreCurrentCount} / {r.RestoreOverdueCount} / {r.RestoreNeverTestedCount}";
 
     private void SelectPreset(int days)
     {
@@ -578,13 +648,25 @@ else
             return (DateTime.UtcNow.AddDays(-_rangeDays), DateTime.UtcNow);
         }
 
-        var fromLocal = _customFrom.Date;
-        var toLocal = _customTo.Date.AddDays(1).AddTicks(-1);
-        return (fromLocal.ToUniversalTime(), toLocal.ToUniversalTime());
+        return ToUtcRange(_customFrom, _customTo);
     }
 
-    private static (DateTime FromUtc, DateTime ToUtc) ToUtcRange(DateTime fromLocal, DateTime toLocal) =>
-        (fromLocal.Date.ToUniversalTime(), toLocal.Date.AddDays(1).AddTicks(-1).ToUniversalTime());
+    /// <summary>Whole calendar days in the viewer's zone, as UTC: 00:00 on the first day (inclusive) to the end of the last day (inclusive).</summary>
+    private (DateTime FromUtc, DateTime ToUtc) ToUtcRange(DateTime fromLocal, DateTime toLocal) =>
+        (DayStartUtc(fromLocal.Date), DayStartUtc(toLocal.Date.AddDays(1)).AddTicks(-1));
+
+    /// <summary>Midnight in the viewer's zone. Where a daylight-saving change skips midnight, the first valid hour is used.</summary>
+    private DateTime DayStartUtc(DateTime day)
+    {
+        for (var hour = 0; hour < 3; hour++)
+        {
+            if (Viewer.FromViewer(day.AddHours(hour)) is { Ok: true } result)
+            {
+                return result.Utc!.Value;
+            }
+        }
+        return DateTime.SpecifyKind(day, DateTimeKind.Utc);
+    }
 
     private async Task RunTrendComparison()
     {
@@ -605,11 +687,21 @@ else
     /// </summary>
     private async Task<TrendPeriodInput> BuildTrendPeriodInputAsync(DateTime fromUtc, DateTime toUtc)
     {
-        var snapshot = await Db.ComplianceSnapshots.AsNoTracking()
+        var candidates = await Db.ComplianceSnapshots.AsNoTracking()
             .Where(s => s.EffectiveAsOfUtc <= toUtc)
             .OrderByDescending(s => s.EffectiveAsOfUtc)
-            .FirstOrDefaultAsync();
+            .Take(50)
+            .Select(s => new TrendSnapshotCandidate(s.Id, s.EffectiveAsOfUtc))
+            .ToListAsync();
+        var choice = TrendsReportBuilder.SelectSnapshot(candidates, fromUtc, toUtc);
+        var snapshot = choice.SnapshotId is { } snapshotId
+            ? await Db.ComplianceSnapshots.AsNoTracking().FirstOrDefaultAsync(s => s.Id == snapshotId)
+            : null;
         var snapshotRows = snapshot is null ? null : ComplianceSnapshotBuilder.Deserialize(snapshot.RowsJson);
+
+        var policyChanges = (await AuditLog.ListByActionAsync(BackupPolicyService.PolicyChangeActions, fromUtc, toUtc))
+            .Select(e => new TrendPolicyChange(e.TimestampUtc, e.TargetName, e.ActorName, PolicyChangeSummary(e)))
+            .ToList();
 
         var backupEvents = await Db.BackupRecords.AsNoTracking()
             .Where(r => r.TimestampUtc >= fromUtc && r.TimestampUtc <= toUtc)
@@ -617,7 +709,7 @@ else
             .ToListAsync();
 
         var restoreTestTimestamps = await Db.RestoreEvents.AsNoTracking()
-            .Where(r => r.Outcome == RestoreOutcome.Success && r.TimestampUtc >= fromUtc && r.TimestampUtc <= toUtc)
+            .Where(r => r.Outcome == RestoreOutcome.Success && r.Source != BackupSource.Imported && r.TimestampUtc >= fromUtc && r.TimestampUtc <= toUtc)
             .Select(r => r.TimestampUtc)
             .ToListAsync();
 
@@ -627,10 +719,73 @@ else
             fromUtc, toUtc, snapshotRows, snapshot?.EffectiveAsOfUtc,
             backupEvents.Select(e => new TrendBackupEvent(e.Name, e.TimestampUtc, e.Status, e.SizeMb, e.DurationMinutes)).ToList(),
             restoreTestTimestamps,
-            openIncidents.Select(i => new TrendOutstandingRisk(i.DatabaseInstance?.Name ?? $"Instance #{i.DatabaseInstanceId}", i.OpenedAtUtc, i.TriggerHealth)).ToList());
+            openIncidents.Select(i => new TrendOutstandingRisk(i.DatabaseInstance?.Name ?? $"Instance #{i.DatabaseInstanceId}", i.OpenedAtUtc, i.TriggerHealth)).ToList(),
+            policyChanges,
+            choice.MissingReason);
     }
 
-    private static string FormatRange(TrendPeriodResult r) => $"{r.FromUtc.ToLocalTime():MMM d}–{r.ToUtc.ToLocalTime():MMM d, yyyy}";
+    private static string PolicyChangeSummary(AuditEvent e)
+    {
+        if (e.Action == "BackupPolicyCreated")
+        {
+            return "Created";
+        }
+
+        var changes = AuditDiffJson.Pair(e.BeforeJson, e.AfterJson)
+            .Where(p => p.Field != "Version" && p.Before != p.After)
+            .Select(p => $"{p.Field} {(p.Before.Length == 0 ? "(none)" : p.Before)} to {(p.After.Length == 0 ? "(none)" : p.After)}");
+        var text = string.Join("; ", changes);
+        return text.Length == 0 ? "Edited" : text;
+    }
+
+    private RenderFragment TrendExtras(TrendPeriodResult period, string label) => @<text>
+        <h3 class="h6 text-muted mb-2 mt-3">Period @label: expired restore-test coverage at snapshot</h3>
+        @if (period.RestoreOverdueRows.Count == 0)
+        {
+            <div class="text-muted small mb-3">@(period.MissingEvidence ? "No snapshot." : period.RestoreCurrentCount is null ? "Not recorded in this snapshot." : "None.")</div>
+        }
+        else
+        {
+            <div class="dbt-table mb-3" role="region" aria-label="Period @label expired restore-test coverage" tabindex="0">
+                <table class="table table-sm">
+                    <thead><tr><th scope="col">Instance</th><th scope="col">Last verified restore</th></tr></thead>
+                    <tbody>
+                        @foreach (var row in period.RestoreOverdueRows)
+                        {
+                            <tr><td class="small">@InstanceLink(row.InstanceName, row.InstanceId)</td><td class="small"><LocalTime Utc="row.LastVerifiedRestoreUtc" ShowUtc="false" /></td></tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+
+        <h3 class="h6 text-muted mb-2 mt-3">Period @label: backup policy changes</h3>
+        @if (period.PolicyChanges.Count == 0)
+        {
+            <div class="text-muted small mb-3">No policy was created or edited in this period.</div>
+        }
+        else
+        {
+            <div class="dbt-table mb-3" role="region" aria-label="Period @label backup policy changes" tabindex="0">
+                <table class="table table-sm">
+                    <thead><tr><th scope="col">When</th><th scope="col">Policy</th><th scope="col">By</th><th scope="col">Change</th></tr></thead>
+                    <tbody>
+                        @foreach (var change in period.PolicyChanges)
+                        {
+                            <tr><td class="small"><LocalTime Utc="change.ChangedAtUtc" ShowUtc="false" /></td><td class="small">@change.PolicyName</td><td class="small">@change.ChangedBy</td><td class="small">@change.Summary</td></tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </text>;
+
+    private string FormatRange(TrendPeriodResult r)
+    {
+        var from = Viewer.ToViewer(r.FromUtc);
+        var to = Viewer.ToViewer(r.ToUtc);
+        return $"{from:MMM d} to {to:MMM d, yyyy}";
+    }
 
     private static string FormatHours(double hours) =>
         hours >= 24 ? $"{hours / 24:N1} d" : $"{hours:N0} h";
@@ -691,7 +846,7 @@ else
     private string SummaryPreview()
     {
         var rows = (_overviews ?? []).Select(o => new ComplianceReportRow(
-            o.Instance, o.Health, o.LastBackupUtc, o.Instance.RestoreEvents.Any(r => r.Outcome == RestoreOutcome.Success))).ToList();
+            o.Instance, o.Health, o.LastBackupUtc, RestoreEvidence.AnyVerified(o.Instance.RestoreEvents))).ToList();
         return ComplianceReportBuilder.BuildPlainTextBody(rows, DateTime.UtcNow);
     }
 
