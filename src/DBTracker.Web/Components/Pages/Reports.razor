@@ -12,22 +12,21 @@
 
 <div class="app-topbar">
     <div>
-        <div class="eyebrow">Reporting</div>
         <h1>Reports</h1>
-        <div class="subtitle">Generate and export operational, ownership and compliance reports from the same tracked data — no spreadsheet wrangling.</div>
+        <div class="subtitle">Generate and export operational, ownership and compliance reports from the same tracked data, without exporting to a spreadsheet first.</div>
     </div>
 </div>
 
 @if (_overviews is null)
 {
-    <div class="spinner-ring"></div>
+    <div class="spinner-ring" role="status"><span class="visually-hidden">Loading</span></div>
 }
 else
 {
     <div class="filter-bar">
         @foreach (var type in ReportTypeOrder)
         {
-            <button type="button" class="btn @(type == _selected ? "btn-primary" : "btn-outline-secondary")" @onclick="() => _selected = type">
+            <button type="button" class="btn @(type == _selected ? "btn-primary" : "btn-outline-secondary")" aria-pressed="@(type == _selected ? "true" : "false")" @onclick="() => _selected = type">
                 @Label(type)
             </button>
         }
@@ -40,11 +39,11 @@ else
             <div class="filter-bar" style="padding-top:0;border-top:none;border-bottom:none;margin-bottom:6px;gap:12px;">
                 @foreach (var days in new[] { 7, 30, 90 })
                 {
-                    <button type="button" class="btn btn-sm @(!_useCustomRange && days == _rangeDays ? "btn-primary" : "btn-outline-secondary")" @onclick="() => SelectPreset(days)">
+                    <button type="button" class="btn btn-sm @(!_useCustomRange && days == _rangeDays ? "btn-primary" : "btn-outline-secondary")" aria-pressed="@(!_useCustomRange && days == _rangeDays ? "true" : "false")" @onclick="() => SelectPreset(days)">
                         Last @days d
                     </button>
                 }
-                <button type="button" class="btn btn-sm @(_useCustomRange ? "btn-primary" : "btn-outline-secondary")" @onclick="() => _useCustomRange = true">
+                <button type="button" class="btn btn-sm @(_useCustomRange ? "btn-primary" : "btn-outline-secondary")" aria-pressed="@(_useCustomRange ? "true" : "false")" @onclick="() => _useCustomRange = true">
                     Custom
                 </button>
             </div>
@@ -53,12 +52,12 @@ else
             {
                 <div class="d-flex gap-2 align-items-end mb-3" style="flex-wrap:wrap;">
                     <div class="field">
-                        <label class="form-label small">From (local time)</label>
-                        <input type="date" class="form-control form-control-sm" @bind="_customFrom" />
+                        <label for="reports-from-local-time" class="form-label small">From (local time)</label>
+                        <input id="reports-from-local-time" type="date" class="form-control form-control-sm" @bind="_customFrom" />
                     </div>
                     <div class="field">
-                        <label class="form-label small">To (local time, inclusive)</label>
-                        <input type="date" class="form-control form-control-sm" @bind="_customTo" />
+                        <label for="reports-to-local-time-inclusive" class="form-label small">To (local time, inclusive)</label>
+                        <input id="reports-to-local-time-inclusive" type="date" class="form-control form-control-sm" @bind="_customTo" />
                     </div>
                 </div>
             }
@@ -76,20 +75,20 @@ else
             </div>
 
             <div class="d-flex justify-content-between align-items-center mb-3">
-                <span class="small text-muted">Exports all @rowsInRange.Count matching row(s) in the last @_rangeDays day(s) — not limited to what's currently rendered on screen.</span>
+                <span class="small text-muted">Exports all @rowsInRange.Count matching row(s) in the last @_rangeDays day(s), not just the rows rendered on screen.</span>
                 <button class="btn btn-outline-primary" @onclick="() => ExportBackupActivity(rowsInRange)" disabled="@(rowsInRange.Count == 0)">
-                    <i class="bi bi-download"></i> Export CSV
+                    <i aria-hidden="true" class="bi bi-download"></i> Export CSV
                 </button>
             </div>
 
             @if (rowsInRange.Count == 0)
             {
-                <div class="empty-state"><i class="bi bi-inbox"></i>No backup runs in this window.</div>
+                <div class="empty-state"><i aria-hidden="true" class="bi bi-inbox"></i>No backup runs in this window.</div>
             }
             else
             {
                 <div class="dbt-table">
-                    <table class="table">
+                    <table aria-label="Backup runs in range" class="table">
                         <thead><tr><th>When</th><th>Instance</th><th>Company / Dept</th><th>Engine</th><th>Type</th><th>Status</th><th>Size</th><th>Duration</th><th>Source</th></tr></thead>
                         <tbody>
                             @foreach (var r in rowsInRange)
@@ -101,8 +100,8 @@ else
                                     <td>@r.Engine</td>
                                     <td>@r.Type</td>
                                     <td><span class="badge-health dot @StatusClass(r.Status)">@r.Status</span></td>
-                                    <td>@(r.SizeMb is null ? "—" : $"{r.SizeMb:N0} MB")</td>
-                                    <td>@(r.DurationMinutes is null ? "—" : $"{r.DurationMinutes:N0} min")</td>
+                                    <td>@(r.SizeMb is null ? "Not recorded" : $"{r.SizeMb:N0} MB")</td>
+                                    <td>@(r.DurationMinutes is null ? "Not recorded" : $"{r.DurationMinutes:N0} min")</td>
                                     <td class="text-muted">@(r.Source == BackupSource.Discovered ? "Discovered" : "Logged")</td>
                                 </tr>
                             }
@@ -124,19 +123,19 @@ else
             var expired = rows.Count(r => r.Recency == RestoreTestRecency.Overdue);
 
             <p class="text-muted mb-3">
-                @untested of @rows.Count instance(s) have never had a <em>successful</em> restore proven — an untested backup is an audit red flag.
-                Separately, @expired instance(s) have <strong>expired restore-test coverage</strong> (last proven restore older than the @RestoreTestIntervalDaysDefault-day default policy, or a per-instance override) — distinct from ordinary backup health.
+                @untested of @rows.Count instance(s) have never had a <em>successful</em> restore proven. Auditors treat an untested backup as a finding.
+                Separately, @expired instance(s) have <strong>expired restore-test coverage</strong> (last proven restore older than the @RestoreTestIntervalDaysDefault-day default policy, or a per-instance override). This is tracked separately from backup health.
             </p>
 
             <div class="d-flex justify-content-between align-items-center mb-3">
-                <span class="small text-muted">Exports all @rows.Count instance(s) shown — the full result, not a page.</span>
+                <span class="small text-muted">Exports all @rows.Count instance(s) shown: the full result, not one page.</span>
                 <button class="btn btn-outline-primary" @onclick="() => ExportRestoreTesting(rows)" disabled="@(rows.Count == 0)">
-                    <i class="bi bi-download"></i> Export CSV
+                    <i aria-hidden="true" class="bi bi-download"></i> Export CSV
                 </button>
             </div>
 
             <div class="dbt-table">
-                <table class="table">
+                <table aria-label="Restore testing by instance" class="table">
                     <thead><tr><th>Instance</th><th>Company / Dept</th><th>Role</th><th>Env</th><th>Restore tested</th><th>Last successful restore</th><th>Total attempts</th><th>Coverage</th><th>Next test due</th></tr></thead>
                     <tbody>
                         @foreach (var r in rows)
@@ -147,10 +146,10 @@ else
                                 <td><span class="role-pill @r.Role">@r.Role</span></td>
                                 <td>@r.Environment</td>
                                 <td><span class="badge-health dot @(r.RestoreTested ? "OnTrack" : "Overdue")">@(r.RestoreTested ? "Yes" : "No")</span></td>
-                                <td>@(r.LastSuccessfulRestoreUtc is null ? "—" : r.LastSuccessfulRestoreUtc.Value.ToLocalTime().ToString("MMM d, yyyy h:mm tt"))</td>
+                                <td>@(r.LastSuccessfulRestoreUtc is null ? "Never" : r.LastSuccessfulRestoreUtc.Value.ToLocalTime().ToString("MMM d, yyyy h:mm tt"))</td>
                                 <td>@r.TotalAttempts</td>
                                 <td><span class="badge-health dot @RecencyClass(r.Recency)">@RecencyLabel(r.Recency)</span></td>
-                                <td class="small text-muted">@(r.NextDueUtc is null ? "—" : r.NextDueUtc.Value.ToLocalTime().ToString("MMM d, yyyy h:mm tt"))</td>
+                                <td class="small text-muted">@(r.NextDueUtc is null ? "Not scheduled" : r.NextDueUtc.Value.ToLocalTime().ToString("MMM d, yyyy h:mm tt"))</td>
                             </tr>
                         }
                     </tbody>
@@ -164,17 +163,17 @@ else
             var rows = OwnershipRollupBuilder.Build(_overviews.Select(o =>
                 new OwnershipRollupInput(o.Instance.Company, o.Instance.Department, o.Health, o.Instance.ContactName)));
 
-            <p class="text-muted mb-3">Instance counts and backup health rolled up by company and department — who owns what, and where risk is concentrated.</p>
+            <p class="text-muted mb-3">Instance counts and backup health rolled up by company and department, showing who owns each instance and where risk is concentrated.</p>
 
             <div class="d-flex justify-content-between align-items-center mb-3">
-                <span class="small text-muted">Exports all @rows.Count row(s) shown — the full result, not a page.</span>
+                <span class="small text-muted">Exports all @rows.Count row(s) shown: the full result, not one page.</span>
                 <button class="btn btn-outline-primary" @onclick="() => ExportOwnershipRollup(rows)" disabled="@(rows.Count == 0)">
-                    <i class="bi bi-download"></i> Export CSV
+                    <i aria-hidden="true" class="bi bi-download"></i> Export CSV
                 </button>
             </div>
 
             <div class="dbt-table">
-                <table class="table">
+                <table aria-label="Ownership roll-up" class="table">
                     <thead><tr><th>Company</th><th>Department</th><th>Instances</th><th>On track</th><th>Overdue</th><th>Failed</th><th>Never backed up</th><th>Primary contact(s)</th></tr></thead>
                     <tbody>
                         @foreach (var r in rows)
@@ -202,23 +201,23 @@ else
                 _overviews.Select(o => new ScanActivityInput(o.Instance.Name, o.Instance.BackupFileLocation, o.Instance.LastScanUtc, o.Instance.LastScanStatus, o.Instance.LastScanError)),
                 ScanIntervalMinutes, StaleAfterMultiplier, DateTime.UtcNow);
 
-            <p class="text-muted mb-3">Shared-drive scan status for every instance with a backup file location configured — evidence the automated scan is actually running. A scan that hasn't succeeded in a while shows as <strong>Stale</strong> even if its last result was a success — the scanner itself may have stopped.</p>
+            <p class="text-muted mb-3">Shared-drive scan status for every instance with a backup file location configured, as evidence that the automated scan is actually running. A scan that hasn't succeeded in a while shows as <strong>Stale</strong> even if its last result was a success, because the scanner itself may have stopped.</p>
 
             <div class="d-flex justify-content-between align-items-center mb-3">
-                <span class="small text-muted">Exports all @rows.Count row(s) shown — the full result, not a page.</span>
+                <span class="small text-muted">Exports all @rows.Count row(s) shown: the full result, not one page.</span>
                 <button class="btn btn-outline-primary" @onclick="() => ExportScanActivity(rows)" disabled="@(rows.Count == 0)">
-                    <i class="bi bi-download"></i> Export CSV
+                    <i aria-hidden="true" class="bi bi-download"></i> Export CSV
                 </button>
             </div>
 
             @if (rows.Count == 0)
             {
-                <div class="empty-state"><i class="bi bi-inbox"></i>No instance has a backup file location configured yet.</div>
+                <div class="empty-state"><i aria-hidden="true" class="bi bi-inbox"></i>No instance has a backup file location configured yet.</div>
             }
             else
             {
                 <div class="dbt-table">
-                    <table class="table">
+                    <table aria-label="Scan activity by instance" class="table">
                         <thead><tr><th>Instance</th><th>Backup file location</th><th>Last scanned</th><th>Status</th><th>Next expected</th><th>Detail</th></tr></thead>
                         <tbody>
                             @foreach (var r in rows)
@@ -228,7 +227,7 @@ else
                                     <td class="text-muted">@r.BackupFileLocation</td>
                                     <td>@(r.LastScanUtc is null ? "Never" : r.LastScanUtc.Value.ToLocalTime().ToString("MMM d, h:mm tt"))</td>
                                     <td><span class="badge-health dot @ScannerFreshnessClass(r.Scanner.Freshness)">@r.Scanner.Freshness</span></td>
-                                    <td class="small text-muted">@(r.Scanner.NextExpectedCheckUtc is null ? "—" : r.Scanner.NextExpectedCheckUtc.Value.ToLocalTime().ToString("MMM d, h:mm tt"))</td>
+                                    <td class="small text-muted">@(r.Scanner.NextExpectedCheckUtc is null ? "Not scheduled" : r.Scanner.NextExpectedCheckUtc.Value.ToLocalTime().ToString("MMM d, h:mm tt"))</td>
                                     <td class="small @(r.LastScanStatus == ScanStatus.Error ? "text-danger" : "text-muted")">@(r.LastScanStatus == ScanStatus.Error ? r.LastScanError : r.Scanner.RecoveryHint)</td>
                                 </tr>
                             }
@@ -241,9 +240,9 @@ else
 
         case ReportType.ComplianceSnapshot:
         {
-            <p class="text-muted mb-3">Point-in-time snapshot of last-backup age, health and restore-test status per instance — the detailed audit view, filterable by role and environment.</p>
+            <p class="text-muted mb-3">Point-in-time snapshot of last-backup age, health and restore-test status per instance. This is the detailed audit view, filterable by role and environment.</p>
             <a class="btn btn-outline-secondary" href="/compliance">
-                <i class="bi bi-clipboard-check"></i> Open Compliance snapshot
+                <i aria-hidden="true" class="bi bi-clipboard-check"></i> Open Compliance snapshot
             </a>
             break;
         }
@@ -251,8 +250,8 @@ else
         case ReportType.Trends:
         {
             <p class="text-muted mb-3">
-                Compares two time periods using saved <a href="/compliance">Compliance snapshots</a> (U10) for point-in-time
-                health/restore-test coverage, and raw dated backup/restore/incident events for everything else — never by
+                Compares two time periods using saved <a href="/compliance">Compliance snapshots</a> for point-in-time
+                health/restore-test coverage, and raw dated backup/restore/incident events for everything else. It never works by
                 re-running today's health calculator against old data, which would misrepresent instances that didn't exist
                 yet or whose policy has since changed. A period with no snapshot is flagged explicitly, not interpolated.
                 Retention-days values alone are not evidence that backup files still exist on disk (tracked separately, future scope).
@@ -261,7 +260,7 @@ else
             <div class="row g-3 mb-3">
                 <div class="col-md-6">
                     <div class="dbt-card">
-                        <h2 class="h6 text-muted text-uppercase mb-2">Period A (earlier)</h2>
+                        <h2 class="h6 text-muted mb-2">Period A (earlier)</h2>
                         <div class="d-flex gap-2">
                             <div class="field"><label class="form-label small" for="trend-a-from">From</label><input id="trend-a-from" type="date" class="form-control form-control-sm" @bind="_trendAFrom" /></div>
                             <div class="field"><label class="form-label small" for="trend-a-to">To</label><input id="trend-a-to" type="date" class="form-control form-control-sm" @bind="_trendATo" /></div>
@@ -270,7 +269,7 @@ else
                 </div>
                 <div class="col-md-6">
                     <div class="dbt-card">
-                        <h2 class="h6 text-muted text-uppercase mb-2">Period B (later)</h2>
+                        <h2 class="h6 text-muted mb-2">Period B (later)</h2>
                         <div class="d-flex gap-2">
                             <div class="field"><label class="form-label small" for="trend-b-from">From</label><input id="trend-b-from" type="date" class="form-control form-control-sm" @bind="_trendBFrom" /></div>
                             <div class="field"><label class="form-label small" for="trend-b-to">To</label><input id="trend-b-to" type="date" class="form-control form-control-sm" @bind="_trendBTo" /></div>
@@ -347,18 +346,18 @@ else
                             </tr>
                             <tr>
                                 <td class="small fw-semibold">Avg backup duration</td>
-                                <td class="small">@(a.AvgBackupDurationMinutes is { } ad ? $"{ad:N0} min" : "—")</td>
-                                <td class="small">@(b.AvgBackupDurationMinutes is { } bd ? $"{bd:N0} min" : "—")</td>
+                                <td class="small">@(a.AvgBackupDurationMinutes is { } ad ? $"{ad:N0} min" : "No data")</td>
+                                <td class="small">@(b.AvgBackupDurationMinutes is { } bd ? $"{bd:N0} min" : "No data")</td>
                             </tr>
                             <tr>
                                 <td class="small fw-semibold">Avg backup size</td>
-                                <td class="small">@(a.AvgBackupSizeMb is { } asz ? FormatMb(asz) : "—")</td>
-                                <td class="small">@(b.AvgBackupSizeMb is { } bsz ? FormatMb(bsz) : "—")</td>
+                                <td class="small">@(a.AvgBackupSizeMb is { } asz ? FormatMb(asz) : "No data")</td>
+                                <td class="small">@(b.AvgBackupSizeMb is { } bsz ? FormatMb(bsz) : "No data")</td>
                             </tr>
                             <tr>
                                 <td class="small fw-semibold">Avg outstanding-risk age</td>
-                                <td class="small">@(a.AverageOutstandingRiskAgeHours is { } aage ? FormatHours(aage) : "—")</td>
-                                <td class="small">@(b.AverageOutstandingRiskAgeHours is { } bage ? FormatHours(bage) : "—")</td>
+                                <td class="small">@(a.AverageOutstandingRiskAgeHours is { } aage ? FormatHours(aage) : "No data")</td>
+                                <td class="small">@(b.AverageOutstandingRiskAgeHours is { } bage ? FormatHours(bage) : "No data")</td>
                             </tr>
                         </tbody>
                     </table>
@@ -367,15 +366,15 @@ else
                 @if (a.MissingEvidence || b.MissingEvidence)
                 {
                     <div class="alert alert-danger mb-4">
-                        <i class="bi bi-exclamation-triangle"></i>
-                        @(a.MissingEvidence && b.MissingEvidence ? "Neither period has a Compliance snapshot at or before its end date" : a.MissingEvidence ? "Period A has no Compliance snapshot at or before its end date" : "Period B has no Compliance snapshot at or before its end date") —
-                        health-coverage and restore-tested percentages are not shown for that period rather than inferred from today's live inventory. Save a snapshot on the <a href="/compliance">Compliance page</a> to establish evidence for future comparisons.
+                        <i aria-hidden="true" class="bi bi-exclamation-triangle"></i>
+                        @(a.MissingEvidence && b.MissingEvidence ? "Neither period has a Compliance snapshot at or before its end date" : a.MissingEvidence ? "Period A has no Compliance snapshot at or before its end date" : "Period B has no Compliance snapshot at or before its end date").
+                        Health-coverage and restore-tested percentages are not shown for that period rather than inferred from today's live inventory. Save a snapshot on the <a href="/compliance">Compliance page</a> to establish evidence for future comparisons.
                     </div>
                 }
 
                 <div class="row g-3">
                     <div class="col-md-6">
-                        <h3 class="h6 text-muted text-uppercase mb-2">Period A — at-risk rows (drill-down)</h3>
+                        <h3 class="h6 text-muted mb-2">Period A — at-risk rows (drill-down)</h3>
                         @if (a.AtRiskRows.Count == 0)
                         {
                             <div class="text-muted small mb-3">None.</div>
@@ -395,7 +394,7 @@ else
                             </div>
                         }
 
-                        <h3 class="h6 text-muted text-uppercase mb-2 mt-3">Period A — repeated failures</h3>
+                        <h3 class="h6 text-muted mb-2 mt-3">Period A — repeated failures</h3>
                         @if (a.RepeatedFailureRows.Count == 0)
                         {
                             <div class="text-muted small mb-3">None.</div>
@@ -415,7 +414,7 @@ else
                             </div>
                         }
 
-                        <h3 class="h6 text-muted text-uppercase mb-2 mt-3">Period A — outstanding risk (open incidents as of period end)</h3>
+                        <h3 class="h6 text-muted mb-2 mt-3">Period A — outstanding risk (open incidents as of period end)</h3>
                         @if (a.OutstandingRiskRows.Count == 0)
                         {
                             <div class="text-muted small mb-3">None open as of period end.</div>
@@ -436,7 +435,7 @@ else
                         }
                     </div>
                     <div class="col-md-6">
-                        <h3 class="h6 text-muted text-uppercase mb-2">Period B — at-risk rows (drill-down)</h3>
+                        <h3 class="h6 text-muted mb-2">Period B — at-risk rows (drill-down)</h3>
                         @if (b.AtRiskRows.Count == 0)
                         {
                             <div class="text-muted small mb-3">None.</div>
@@ -456,7 +455,7 @@ else
                             </div>
                         }
 
-                        <h3 class="h6 text-muted text-uppercase mb-2 mt-3">Period B — repeated failures</h3>
+                        <h3 class="h6 text-muted mb-2 mt-3">Period B — repeated failures</h3>
                         @if (b.RepeatedFailureRows.Count == 0)
                         {
                             <div class="text-muted small mb-3">None.</div>
@@ -476,7 +475,7 @@ else
                             </div>
                         }
 
-                        <h3 class="h6 text-muted text-uppercase mb-2 mt-3">Period B — outstanding risk (open incidents as of period end)</h3>
+                        <h3 class="h6 text-muted mb-2 mt-3">Period B — outstanding risk (open incidents as of period end)</h3>
                         @if (b.OutstandingRiskRows.Count == 0)
                         {
                             <div class="text-muted small mb-3">None open as of period end.</div>
@@ -503,7 +502,7 @@ else
 
         case ReportType.ManagementSummary:
         {
-            <p class="text-muted mb-3">The same leadership-ready roll-up sent on schedule (<code>Reports:IntervalDays</code>) or on demand — plain-text, ready to paste into an email or ticket.</p>
+            <p class="text-muted mb-3">The same leadership-ready roll-up sent on schedule (<code>Reports:IntervalDays</code>) or on demand, as plain text ready to paste into an email or ticket.</p>
 
             <div class="d-flex gap-2 mb-3">
                 <AuthorizeView Roles="@Roles.ReportingPolicy">
@@ -512,7 +511,7 @@ else
                     </Authorized>
                 </AuthorizeView>
                 <button class="btn btn-outline-secondary" @onclick="CopySummary">
-                    <i class="bi bi-clipboard"></i> Copy to clipboard
+                    <i aria-hidden="true" class="bi bi-clipboard"></i> Copy to clipboard
                 </button>
             </div>
 
@@ -532,7 +531,7 @@ else
     ];
 
     // Lets the dashboard's scan-issue banner (and any other link) open this page directly on a
-    // given report type (U05) — e.g. /reports?type=ScanActivity — instead of landing on the
+    // given report type (for example /reports?type=ScanActivity) instead of landing on the
     // default tab and making the user click again.
     [Parameter, SupplyParameterFromQuery(Name = "type")] public string? Type { get; set; }
 
@@ -543,7 +542,7 @@ else
     private DateTime _customFrom = DateTime.Today.AddDays(-7);
     private DateTime _customTo = DateTime.Today;
 
-    // U22: Period A/B default to two adjacent 30-day windows — "this period vs. the one before it".
+    // U22: Period A/B default to two adjacent 30-day windows: "this period vs. the one before it".
     private DateTime _trendAFrom = DateTime.Today.AddDays(-60);
     private DateTime _trendATo = DateTime.Today.AddDays(-30);
     private DateTime _trendBFrom = DateTime.Today.AddDays(-30);
@@ -571,7 +570,7 @@ else
         _rangeDays = days;
     }
 
-    /// <summary>Custom range is entered as local calendar dates (U10) — converted to explicit UTC boundaries: start of day (inclusive) to end of day (inclusive) in the server's local time zone.</summary>
+    /// <summary>Custom range is entered as local calendar dates, converted to explicit UTC boundaries: start of day (inclusive) to end of day (inclusive) in the server's local time zone.</summary>
     private (DateTime FromUtc, DateTime ToUtc) CurrentRangeUtc()
     {
         if (!_useCustomRange)
@@ -601,8 +600,8 @@ else
 
     /// <summary>
     /// Gathers one trend period's inputs (U22): the nearest saved Compliance snapshot at or before
-    /// the period's end for point-in-time health/restore-tested coverage (null — "missing evidence"
-    /// — if none exists), plus raw dated BackupRecord/RestoreEvent/Incident rows within the period.
+    /// the period's end for point-in-time health/restore-tested coverage (null, meaning "missing evidence",
+    /// if none exists), plus raw dated BackupRecord/RestoreEvent/Incident rows within the period.
     /// </summary>
     private async Task<TrendPeriodInput> BuildTrendPeriodInputAsync(DateTime fromUtc, DateTime toUtc)
     {
@@ -637,7 +636,7 @@ else
         hours >= 24 ? $"{hours / 24:N1} d" : $"{hours:N0} h";
 
     private static string EvidenceCell(TrendPeriodResult r, Func<TrendPeriodResult, string?> format) =>
-        r.MissingEvidence ? "No snapshot — missing evidence" : format(r) ?? "—";
+        r.MissingEvidence ? "No snapshot — missing evidence" : format(r) ?? "No data";
 
     private static string RecencyClass(RestoreTestRecency recency) => recency switch
     {

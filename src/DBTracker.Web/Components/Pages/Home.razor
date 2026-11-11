@@ -10,7 +10,6 @@
 
 <div class="app-topbar">
     <div>
-        <div class="eyebrow">Overview</div>
         <h1>Dashboard</h1>
         <div class="subtitle">Backup health across every tracked database instance, ranked by what needs attention first.</div>
     </div>
@@ -18,13 +17,14 @@
 
 @if (_rows is null)
 {
-    <div class="skeleton-stats">
+    <span class="visually-hidden" role="status">Loading dashboard</span>
+    <div class="skeleton-stats" aria-hidden="true">
         <div class="skeleton"></div>
         <div class="skeleton"></div>
         <div class="skeleton"></div>
         <div class="skeleton"></div>
     </div>
-    <div class="dbt-table">
+    <div class="dbt-table" aria-hidden="true">
         @for (var i = 0; i < 5; i++)
         {
             <div class="skeleton skeleton-row"></div>
@@ -37,7 +37,7 @@ else
         <div class="small text-muted" role="status">
             @if (_refreshError is not null)
             {
-                <span style="color:var(--dbt-failed)"><i class="bi bi-exclamation-circle"></i> Refresh failed: @_refreshError — showing data as of last successful load.</span>
+                <span role="alert" style="color:var(--dbt-failed)"><i class="bi bi-exclamation-circle" aria-hidden="true"></i> Refresh failed: @_refreshError. Showing data from the last successful load.</span>
             }
             else
             {
@@ -46,10 +46,10 @@ else
         </div>
         <div class="d-flex gap-2">
             <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="RefreshNow" disabled="@_refreshing">
-                <i class="bi bi-arrow-clockwise"></i> @(_refreshing ? "Refreshing…" : "Refresh")
+                <i aria-hidden="true" class="bi bi-arrow-clockwise"></i> @(_refreshing ? "Refreshing…" : "Refresh")
             </button>
             <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="ToggleAutoRefresh" title="Auto-refreshes every 30s while on">
-                <i class="bi @(_autoRefreshPaused ? "bi-play-fill" : "bi-pause-fill")"></i> Auto-refresh @(_autoRefreshPaused ? "paused" : "on")
+                <i aria-hidden="true" class="bi @(_autoRefreshPaused ? "bi-play-fill" : "bi-pause-fill")"></i> Auto-refresh @(_autoRefreshPaused ? "paused" : "on")
             </button>
         </div>
     </div>
@@ -57,7 +57,7 @@ else
     @if (_scanIssueCount > 0)
     {
         <div class="alert alert-danger mb-4 d-flex justify-content-between align-items-center flex-wrap gap-2">
-            <span><i class="bi bi-exclamation-triangle"></i> @_scanIssueCount shared-drive scan(s) erroring, stale or never completed.</span>
+            <span><i aria-hidden="true" class="bi bi-exclamation-triangle"></i> @_scanIssueCount shared-drive scan(s) erroring, stale or never completed.</span>
             <a class="btn btn-outline-secondary btn-sm" href="/reports?type=ScanActivity">View scan activity</a>
         </div>
     }
@@ -65,7 +65,7 @@ else
     @if (_openIncidents.Count > 0)
     {
         <div class="alert alert-warning mb-4 d-flex justify-content-between align-items-center flex-wrap gap-2">
-            <span><i class="bi bi-person-exclamation"></i> @_openIncidents.Count open incident(s) — @_openIncidents.Count(i => i.AcknowledgedAtUtc is null) unacknowledged.</span>
+            <span><i aria-hidden="true" class="bi bi-person-exclamation"></i> @_openIncidents.Count open incident(s), @_openIncidents.Count(i => i.AcknowledgedAtUtc is null) unacknowledged.</span>
             <a class="btn btn-outline-secondary btn-sm" href="/instances/@_openIncidents[0].DatabaseInstanceId">Open earliest</a>
         </div>
     }
@@ -102,7 +102,7 @@ else
     </div>
 
     <div class="dbt-table">
-        <table class="table">
+        <table aria-label="Instances, most at risk first" class="table">
             <thead>
                 <tr>
                     <th>Instance</th>
@@ -118,7 +118,7 @@ else
                 {
                     <tr @onclick='() => Nav.NavigateTo($"/instances/{o.Id}")'>
                         <td>
-                            <div class="fw-semibold">@o.Name</div>
+                            <a class="fw-semibold" href="/instances/@o.Id" @onclick:stopPropagation="true">@o.Name</a>
                             <div class="text-muted small">@o.Environment</div>
                         </td>
                         <td><span class="engine-pill">@o.Engine</span></td>
@@ -131,10 +131,10 @@ else
                             <HealthBadge Health="o.Health" />
                             @if (o.MaintenanceUntilUtc > DateTime.UtcNow)
                             {
-                                <i class="bi bi-cone-striped text-muted ms-1" title="Under maintenance — alerts suppressed"></i>
+                                <i class="bi bi-cone-striped text-muted ms-1" role="img" aria-label="Under maintenance, alerts suppressed" title="Under maintenance, alerts suppressed"></i>
                             }
                         </td>
-                        <td>@(o.LastBackupUtc is null ? "—" : o.LastBackupUtc.Value.ToLocalTime().ToString("MMM d, h:mm tt"))</td>
+                        <td>@(o.LastBackupUtc is null ? "Never" : o.LastBackupUtc.Value.ToLocalTime().ToString("MMM d, h:mm tt"))</td>
                     </tr>
                 }
             </tbody>
@@ -144,7 +144,7 @@ else
     @if (!Sorted().Any())
     {
         <div class="empty-state">
-            <i class="bi bi-inbox"></i>
+            <i aria-hidden="true" class="bi bi-inbox"></i>
             No instances match this filter.
         </div>
     }
@@ -152,7 +152,7 @@ else
 
 @code {
     // Dashboard reads the lightweight InstanceListRow projection (U06) rather than including every
-    // instance's full BackupRecords/RestoreEvents collections — the stat counts and risk-sorted
+    // instance's full BackupRecords/RestoreEvents collections; the stat counts and risk-sorted
     // table only ever need each instance's latest record/success, which is all that shape carries.
     private List<InstanceListRow>? _rows;
     private List<Core.Entities.Incident> _openIncidents = new();

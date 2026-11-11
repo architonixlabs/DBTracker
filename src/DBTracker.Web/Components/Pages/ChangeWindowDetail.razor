@@ -14,19 +14,18 @@
 
 @if (!_loaded)
 {
-    <div class="spinner-ring"></div>
+    <div class="spinner-ring" role="status"><span class="visually-hidden">Loading</span></div>
 }
 else if (_window is null)
 {
     <div class="dbt-card" style="max-width:600px;">
-        <div class="empty-state py-4"><i class="bi bi-question-diamond"></i> Change window #@Id doesn't exist.</div>
+        <div class="empty-state py-4"><i aria-hidden="true" class="bi bi-question-diamond"></i> Change window #@Id doesn't exist.</div>
     </div>
 }
 else
 {
     <div class="app-topbar">
         <div>
-            <div class="eyebrow">Epic 20 (D12) · Cutover journal</div>
             <h1>@_window.Title <span class="badge-health dot Overdue" data-testid="change-window-detail-status">@_window.Status</span></h1>
             <div class="subtitle">
                 @_window.PlannedStartUtc.ToString("yyyy-MM-dd HH:mm") – @_window.PlannedEndUtc.ToString("HH:mm") UTC (@_window.TimeZoneLabel) ·
@@ -38,9 +37,9 @@ else
     <div class="row g-3">
         <div class="col-lg-6">
             <div class="dbt-card h-100">
-                <h2 class="h6 text-muted text-uppercase mb-3">Required approvals</h2>
-                <p class="small text-muted">Each scope is checked against the recording user's role — recording outside the permitted role/scope is refused, not just hidden.</p>
-                <table class="table table-sm dbt-table mb-2">
+                <h2 class="h6 text-muted mb-3">Required approvals</h2>
+                <p class="small text-muted">Each scope is checked against the role of the person recording it. Entries outside the permitted role or scope are refused, not just hidden.</p>
+                <table aria-label="Required approvals" class="table table-sm dbt-table mb-2">
                     <thead><tr><th>Scope</th><th>Decision</th><th>Approver</th></tr></thead>
                     <tbody>
                         @foreach (var a in _window.Approvals)
@@ -56,7 +55,7 @@ else
 
                 <div class="row g-2 mb-2">
                     <div class="col-4">
-                        <select class="form-select form-select-sm" @bind="_approvalId">
+                        <label class="form-label small mb-1" for="changewindow-approval">Approval</label><select id="changewindow-approval" class="form-select form-select-sm" @bind="_approvalId">
                             <option value="0">Choose approval…</option>
                             @foreach (var a in _window.Approvals)
                             {
@@ -65,14 +64,14 @@ else
                         </select>
                     </div>
                     <div class="col-4">
-                        <select class="form-select form-select-sm" @bind="_approvalDecision">
+                        <label class="form-label small mb-1" for="changewindow-approval-decision">Decision</label><select id="changewindow-approval-decision" class="form-select form-select-sm" @bind="_approvalDecision">
                             @foreach (var d in Enum.GetValues<CampaignApprovalDecision>())
                             {
                                 <option value="@d">@d</option>
                             }
                         </select>
                     </div>
-                    <div class="col-4"><input class="form-control form-control-sm" placeholder="Your name" @bind="_approverName" @bind:event="oninput" /></div>
+                    <div class="col-4"><label class="form-label small mb-1" for="changewindowdetail-your-name">Your name</label><input class="form-control form-control-sm" placeholder="Your name" id="changewindowdetail-your-name" @bind="_approverName" @bind:event="oninput" /></div>
                 </div>
                 <button class="btn btn-outline-secondary btn-sm" @onclick="RecordApproval" disabled="@(_approvalId == 0 || string.IsNullOrWhiteSpace(_approverName))" data-testid="record-approval-button">Record decision</button>
 
@@ -83,14 +82,14 @@ else
                 <div class="d-flex gap-2 flex-wrap">
                     @foreach (var s in Enum.GetValues<ChangeWindowStatus>().Where(s => s != _window.Status))
                     {
-                        <button class="btn btn-outline-secondary btn-sm" @onclick="() => SetStatus(s)" data-testid="@($"status-{s}")">→ @s</button>
+                        <button class="btn btn-outline-secondary btn-sm" @onclick="() => SetStatus(s)" data-testid="@($"status-{s}")">Set to @s</button>
                     }
                 </div>
                 <div class="mt-2">
-                    <label class="form-label small">Emergency exception id (D14, optional)</label>
+                    <label class="form-label small" for="changewindow-emergency-exception">Emergency exception id (optional)</label>
                     <div class="d-flex gap-2">
-                        <input type="number" class="form-control form-control-sm" @bind="_emergencyExceptionId" />
-                        <button class="btn btn-link btn-sm" @onclick="LinkException">Link</button>
+                        <input type="number" id="changewindow-emergency-exception" class="form-control form-control-sm" @bind="_emergencyExceptionId" />
+                        <button class="btn btn-link btn-sm" @onclick="LinkException">Link exception</button>
                     </div>
                 </div>
                 </Authorized>
@@ -100,12 +99,16 @@ else
 
         <div class="col-lg-6">
             <div class="dbt-card h-100">
-                <h2 class="h6 text-muted text-uppercase mb-3">Cutover journal</h2>
+                <h2 class="h6 text-muted mb-3">Cutover journal</h2>
                 <p class="small text-muted">Externally performed actions, traffic/write-state notes, go/no-go decisions, the point of no return, and rollback outcomes. Adding an entry never runs anything against any database.</p>
 
-                @if (_window.JournalEntries.Count > 0)
+                @if (_window.JournalEntries.Count == 0)
                 {
-                    <table class="table table-sm dbt-table mb-2" data-testid="journal-table">
+                    <p class="small text-muted mb-2">No journal entries yet.</p>
+                }
+                else
+                {
+                    <table aria-label="Cutover journal" class="table table-sm dbt-table mb-2" data-testid="journal-table">
                         <thead><tr><th>When</th><th>Type</th><th>Description</th><th>Decision</th></tr></thead>
                         <tbody>
                             @foreach (var e in _window.JournalEntries.OrderBy(e => e.TimestampUtc))
@@ -123,7 +126,7 @@ else
 
                 <div class="row g-2 mb-2">
                     <div class="col-4">
-                        <select class="form-select form-select-sm" @bind="_entryType">
+                        <label class="form-label small mb-1" for="changewindow-entry-type">Entry type</label><select id="changewindow-entry-type" class="form-select form-select-sm" @bind="_entryType">
                             @foreach (var t in Enum.GetValues<CutoverJournalEntryType>())
                             {
                                 <option value="@t">@t</option>
@@ -131,16 +134,16 @@ else
                         </select>
                     </div>
                     <div class="col-4">
-                        <select class="form-select form-select-sm" @bind="_entryDecision">
+                        <label class="form-label small mb-1" for="changewindow-entry-decision">Go/no-go decision</label><select id="changewindow-entry-decision" class="form-select form-select-sm" @bind="_entryDecision">
                             @foreach (var d in Enum.GetValues<GoNoGoDecision>())
                             {
                                 <option value="@d">@d</option>
                             }
                         </select>
                     </div>
-                    <div class="col-4"><input class="form-control form-control-sm" placeholder="Description" @bind="_entryDescription" @bind:event="oninput" /></div>
+                    <div class="col-4"><label class="form-label small mb-1" for="changewindowdetail-description">Description</label><input class="form-control form-control-sm" placeholder="Description" id="changewindowdetail-description" @bind="_entryDescription" @bind:event="oninput" /></div>
                 </div>
-                <div class="mb-2"><input class="form-control form-control-sm" placeholder="Traffic/write-state note" @bind="_entryTrafficNote" @bind:event="oninput" /></div>
+                <div class="mb-2"><label class="form-label small mb-1" for="changewindowdetail-traffic-write-state-note">Traffic/write-state note</label><input class="form-control form-control-sm" placeholder="Traffic/write-state note" id="changewindowdetail-traffic-write-state-note" @bind="_entryTrafficNote" @bind:event="oninput" /></div>
                 <AuthorizeView Roles="@Roles.CanEditPolicy" Context="journalAuth">
                 <Authorized>
                 <button class="btn btn-primary btn-sm" @onclick="AddJournalEntry" disabled="@string.IsNullOrWhiteSpace(_entryDescription)" data-testid="add-journal-entry-button">Add journal entry</button>

@@ -16,12 +16,12 @@
 
 @if (!_loaded)
 {
-    <div class="spinner-ring"></div>
+    <div class="spinner-ring" role="status"><span class="visually-hidden">Loading</span></div>
 }
 else if (_campaign is null)
 {
     <div class="dbt-card" style="max-width:600px;">
-        <div class="empty-state py-4"><i class="bi bi-question-diamond"></i> Campaign #@Id doesn't exist.</div>
+        <div class="empty-state py-4"><i aria-hidden="true" class="bi bi-question-diamond"></i> Campaign #@Id doesn't exist.</div>
         <a class="btn btn-outline-secondary" href="/campaigns">Back to campaigns</a>
     </div>
 }
@@ -29,11 +29,10 @@ else
 {
     <div class="app-topbar">
         <div>
-            <div class="eyebrow">Epic 20 (D11)</div>
             <h1>Rehearsal, recovery &amp; rollback evidence</h1>
             <div class="subtitle">
                 @_campaign.Name · <a href="/campaigns/@Id">Back to campaign</a> ·
-                Named source/target, a representative dataset, measured RPO/RTO vs. target, and an explicit plan for post-cutover writes — never implying a newer-format backup always restores to an older engine.
+                Named source/target, a representative dataset, measured RPO/RTO vs. target, and an explicit plan for post-cutover writes. A newer-format backup is never assumed to restore to an older engine.
             </div>
         </div>
     </div>
@@ -41,9 +40,9 @@ else
     <div class="row g-3">
         <div class="col-lg-5">
             <div class="dbt-card">
-                <h2 class="h6 text-muted text-uppercase mb-3">Record a rehearsal</h2>
+                <h2 class="h6 text-muted mb-3">Record a rehearsal</h2>
                 <div class="mb-2">
-                    <select class="form-select form-select-sm" @bind="_instanceId" data-testid="rehearsal-instance-select">
+                    <label class="form-label small mb-1" for="rehearsals-instance">Instance</label><select id="rehearsals-instance" class="form-select form-select-sm" @bind="_instanceId" data-testid="rehearsal-instance-select">
                         <option value="0">Choose instance…</option>
                         @foreach (var link in _campaign.InstanceLinks)
                         {
@@ -52,25 +51,25 @@ else
                     </select>
                 </div>
                 <div class="row g-2 mb-2">
-                    <div class="col-6"><input class="form-control form-control-sm" placeholder="Source label" @bind="_sourceLabel" @bind:event="oninput" /></div>
-                    <div class="col-6"><input class="form-control form-control-sm" placeholder="Target label" @bind="_targetLabel" @bind:event="oninput" /></div>
+                    <div class="col-6"><label class="form-label small mb-1" for="campaignrehearsals-source-label">Source label</label><input class="form-control form-control-sm" placeholder="Source label" id="campaignrehearsals-source-label" @bind="_sourceLabel" @bind:event="oninput" /></div>
+                    <div class="col-6"><label class="form-label small mb-1" for="campaignrehearsals-target-label">Target label</label><input class="form-control form-control-sm" placeholder="Target label" id="campaignrehearsals-target-label" @bind="_targetLabel" @bind:event="oninput" /></div>
                 </div>
-                <div class="mb-2"><input class="form-control form-control-sm" placeholder="Representative dataset description" @bind="_dataset" @bind:event="oninput" /></div>
+                <div class="mb-2"><label class="form-label small mb-1" for="campaignrehearsals-representative-dataset-description">Representative dataset description</label><input class="form-control form-control-sm" placeholder="Representative dataset description" id="campaignrehearsals-representative-dataset-description" @bind="_dataset" @bind:event="oninput" /></div>
                 <div class="row g-2 mb-2">
                     <div class="col-6">
-                        <select class="form-select form-select-sm" @bind="_method">
+                        <label class="form-label small mb-1" for="rehearsals-method">Method</label><select id="rehearsals-method" class="form-select form-select-sm" @bind="_method">
                             @foreach (var m in Enum.GetValues<MigrationMethod>())
                             {
                                 <option value="@m">@m</option>
                             }
                         </select>
                     </div>
-                    <div class="col-6"><input type="number" class="form-control form-control-sm" placeholder="Duration (minutes)" @bind="_durationMinutes" /></div>
+                    <div class="col-6"><label class="form-label small mb-1" for="campaignrehearsals-duration-minutes">Duration (minutes)</label><input type="number" class="form-control form-control-sm" placeholder="Duration (minutes)" id="campaignrehearsals-duration-minutes" @bind="_durationMinutes" /></div>
                 </div>
                 <div class="row g-2 mb-2">
                     <div class="col-6">
-                        <label class="form-label small">Backup-restore outcome</label>
-                        <select class="form-select form-select-sm" @bind="_backupRestoreOutcome" data-testid="backup-restore-outcome">
+                        <label for="campaignrehearsals-backup-restore-outcome" class="form-label small">Backup-restore outcome</label>
+                        <select id="campaignrehearsals-backup-restore-outcome" class="form-select form-select-sm" @bind="_backupRestoreOutcome" data-testid="backup-restore-outcome">
                             @foreach (var o in Enum.GetValues<EvidenceCheckOutcome>())
                             {
                                 <option value="@o">@o</option>
@@ -78,8 +77,8 @@ else
                         </select>
                     </div>
                     <div class="col-6">
-                        <label class="form-label small">Correctness outcome</label>
-                        <select class="form-select form-select-sm" @bind="_correctnessOutcome" data-testid="correctness-outcome">
+                        <label for="campaignrehearsals-correctness-outcome" class="form-label small">Correctness outcome</label>
+                        <select id="campaignrehearsals-correctness-outcome" class="form-select form-select-sm" @bind="_correctnessOutcome" data-testid="correctness-outcome">
                             @foreach (var o in Enum.GetValues<EvidenceCheckOutcome>())
                             {
                                 <option value="@o">@o</option>
@@ -87,40 +86,40 @@ else
                         </select>
                     </div>
                 </div>
-                <div class="mb-2"><input class="form-control form-control-sm" placeholder="Correctness check notes" @bind="_correctnessNotes" @bind:event="oninput" /></div>
+                <div class="mb-2"><label class="form-label small mb-1" for="campaignrehearsals-correctness-check-notes">Correctness check notes</label><input class="form-control form-control-sm" placeholder="Correctness check notes" id="campaignrehearsals-correctness-check-notes" @bind="_correctnessNotes" @bind:event="oninput" /></div>
                 <div class="row g-2 mb-2">
                     <div class="col-6">
-                        <label class="form-label small">Performance outcome</label>
-                        <select class="form-select form-select-sm" @bind="_performanceOutcome" data-testid="performance-outcome">
+                        <label for="campaignrehearsals-performance-outcome" class="form-label small">Performance outcome</label>
+                        <select id="campaignrehearsals-performance-outcome" class="form-select form-select-sm" @bind="_performanceOutcome" data-testid="performance-outcome">
                             @foreach (var o in Enum.GetValues<EvidenceCheckOutcome>())
                             {
                                 <option value="@o">@o</option>
                             }
                         </select>
                     </div>
-                    <div class="col-6"><input class="form-control form-control-sm" placeholder="Performance comparison notes" @bind="_performanceNotes" @bind:event="oninput" /></div>
+                    <div class="col-6"><label class="form-label small mb-1" for="campaignrehearsals-performance-comparison-notes">Performance comparison notes</label><input class="form-control form-control-sm" placeholder="Performance comparison notes" id="campaignrehearsals-performance-comparison-notes" @bind="_performanceNotes" @bind:event="oninput" /></div>
                 </div>
                 <div class="row g-2 mb-2">
-                    <div class="col-3"><input type="number" class="form-control form-control-sm" placeholder="Target RPO (min)" @bind="_targetRpo" /></div>
-                    <div class="col-3"><input type="number" class="form-control form-control-sm" placeholder="Target RTO (min)" @bind="_targetRto" /></div>
-                    <div class="col-3"><input type="number" class="form-control form-control-sm" placeholder="Measured RPO (min)" @bind="_measuredRpo" /></div>
-                    <div class="col-3"><input type="number" class="form-control form-control-sm" placeholder="Measured RTO (min)" @bind="_measuredRto" /></div>
+                    <div class="col-3"><label class="form-label small mb-1" for="campaignrehearsals-target-rpo-min">Target RPO (min)</label><input type="number" class="form-control form-control-sm" placeholder="Target RPO (min)" id="campaignrehearsals-target-rpo-min" @bind="_targetRpo" /></div>
+                    <div class="col-3"><label class="form-label small mb-1" for="campaignrehearsals-target-rto-min">Target RTO (min)</label><input type="number" class="form-control form-control-sm" placeholder="Target RTO (min)" id="campaignrehearsals-target-rto-min" @bind="_targetRto" /></div>
+                    <div class="col-3"><label class="form-label small mb-1" for="campaignrehearsals-measured-rpo-min">Measured RPO (min)</label><input type="number" class="form-control form-control-sm" placeholder="Measured RPO (min)" id="campaignrehearsals-measured-rpo-min" @bind="_measuredRpo" /></div>
+                    <div class="col-3"><label class="form-label small mb-1" for="campaignrehearsals-measured-rto-min">Measured RTO (min)</label><input type="number" class="form-control form-control-sm" placeholder="Measured RTO (min)" id="campaignrehearsals-measured-rto-min" @bind="_measuredRto" /></div>
                 </div>
-                <div class="mb-2"><input class="form-control form-control-sm" placeholder="Prerequisites" @bind="_prerequisites" @bind:event="oninput" /></div>
-                <div class="mb-2"><input class="form-control form-control-sm" placeholder="Recovery/key dependencies (encryption keys, certs…)" @bind="_recoveryDeps" @bind:event="oninput" /></div>
+                <div class="mb-2"><label class="form-label small mb-1" for="campaignrehearsals-prerequisites">Prerequisites</label><input class="form-control form-control-sm" placeholder="Prerequisites" id="campaignrehearsals-prerequisites" @bind="_prerequisites" @bind:event="oninput" /></div>
+                <div class="mb-2"><label class="form-label small mb-1" for="campaignrehearsals-recovery-key-dependencies-encryption-key">Recovery/key dependencies (encryption keys, certs…)</label><input class="form-control form-control-sm" placeholder="Recovery/key dependencies (encryption keys, certs…)" id="campaignrehearsals-recovery-key-dependencies-encryption-key" @bind="_recoveryDeps" @bind:event="oninput" /></div>
                 <div class="row g-2 mb-2">
                     <div class="col-5">
-                        <label class="form-label small">Post-cutover writes</label>
-                        <select class="form-select form-select-sm" @bind="_writeDisposition" data-testid="write-disposition">
+                        <label for="campaignrehearsals-post-cutover-writes" class="form-label small">Post-cutover writes</label>
+                        <select id="campaignrehearsals-post-cutover-writes" class="form-select form-select-sm" @bind="_writeDisposition" data-testid="write-disposition">
                             @foreach (var d in Enum.GetValues<PostCutoverWriteDisposition>())
                             {
                                 <option value="@d">@d</option>
                             }
                         </select>
                     </div>
-                    <div class="col-7"><input class="form-control form-control-sm" placeholder="Reconciliation plan (required unless N/A)" @bind="_reconciliationPlan" @bind:event="oninput" /></div>
+                    <div class="col-7"><label class="form-label small mb-1" for="campaignrehearsals-reconciliation-plan-required-unless-n-a">Reconciliation plan (required unless N/A)</label><input class="form-control form-control-sm" placeholder="Reconciliation plan (required unless N/A)" id="campaignrehearsals-reconciliation-plan-required-unless-n-a" @bind="_reconciliationPlan" @bind:event="oninput" /></div>
                 </div>
-                <div class="mb-2"><input class="form-control form-control-sm" placeholder="Performed by" @bind="_performedBy" @bind:event="oninput" /></div>
+                <div class="mb-2"><label class="form-label small mb-1" for="campaignrehearsals-performed-by">Performed by</label><input class="form-control form-control-sm" placeholder="Performed by" id="campaignrehearsals-performed-by" @bind="_performedBy" @bind:event="oninput" /></div>
 
                 <p class="small text-muted mb-1">Rollback decision points:</p>
                 @for (var i = 0; i < _decisionPoints.Count; i++)
@@ -129,8 +128,8 @@ else
                     <div class="small mb-1">@(i + 1). @dp.TriggerCondition → @dp.Decision @(dp.IsPointOfNoReturn ? "(point of no return)" : "")</div>
                 }
                 <div class="row g-2 mb-2">
-                    <div class="col-5"><input class="form-control form-control-sm" placeholder="Trigger condition" @bind="_dpTrigger" @bind:event="oninput" /></div>
-                    <div class="col-5"><input class="form-control form-control-sm" placeholder="Decision" @bind="_dpDecision" @bind:event="oninput" /></div>
+                    <div class="col-5"><label class="form-label small mb-1" for="campaignrehearsals-trigger-condition">Trigger condition</label><input class="form-control form-control-sm" placeholder="Trigger condition" id="campaignrehearsals-trigger-condition" @bind="_dpTrigger" @bind:event="oninput" /></div>
+                    <div class="col-5"><label class="form-label small mb-1" for="campaignrehearsals-decision">Decision</label><input class="form-control form-control-sm" placeholder="Decision" id="campaignrehearsals-decision" @bind="_dpDecision" @bind:event="oninput" /></div>
                     <div class="col-2 form-check pt-2">
                         <input class="form-check-input" type="checkbox" @bind="_dpIsPointOfNoReturn" id="dp-ponr" />
                         <label class="form-check-label small" for="dp-ponr">PONR</label>
@@ -145,11 +144,11 @@ else
         <div class="col-lg-7">
             @if (_rehearsals.Count == 0)
             {
-                <div class="empty-state"><i class="bi bi-arrow-repeat"></i> No rehearsals recorded yet for this campaign — every linked instance's readiness shows as Missing until one is.</div>
+                <div class="empty-state"><i aria-hidden="true" class="bi bi-arrow-repeat"></i> No rehearsals recorded for this campaign yet. Until one is, every linked instance shows readiness as Missing.</div>
             }
             else
             {
-                <table class="table table-sm dbt-table" data-testid="rehearsal-table">
+                <table aria-label="Recorded rehearsals" class="table table-sm dbt-table" data-testid="rehearsal-table">
                     <thead><tr><th>Instance</th><th>Source → target</th><th>Performed</th><th>Readiness</th></tr></thead>
                     <tbody>
                         @foreach (var r in _rehearsals)
@@ -256,7 +255,7 @@ else
 
         await Rehearsals.RecordAsync(rehearsal, _userName ?? "unknown");
         var readiness = RehearsalEvidenceEvaluator.Evaluate(rehearsal, DateTime.UtcNow);
-        Toasts.Success($"Rehearsal recorded — readiness: {readiness.Status}.");
+        Toasts.Success($"Rehearsal recorded. Readiness: {readiness.Status}.");
 
         _sourceLabel = _targetLabel = _dataset = _performedBy = _correctnessNotes = _performanceNotes = _prerequisites = _recoveryDeps = _reconciliationPlan = "";
         _durationMinutes = _targetRpo = _targetRto = _measuredRpo = _measuredRto = null;

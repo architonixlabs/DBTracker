@@ -18,12 +18,12 @@
 
 @if (!_loaded)
 {
-    <div class="spinner-ring"></div>
+    <div class="spinner-ring" role="status"><span class="visually-hidden">Loading</span></div>
 }
 else if (_campaign is null)
 {
     <div class="dbt-card" style="max-width:600px;">
-        <div class="empty-state py-4"><i class="bi bi-question-diamond"></i> Campaign #@Id doesn't exist.</div>
+        <div class="empty-state py-4"><i aria-hidden="true" class="bi bi-question-diamond"></i> Campaign #@Id doesn't exist.</div>
         <a class="btn btn-outline-secondary" href="/campaigns">Back to campaigns</a>
     </div>
 }
@@ -31,14 +31,13 @@ else
 {
     <div class="app-topbar">
         <div>
-            <div class="eyebrow">Migration campaign · Epic 19 (D10)</div>
             <h1>@_campaign.Name <span class="badge-health dot Overdue" data-testid="campaign-detail-state">@_campaign.State</span></h1>
             <div class="subtitle">
                 @_campaign.SourceLabel → @_campaign.TargetLabel · @_campaign.ChosenMethod · <a href="/campaigns">Back to campaigns</a> ·
-                <a href="/campaigns/@Id/rehearsals">Rehearsals (D11)</a> ·
-                <a href="/campaigns/@Id/change-windows">Change windows (D12)</a> ·
-                <a href="/campaigns/@Id/validation">Validation (D13)</a> ·
-                <a href="/exceptions">Exceptions (D14)</a>
+                <a href="/campaigns/@Id/rehearsals">Rehearsals</a> ·
+                <a href="/campaigns/@Id/change-windows">Change windows</a> ·
+                <a href="/campaigns/@Id/validation">Validation</a> ·
+                <a href="/exceptions">Exceptions</a>
             </div>
         </div>
     </div>
@@ -48,15 +47,15 @@ else
         <div class="dbt-card mb-3" data-testid="completion-gate-banner" style="border-color:@(_completionGate.CanComplete ? "var(--dbt-ontrack)" : "var(--dbt-overdue)");">
             @if (_completionGate.CanComplete)
             {
-                <strong style="color:var(--dbt-ontrack);"><i class="bi bi-check-circle"></i> Completion readiness: ready.</strong>
+                <strong style="color:var(--dbt-ontrack);"><i aria-hidden="true" class="bi bi-check-circle"></i> Completion readiness: ready.</strong>
                 @if (_completionGate.UsedException)
                 {
-                    <span class="small"> — proceeding on an active D14 exception, not full evidence.</span>
+                    <span class="small"> Proceeding on an active exception, not full evidence.</span>
                 }
             }
             else
             {
-                <strong style="color:var(--dbt-overdue);"><i class="bi bi-exclamation-triangle"></i> Completion readiness: blocked.</strong>
+                <strong style="color:var(--dbt-overdue);"><i aria-hidden="true" class="bi bi-exclamation-triangle"></i> Completion readiness: blocked.</strong>
                 <ul class="small mb-0">
                     @foreach (var r in _completionGate.BlockingReasons)
                     {
@@ -71,16 +70,16 @@ else
     <div class="row g-3">
         <div class="col-lg-6">
             <div class="dbt-card h-100">
-                <h2 class="h6 text-muted text-uppercase mb-3">Overview</h2>
+                <h2 class="h6 text-muted mb-3">Overview</h2>
                 <dl class="row small mb-2">
-                    <dt class="col-5">Reason</dt><dd class="col-7">@EmDash(_campaign.Reason)</dd>
-                    <dt class="col-5">Change ticket</dt><dd class="col-7">@EmDash(_campaign.ChangeTicketReference)</dd>
-                    <dt class="col-5">DBA owner</dt><dd class="col-7">@EmDash(_campaign.AccountableDbaTeam?.Name)</dd>
-                    <dt class="col-5">App owner</dt><dd class="col-7">@EmDash(_campaign.AccountableAppTeam?.Name)</dd>
-                    <dt class="col-5">Platform owner</dt><dd class="col-7">@EmDash(_campaign.AccountablePlatformTeam?.Name)</dd>
-                    <dt class="col-5">Estimated effort</dt><dd class="col-7">@(_campaign.EstimatedEffortHours?.ToString("0.#") ?? "—") h</dd>
-                    <dt class="col-5">Estimated cost</dt><dd class="col-7">@(_campaign.EstimatedCost?.ToString("0.##") ?? "—")</dd>
-                    <dt class="col-5">Blockers</dt><dd class="col-7">@EmDash(_campaign.Blockers)</dd>
+                    <dt class="col-5">Reason</dt><dd class="col-7">@OrNotRecorded(_campaign.Reason)</dd>
+                    <dt class="col-5">Change ticket</dt><dd class="col-7">@OrNotRecorded(_campaign.ChangeTicketReference)</dd>
+                    <dt class="col-5">DBA owner</dt><dd class="col-7">@OrNotRecorded(_campaign.AccountableDbaTeam?.Name)</dd>
+                    <dt class="col-5">App owner</dt><dd class="col-7">@OrNotRecorded(_campaign.AccountableAppTeam?.Name)</dd>
+                    <dt class="col-5">Platform owner</dt><dd class="col-7">@OrNotRecorded(_campaign.AccountablePlatformTeam?.Name)</dd>
+                    <dt class="col-5">Estimated effort</dt><dd class="col-7">@(_campaign.EstimatedEffortHours is { } effort ? $"{effort:0.#} h" : "Not estimated")</dd>
+                    <dt class="col-5">Estimated cost</dt><dd class="col-7">@(_campaign.EstimatedCost?.ToString("0.##") ?? "Not estimated")</dd>
+                    <dt class="col-5">Blockers</dt><dd class="col-7">@OrNotRecorded(_campaign.Blockers)</dd>
                 </dl>
 
                 <p class="small text-muted mb-1">Affected deployments:</p>
@@ -91,21 +90,21 @@ else
                     }
                 </ul>
                 <div class="d-flex gap-2">
-                    <select class="form-select form-select-sm" @bind="_addInstanceId">
+                    <label class="visually-hidden" for="campaigndetail-add-instance">Instance to add</label><select id="campaigndetail-add-instance" class="form-select form-select-sm" @bind="_addInstanceId">
                         <option value="0">Add instance…</option>
                         @foreach (var i in _instances.Where(i => !_campaign.InstanceLinks.Any(l => l.DatabaseInstanceId == i.Id)))
                         {
                             <option value="@i.Id">@i.Name</option>
                         }
                     </select>
-                    <button class="btn btn-outline-secondary btn-sm" @onclick="AddInstance" disabled="@(_addInstanceId == 0)">Add</button>
+                    <button class="btn btn-outline-secondary btn-sm" @onclick="AddInstance" disabled="@(_addInstanceId == 0)">Add to campaign</button>
                 </div>
             </div>
         </div>
 
         <div class="col-lg-6">
             <div class="dbt-card h-100">
-                <h2 class="h6 text-muted text-uppercase mb-3">State transition</h2>
+                <h2 class="h6 text-muted mb-3">State transition</h2>
                 <p class="small mb-2">Current state: <strong>@_campaign.State</strong></p>
 
                 @{
@@ -113,25 +112,29 @@ else
                 }
                 @if (nextStates.Count == 0)
                 {
-                    <p class="small text-muted">Terminal state — no further transitions.</p>
+                    <p class="small text-muted">Final state. No further transitions.</p>
                 }
                 else
                 {
                     <div class="d-flex gap-2 mb-2">
-                        <select class="form-select form-select-sm" @bind="_nextState" data-testid="next-state-select">
+                        <label class="visually-hidden" for="campaigndetail-next-state">Next state</label><select id="campaigndetail-next-state" class="form-select form-select-sm" @bind="_nextState" data-testid="next-state-select">
                             @foreach (var s in nextStates)
                             {
                                 <option value="@s">@s</option>
                             }
                         </select>
-                        <input class="form-control form-control-sm" placeholder="Reason" @bind="_transitionReason" @bind:event="oninput" />
+                        <label class="visually-hidden" for="campaigndetail-transition-reason">Transition reason</label><input id="campaigndetail-transition-reason" class="form-control form-control-sm" placeholder="Reason" @bind="_transitionReason" @bind:event="oninput" />
                         <button class="btn btn-primary btn-sm" @onclick="Transition" data-testid="transition-button">Transition</button>
                     </div>
                 }
 
-                @if (_campaign.StateTransitions.Count > 0)
+                @if (_campaign.StateTransitions.Count == 0)
                 {
-                    <table class="table table-sm dbt-table mb-0" data-testid="transition-history">
+                    <p class="small text-muted mb-2">No state changes recorded yet.</p>
+                }
+                else
+                {
+                    <table aria-label="State change history" class="table table-sm dbt-table mb-0" data-testid="transition-history">
                         <thead><tr><th>When</th><th>From → to</th><th>By</th><th>Reason</th></tr></thead>
                         <tbody>
                             @foreach (var t in _campaign.StateTransitions.OrderByDescending(t => t.TransitionedAtUtc))
@@ -146,17 +149,21 @@ else
 
         <div class="col-lg-6">
             <div class="dbt-card h-100">
-                <h2 class="h6 text-muted text-uppercase mb-3">Alternatives compared</h2>
-                <p class="small text-muted">Upgrade vs. patch vs. replace vs. retire vs. a documented support-extension/exception — recording the comparison, not just the final pick.</p>
+                <h2 class="h6 text-muted mb-3">Alternatives compared</h2>
+                <p class="small text-muted">Compare an upgrade, a patch, a replacement, retirement, or a documented support extension or exception. Record the comparison, not just the final pick.</p>
 
-                @if (_campaign.Alternatives.Count > 0)
+                @if (_campaign.Alternatives.Count == 0)
+                {
+                    <p class="small text-muted mb-2">No alternatives recorded yet.</p>
+                }
+                else
                 {
                     @foreach (var alt in _campaign.Alternatives)
                     {
                         <div class="mb-2 pb-2 d-flex justify-content-between align-items-start" style="border-bottom:1px solid var(--dbt-line);" data-testid="alternative-row">
                             <div>
-                                <strong class="small">@alt.Type</strong> <span class="small text-muted">— @alt.Description</span>
-                                <div class="small text-muted">@(alt.EstimatedEffortHours?.ToString("0.#") ?? "—") h · @(alt.EstimatedCost?.ToString("0.##") ?? "—") · @alt.RiskNotes</div>
+                                <strong class="small">@alt.Type</strong> <span class="small text-muted">: @alt.Description</span>
+                                <div class="small text-muted">@(alt.EstimatedEffortHours is { } altEffort ? $"{altEffort:0.#} h" : "Effort not estimated") · @(alt.EstimatedCost?.ToString("0.##") ?? "Cost not estimated") · @alt.RiskNotes</div>
                             </div>
                             @if (alt.IsChosen)
                             {
@@ -172,14 +179,14 @@ else
 
                 <div class="row g-2 mb-2 mt-2">
                     <div class="col-4">
-                        <select class="form-select form-select-sm" @bind="_altType">
+                        <label class="form-label small mb-1" for="campaigndetail-alt-type">Alternative type</label><select id="campaigndetail-alt-type" class="form-select form-select-sm" @bind="_altType">
                             @foreach (var t in Enum.GetValues<CampaignAlternativeType>())
                             {
                                 <option value="@t">@t</option>
                             }
                         </select>
                     </div>
-                    <div class="col-8"><input class="form-control form-control-sm" placeholder="Description" @bind="_altDescription" @bind:event="oninput" /></div>
+                    <div class="col-8"><label class="form-label small mb-1" for="campaigndetail-description">Description</label><input class="form-control form-control-sm" placeholder="Description" id="campaigndetail-description" @bind="_altDescription" @bind:event="oninput" /></div>
                 </div>
                 <button class="btn btn-outline-secondary btn-sm" @onclick="AddAlternative" disabled="@string.IsNullOrWhiteSpace(_altDescription)">Add alternative</button>
             </div>
@@ -187,11 +194,15 @@ else
 
         <div class="col-lg-6">
             <div class="dbt-card h-100">
-                <h2 class="h6 text-muted text-uppercase mb-3">Approval history</h2>
+                <h2 class="h6 text-muted mb-3">Approval history</h2>
 
-                @if (_campaign.Approvals.Count > 0)
+                @if (_campaign.Approvals.Count == 0)
                 {
-                    <table class="table table-sm dbt-table mb-2">
+                    <p class="small text-muted mb-2">No approval decisions recorded yet.</p>
+                }
+                else
+                {
+                    <table aria-label="Approval history" class="table table-sm dbt-table mb-2">
                         <thead><tr><th>Scope</th><th>Decision</th><th>Approver</th><th>When</th></tr></thead>
                         <tbody>
                             @foreach (var a in _campaign.Approvals.OrderByDescending(a => a.DecidedAtUtc))
@@ -203,16 +214,16 @@ else
                 }
 
                 <div class="row g-2 mb-2">
-                    <div class="col-4"><input class="form-control form-control-sm" placeholder="Scope (e.g. DBA technical)" @bind="_approvalScope" @bind:event="oninput" /></div>
+                    <div class="col-4"><label class="form-label small mb-1" for="campaigndetail-scope">Scope</label><input class="form-control form-control-sm" placeholder="Scope (e.g. DBA technical)" id="campaigndetail-scope" @bind="_approvalScope" @bind:event="oninput" /></div>
                     <div class="col-4">
-                        <select class="form-select form-select-sm" @bind="_approvalDecision">
+                        <label class="form-label small mb-1" for="campaigndetail-approval-decision">Decision</label><select id="campaigndetail-approval-decision" class="form-select form-select-sm" @bind="_approvalDecision">
                             @foreach (var d in Enum.GetValues<CampaignApprovalDecision>())
                             {
                                 <option value="@d">@d</option>
                             }
                         </select>
                     </div>
-                    <div class="col-4"><input class="form-control form-control-sm" placeholder="Approver name" @bind="_approverName" @bind:event="oninput" /></div>
+                    <div class="col-4"><label class="form-label small mb-1" for="campaigndetail-approver-name">Approver name</label><input class="form-control form-control-sm" placeholder="Approver name" id="campaigndetail-approver-name" @bind="_approverName" @bind:event="oninput" /></div>
                 </div>
                 <button class="btn btn-outline-secondary btn-sm" @onclick="RecordApproval" disabled="@(string.IsNullOrWhiteSpace(_approvalScope) || string.IsNullOrWhiteSpace(_approverName))">Record approval</button>
             </div>
@@ -312,5 +323,5 @@ else
         await Load();
     }
 
-    private static string EmDash(string? value) => string.IsNullOrWhiteSpace(value) ? "—" : value;
+    private static string OrNotRecorded(string? value) => string.IsNullOrWhiteSpace(value) ? "Not recorded" : value;
 }

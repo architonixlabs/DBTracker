@@ -17,12 +17,12 @@
 
 @if (!_loaded)
 {
-    <div class="spinner-ring"></div>
+    <div class="spinner-ring" role="status"><span class="visually-hidden">Loading</span></div>
 }
 else if (_campaign is null)
 {
     <div class="dbt-card" style="max-width:600px;">
-        <div class="empty-state py-4"><i class="bi bi-question-diamond"></i> Campaign #@Id doesn't exist.</div>
+        <div class="empty-state py-4"><i aria-hidden="true" class="bi bi-question-diamond"></i> Campaign #@Id doesn't exist.</div>
         <a class="btn btn-outline-secondary" href="/campaigns">Back to campaigns</a>
     </div>
 }
@@ -30,11 +30,10 @@ else
 {
     <div class="app-topbar">
         <div>
-            <div class="eyebrow">Epic 20 (D13)</div>
             <h1>Post-change validation</h1>
             <div class="subtitle">
                 @_campaign.Name · <a href="/campaigns/@Id">Back to campaign</a> ·
-                A Version text edit alone never completes a change — completion requires the evidence below, every required sign-off, and current rehearsal evidence.
+                Editing the Version text alone never completes a change. Completion requires the evidence below, every required sign-off, and current rehearsal evidence.
             </div>
         </div>
     </div>
@@ -62,9 +61,9 @@ else
     <div class="row g-3">
         <div class="col-lg-6">
             <div class="dbt-card">
-                <h2 class="h6 text-muted text-uppercase mb-3">Record validation</h2>
+                <h2 class="h6 text-muted mb-3">Record validation</h2>
                 <div class="mb-2">
-                    <select class="form-select form-select-sm" @bind="_instanceId" data-testid="validation-instance-select">
+                    <label class="form-label small mb-1" for="validation-instance">Instance</label><select id="validation-instance" class="form-select form-select-sm" @bind="_instanceId" data-testid="validation-instance-select">
                         <option value="0">Choose instance…</option>
                         @foreach (var link in _campaign.InstanceLinks)
                         {
@@ -73,13 +72,13 @@ else
                     </select>
                 </div>
                 <div class="row g-2 mb-2">
-                    <div class="col-6"><input class="form-control form-control-sm" placeholder="Observed target build" @bind="_observedBuild" @bind:event="oninput" /></div>
-                    <div class="col-6"><input class="form-control form-control-sm" placeholder="Observed compatibility level" @bind="_observedCompat" @bind:event="oninput" /></div>
+                    <div class="col-6"><label class="form-label small mb-1" for="campaignvalidation-observed-target-build">Observed target build</label><input class="form-control form-control-sm" placeholder="Observed target build" id="campaignvalidation-observed-target-build" @bind="_observedBuild" @bind:event="oninput" /></div>
+                    <div class="col-6"><label class="form-label small mb-1" for="campaignvalidation-observed-compatibility-level">Observed compatibility level</label><input class="form-control form-control-sm" placeholder="Observed compatibility level" id="campaignvalidation-observed-compatibility-level" @bind="_observedCompat" @bind:event="oninput" /></div>
                 </div>
                 <div class="row g-2 mb-2">
                     <div class="col-6">
-                        <label class="form-label small">Application tests</label>
-                        <select class="form-select form-select-sm" @bind="_appTests" data-testid="app-tests-outcome">
+                        <label for="campaignvalidation-application-tests" class="form-label small">Application tests</label>
+                        <select id="campaignvalidation-application-tests" class="form-select form-select-sm" @bind="_appTests" data-testid="app-tests-outcome">
                             @foreach (var o in Enum.GetValues<EvidenceCheckOutcome>())
                             {
                                 <option value="@o">@o</option>
@@ -87,8 +86,8 @@ else
                         </select>
                     </div>
                     <div class="col-6">
-                        <label class="form-label small">Integrity checks</label>
-                        <select class="form-select form-select-sm" @bind="_integrity" data-testid="integrity-outcome">
+                        <label for="campaignvalidation-integrity-checks" class="form-label small">Integrity checks</label>
+                        <select id="campaignvalidation-integrity-checks" class="form-select form-select-sm" @bind="_integrity" data-testid="integrity-outcome">
                             @foreach (var o in Enum.GetValues<EvidenceCheckOutcome>())
                             {
                                 <option value="@o">@o</option>
@@ -96,11 +95,11 @@ else
                         </select>
                     </div>
                 </div>
-                <div class="mb-2"><input class="form-control form-control-sm" placeholder="Performance comparison notes" @bind="_perfNotes" @bind:event="oninput" /></div>
+                <div class="mb-2"><label class="form-label small mb-1" for="campaignvalidation-performance-comparison-notes">Performance comparison notes</label><input class="form-control form-control-sm" placeholder="Performance comparison notes" id="campaignvalidation-performance-comparison-notes" @bind="_perfNotes" @bind:event="oninput" /></div>
                 <div class="row g-2 mb-2">
                     <div class="col-6">
-                        <label class="form-label small">Jobs/permissions</label>
-                        <select class="form-select form-select-sm" @bind="_jobsPermissions" data-testid="jobs-permissions-outcome">
+                        <label for="campaignvalidation-jobs-permissions" class="form-label small">Jobs/permissions</label>
+                        <select id="campaignvalidation-jobs-permissions" class="form-select form-select-sm" @bind="_jobsPermissions" data-testid="jobs-permissions-outcome">
                             @foreach (var o in Enum.GetValues<EvidenceCheckOutcome>())
                             {
                                 <option value="@o">@o</option>
@@ -108,8 +107,8 @@ else
                         </select>
                     </div>
                     <div class="col-6">
-                        <label class="form-label small">HA/replication state</label>
-                        <select class="form-select form-select-sm" @bind="_haState" data-testid="ha-state-outcome">
+                        <label for="campaignvalidation-ha-replication-state" class="form-label small">HA/replication state</label>
+                        <select id="campaignvalidation-ha-replication-state" class="form-select form-select-sm" @bind="_haState" data-testid="ha-state-outcome">
                             @foreach (var o in Enum.GetValues<EvidenceCheckOutcome>())
                             {
                                 <option value="@o">@o</option>
@@ -118,8 +117,8 @@ else
                     </div>
                 </div>
                 <div class="mb-2">
-                    <label class="form-label small">New successful backup/restore evidence</label>
-                    <select class="form-select form-select-sm" @bind="_backupRestoreEvidence" data-testid="backup-restore-evidence-outcome">
+                    <label for="campaignvalidation-new-successful-backup-restore-evidence" class="form-label small">New successful backup/restore evidence</label>
+                    <select id="campaignvalidation-new-successful-backup-restore-evidence" class="form-select form-select-sm" @bind="_backupRestoreEvidence" data-testid="backup-restore-evidence-outcome">
                         @foreach (var o in Enum.GetValues<EvidenceCheckOutcome>())
                         {
                             <option value="@o">@o</option>
@@ -128,8 +127,8 @@ else
                 </div>
                 <div class="row g-2 mb-2">
                     <div class="col-6">
-                        <label class="form-label small">Rollback retention deadline</label>
-                        <input type="date" class="form-control form-control-sm" @bind="_rollbackRetentionDeadline" />
+                        <label for="campaignvalidation-rollback-retention-deadline" class="form-label small">Rollback retention deadline</label>
+                        <input id="campaignvalidation-rollback-retention-deadline" type="date" class="form-control form-control-sm" @bind="_rollbackRetentionDeadline" />
                     </div>
                 </div>
                 <button class="btn btn-primary btn-sm" @onclick="SaveValidation" disabled="@(_instanceId == 0)" data-testid="record-validation-button">Record validation</button>
@@ -138,10 +137,10 @@ else
 
         <div class="col-lg-6">
             <div class="dbt-card">
-                <h2 class="h6 text-muted text-uppercase mb-3">Recorded validations &amp; sign-offs</h2>
+                <h2 class="h6 text-muted mb-3">Recorded validations &amp; sign-offs</h2>
                 @if (_validations.Count == 0)
                 {
-                    <div class="empty-state py-3"><i class="bi bi-clipboard-check"></i> None recorded yet.</div>
+                    <div class="empty-state py-3"><i aria-hidden="true" class="bi bi-clipboard-check"></i> None recorded yet.</div>
                 }
                 else
                 {
@@ -149,25 +148,25 @@ else
                     {
                         <div class="mb-2 pb-2" style="border-bottom:1px solid var(--dbt-line);" data-testid="validation-row">
                             <strong class="small">@(v.DatabaseInstance?.Name ?? $"#{v.DatabaseInstanceId}")</strong>
-                            <span class="small text-muted"> — build @v.ObservedTargetBuildText, @v.RecordedAtUtc.ToString("yyyy-MM-dd")</span>
+                            <span class="small text-muted"> · build @v.ObservedTargetBuildText, @v.RecordedAtUtc.ToString("yyyy-MM-dd")</span>
                             <div class="small">App tests: @v.ApplicationTestsOutcome · Integrity: @v.IntegrityCheckOutcome · Backup/restore evidence: @v.NewBackupRestoreEvidenceOutcome</div>
                             @foreach (var s in v.Signoffs)
                             {
                                 <div class="small" data-testid="signoff-row">@s.ReviewerScope: @s.Outcome by @s.ReviewerName</div>
                             }
                             <div class="d-flex gap-2 mt-1">
-                                <select class="form-select form-select-sm" @bind="_signoffScope">
+                                <label class="visually-hidden" for="validation-signoff-scope-@v.Id">Sign-off scope</label><select id="validation-signoff-scope-@v.Id" class="form-select form-select-sm" @bind="_signoffScope">
                                     <option value="DBA">DBA</option>
                                     <option value="Application owner">Application owner</option>
                                     <option value="Security">Security</option>
                                 </select>
-                                <select class="form-select form-select-sm" @bind="_signoffOutcome">
+                                <label class="visually-hidden" for="validation-signoff-outcome-@v.Id">Sign-off outcome</label><select id="validation-signoff-outcome-@v.Id" class="form-select form-select-sm" @bind="_signoffOutcome">
                                     @foreach (var o in Enum.GetValues<SignoffOutcome>())
                                     {
                                         <option value="@o">@o</option>
                                     }
                                 </select>
-                                <input class="form-control form-control-sm" placeholder="Reviewer name" @bind="_signoffReviewer" @bind:event="oninput" />
+                                <label class="visually-hidden" for="validation-signoff-reviewer-@v.Id">Reviewer name</label><input id="validation-signoff-reviewer-@v.Id" class="form-control form-control-sm" placeholder="Reviewer name" @bind="_signoffReviewer" @bind:event="oninput" />
                                 <button class="btn btn-outline-secondary btn-sm" @onclick="() => AddSignoff(v.Id)" disabled="@string.IsNullOrWhiteSpace(_signoffReviewer)" data-testid="add-signoff-button">Sign off</button>
                             </div>
                         </div>

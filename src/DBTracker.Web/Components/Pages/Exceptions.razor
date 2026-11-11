@@ -16,10 +16,9 @@
 
 <div class="app-topbar">
     <div>
-        <div class="eyebrow">Epic 20 (D14)</div>
         <h1>Readiness &amp; support exceptions</h1>
         <div class="subtitle">
-            An explicit, time-boxed risk acceptance against a specific target/gate — never a status override. An exception never
+            An explicit, time-boxed risk acceptance against a specific target or gate, not a status override. An exception never
             changes any vendor fact and never clears the underlying risk; it is distinct from actual paid vendor support coverage.
         </div>
     </div>
@@ -27,7 +26,7 @@
 
 @if (!_loaded)
 {
-    <div class="spinner-ring"></div>
+    <div class="spinner-ring" role="status"><span class="visually-hidden">Loading</span></div>
 }
 else
 {
@@ -36,17 +35,17 @@ else
             <AuthorizeView Roles="@Roles.CanEditPolicy">
             <Authorized>
             <div class="dbt-card">
-                <h2 class="h6 text-muted text-uppercase mb-3">Record an exception</h2>
+                <h2 class="h6 text-muted mb-3">Record an exception</h2>
                 <div class="row g-2 mb-2">
-                    <div class="col-6"><input class="form-control form-control-sm" placeholder="Target type (e.g. MigrationCampaign)" @bind="_targetType" @bind:event="oninput" /></div>
-                    <div class="col-6"><input type="number" class="form-control form-control-sm" placeholder="Target id" @bind="_targetId" /></div>
+                    <div class="col-6"><label class="form-label small mb-1" for="exceptions-target-type">Target type</label><input class="form-control form-control-sm" placeholder="Target type (e.g. MigrationCampaign)" id="exceptions-target-type" @bind="_targetType" @bind:event="oninput" /></div>
+                    <div class="col-6"><label class="form-label small mb-1" for="exceptions-target-id">Target id</label><input type="number" class="form-control form-control-sm" placeholder="Target id" id="exceptions-target-id" @bind="_targetId" /></div>
                 </div>
-                <div class="mb-2"><input class="form-control form-control-sm" placeholder="Waived check/policy reference" @bind="_waivedCheckReference" @bind:event="oninput" /></div>
-                <div class="mb-2"><textarea class="form-control form-control-sm" rows="2" placeholder="Reason" @bind="_reason"></textarea></div>
-                <div class="mb-2"><textarea class="form-control form-control-sm" rows="2" placeholder="Compensating controls" @bind="_compensatingControls"></textarea></div>
+                <div class="mb-2"><label class="form-label small mb-1" for="exceptions-waived-check-policy-reference">Waived check/policy reference</label><input class="form-control form-control-sm" placeholder="Waived check/policy reference" id="exceptions-waived-check-policy-reference" @bind="_waivedCheckReference" @bind:event="oninput" /></div>
+                <div class="mb-2"><label class="form-label small mb-1" for="exceptions-reason">Reason</label><textarea class="form-control form-control-sm" rows="2" placeholder="Reason" id="exceptions-reason" @bind="_reason"></textarea></div>
+                <div class="mb-2"><label class="form-label small mb-1" for="exceptions-compensating-controls">Compensating controls</label><textarea class="form-control form-control-sm" rows="2" placeholder="Compensating controls" id="exceptions-compensating-controls" @bind="_compensatingControls"></textarea></div>
                 <div class="row g-2 mb-2">
                     <div class="col-6">
-                        <select class="form-select form-select-sm" @bind="_ownerTeamId">
+                        <label class="form-label small mb-1" for="exceptions-owner-team">Owner team</label><select id="exceptions-owner-team" class="form-select form-select-sm" @bind="_ownerTeamId">
                             <option value="0">No owner team</option>
                             @foreach (var t in _teams)
                             {
@@ -54,10 +53,10 @@ else
                             }
                         </select>
                     </div>
-                    <div class="col-6"><input class="form-control form-control-sm" placeholder="Accountable owner (name)" @bind="_ownerName" @bind:event="oninput" /></div>
+                    <div class="col-6"><label class="form-label small mb-1" for="exceptions-accountable-owner-name">Accountable owner (name)</label><input class="form-control form-control-sm" placeholder="Accountable owner (name)" id="exceptions-accountable-owner-name" @bind="_ownerName" @bind:event="oninput" /></div>
                 </div>
                 <div class="row g-2 mb-2">
-                    <div class="col-6"><input class="form-control form-control-sm" placeholder="Permitted approver role (e.g. Admin, ITManager)" @bind="_permittedApproverRole" @bind:event="oninput" /></div>
+                    <div class="col-6"><label class="form-label small mb-1" for="exceptions-permitted-approver-role">Permitted approver role</label><input class="form-control form-control-sm" placeholder="Permitted approver role (e.g. Admin, ITManager)" id="exceptions-permitted-approver-role" @bind="_permittedApproverRole" @bind:event="oninput" /></div>
                     <div class="col-6 form-check pt-2">
                         <input class="form-check-input" type="checkbox" id="require-sep" @bind="_requiresSeparateApprover" />
                         <label class="form-check-label small" for="require-sep">Requires separate approver</label>
@@ -65,22 +64,22 @@ else
                 </div>
                 <div class="row g-2 mb-2">
                     <div class="col-6">
-                        <label class="form-label small">Expires</label>
-                        <input type="date" class="form-control form-control-sm" @bind="_expiresAt" data-testid="exception-expires-input" />
+                        <label for="exceptions-expires" class="form-label small">Expires</label>
+                        <input id="exceptions-expires" type="date" class="form-control form-control-sm" @bind="_expiresAt" data-testid="exception-expires-input" />
                     </div>
                     <div class="col-6">
-                        <label class="form-label small">Review date</label>
-                        <input type="date" class="form-control form-control-sm" @bind="_reviewDate" />
+                        <label for="exceptions-review-date" class="form-label small">Review date</label>
+                        <input id="exceptions-review-date" type="date" class="form-control form-control-sm" @bind="_reviewDate" />
                     </div>
                 </div>
-                <div class="mb-2"><input class="form-control form-control-sm" placeholder="Evidence URL/reference" @bind="_evidenceUrl" @bind:event="oninput" /></div>
+                <div class="mb-2"><label class="form-label small mb-1" for="exceptions-evidence-url-reference">Evidence URL/reference</label><input class="form-control form-control-sm" placeholder="Evidence URL/reference" id="exceptions-evidence-url-reference" @bind="_evidenceUrl" @bind:event="oninput" /></div>
                 <button class="btn btn-primary btn-sm" @onclick="CreateException" disabled="@(string.IsNullOrWhiteSpace(_targetType) || _targetId == 0 || string.IsNullOrWhiteSpace(_reason) || _expiresAt == default)" data-testid="create-exception-button">Record exception</button>
             </div>
             </Authorized>
             <NotAuthorized>
             <div class="dbt-card">
-                <h2 class="h6 text-muted text-uppercase mb-3">Record an exception</h2>
-                <div class="text-muted small">Recording a risk-acceptance exception is restricted to Admin/DBA — view-only here.</div>
+                <h2 class="h6 text-muted mb-3">Record an exception</h2>
+                <div class="text-muted small">Recording a risk-acceptance exception is restricted to the Admin and DBA roles. You can view exceptions here but not record them.</div>
             </div>
             </NotAuthorized>
             </AuthorizeView>
@@ -89,12 +88,12 @@ else
         <div class="col-lg-7">
             @if (_exceptions.Count == 0)
             {
-                <div class="empty-state"><i class="bi bi-shield-exclamation"></i> No exceptions recorded.</div>
+                <div class="empty-state"><i aria-hidden="true" class="bi bi-shield-exclamation"></i> No exceptions recorded.</div>
             }
             else
             {
-                <table class="table table-sm dbt-table" data-testid="exception-table">
-                    <thead><tr><th>Target</th><th>Waived check</th><th>Status</th><th>Expires</th><th></th></tr></thead>
+                <table aria-label="Recorded exceptions" class="table table-sm dbt-table" data-testid="exception-table">
+                    <thead><tr><th>Target</th><th>Waived check</th><th>Status</th><th>Expires</th><th><span class="visually-hidden">Actions</span></th></tr></thead>
                     <tbody>
                         @foreach (var e in _exceptions)
                         {
@@ -180,7 +179,7 @@ else
             ReviewDate = _reviewDate
         };
         await ExceptionSvc.CreateAsync(exception, _userId ?? "unknown", _userName ?? "unknown");
-        Toasts.Success("Exception recorded — pending approval.");
+        Toasts.Success("Exception recorded and pending approval.");
         _targetType = _waivedCheckReference = _reason = _compensatingControls = _ownerName = _permittedApproverRole = _evidenceUrl = "";
         _targetId = 0;
         await Load();
@@ -203,7 +202,7 @@ else
     private async Task Revoke(int id)
     {
         await ExceptionSvc.RevokeAsync(id, _userName ?? "unknown", "Revoked from the exceptions hub.");
-        Toasts.Success("Exception revoked — the waived action is reopened.");
+        Toasts.Success("Exception revoked. The waived action is open again.");
         await Load();
     }
 
@@ -224,7 +223,7 @@ else
             ExpiresAtUtc = DateTime.UtcNow.AddDays(30)
         };
         await ExceptionSvc.RenewAsync(original.Id, renewal, _userId ?? "unknown", _userName ?? "unknown");
-        Toasts.Success("Renewal recorded — pending approval; original history preserved.");
+        Toasts.Success("Renewal recorded and pending approval. The original history is kept.");
         await Load();
     }
 

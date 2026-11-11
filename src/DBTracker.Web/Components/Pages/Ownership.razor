@@ -13,11 +13,10 @@
 
 <div class="app-topbar">
     <div>
-        <div class="eyebrow">Organization</div>
         <h1>Ownership &amp; policies</h1>
         <div class="subtitle">
-            Owner teams, reusable backup policies and contact-correction review (U21).
-            Personalization only — team membership narrows what a user sees as relevant; it never grants or restricts
+            Owner teams, reusable backup policies and contact-correction review.
+            Personalization only: team membership narrows what a user sees as relevant; it never grants or restricts
             access beyond what their role already allows.
         </div>
     </div>
@@ -26,7 +25,7 @@
 <div class="filter-bar">
     @foreach (var tab in TabOrder)
     {
-        <button type="button" class="btn @(tab == _selected ? "btn-primary" : "btn-outline-secondary")" @onclick="() => _selected = tab">
+        <button type="button" class="btn @(tab == _selected ? "btn-primary" : "btn-outline-secondary")" aria-pressed="@(tab == _selected ? "true" : "false")" @onclick="() => _selected = tab">
             @Label(tab)
         </button>
     }
@@ -39,18 +38,18 @@
         <div class="row g-3">
             <div class="col-md-5">
                 <div class="dbt-card">
-                    <h2 class="h6 text-muted text-uppercase mb-3">Create a team</h2>
+                    <h2 class="h6 text-muted mb-3">Create a team</h2>
                     <div class="mb-2">
                         <label class="form-label small" for="team-name">Name</label>
                         <input id="team-name" class="form-control form-control-sm" @bind="_newTeamName" @bind:event="oninput" />
                     </div>
                     <div class="row g-2 mb-2">
-                        <div class="col-6"><input class="form-control form-control-sm" placeholder="Primary contact name" @bind="_newTeamPrimaryName" @bind:event="oninput" /></div>
-                        <div class="col-6"><input class="form-control form-control-sm" placeholder="Primary contact email" @bind="_newTeamPrimaryEmail" @bind:event="oninput" /></div>
+                        <div class="col-6"><label class="form-label small mb-1" for="ownership-primary-contact-name">Primary contact name</label><input class="form-control form-control-sm" placeholder="Primary contact name" id="ownership-primary-contact-name" @bind="_newTeamPrimaryName" @bind:event="oninput" /></div>
+                        <div class="col-6"><label class="form-label small mb-1" for="ownership-primary-contact-email">Primary contact email</label><input class="form-control form-control-sm" placeholder="Primary contact email" id="ownership-primary-contact-email" @bind="_newTeamPrimaryEmail" @bind:event="oninput" /></div>
                     </div>
                     <div class="row g-2 mb-3">
-                        <div class="col-6"><input class="form-control form-control-sm" placeholder="Backup contact name" @bind="_newTeamBackupName" @bind:event="oninput" /></div>
-                        <div class="col-6"><input class="form-control form-control-sm" placeholder="Backup contact email" @bind="_newTeamBackupEmail" @bind:event="oninput" /></div>
+                        <div class="col-6"><label class="form-label small mb-1" for="ownership-backup-contact-name">Backup contact name</label><input class="form-control form-control-sm" placeholder="Backup contact name" id="ownership-backup-contact-name" @bind="_newTeamBackupName" @bind:event="oninput" /></div>
+                        <div class="col-6"><label class="form-label small mb-1" for="ownership-backup-contact-email">Backup contact email</label><input class="form-control form-control-sm" placeholder="Backup contact email" id="ownership-backup-contact-email" @bind="_newTeamBackupEmail" @bind:event="oninput" /></div>
                     </div>
                     <button class="btn btn-primary btn-sm" @onclick="CreateTeam" disabled="@string.IsNullOrWhiteSpace(_newTeamName)">Create team</button>
                 </div>
@@ -58,7 +57,7 @@
             <div class="col-md-7">
                 @if (_teams.Count == 0)
                 {
-                    <div class="empty-state"><i class="bi bi-people"></i>No teams yet.</div>
+                    <div class="empty-state"><i aria-hidden="true" class="bi bi-people"></i>No teams yet.</div>
                 }
                 else
                 {
@@ -81,7 +80,7 @@
                                 }
                             }
                             <div class="d-flex gap-2 mt-2">
-                                <select class="form-select form-select-sm" style="max-width:260px;" @bind="_addMemberUserId[t.Team.Id]">
+                                <label class="visually-hidden" for="ownership-add-member-@t.Team.Id">User to add</label><select id="ownership-add-member-@t.Team.Id" class="form-select form-select-sm" style="max-width:260px;" @bind="_addMemberUserId[t.Team.Id]">
                                     @foreach (var u in _allUsers)
                                     {
                                         <option value="@u.Id">@u.DisplayName (@u.Email)</option>
@@ -102,7 +101,7 @@
         <div class="row g-3">
             <div class="col-md-5">
                 <div class="dbt-card">
-                    <h2 class="h6 text-muted text-uppercase mb-3">Create a policy</h2>
+                    <h2 class="h6 text-muted mb-3">Create a policy</h2>
                     <div class="mb-2">
                         <label class="form-label small" for="policy-name">Name</label>
                         <input id="policy-name" class="form-control form-control-sm" @bind="_newPolicyName" @bind:event="oninput" />
@@ -125,7 +124,7 @@
             <div class="col-md-7">
                 @if (_policies.Count == 0)
                 {
-                    <div class="empty-state"><i class="bi bi-shield"></i>No reusable policies yet.</div>
+                    <div class="empty-state"><i aria-hidden="true" class="bi bi-shield"></i>No reusable policies yet.</div>
                 }
                 else
                 {
@@ -158,7 +157,7 @@
     {
         @if (_pendingCorrections.Count == 0)
         {
-            <div class="empty-state"><i class="bi bi-check-circle"></i>No pending contact-correction requests.</div>
+            <div class="empty-state"><i aria-hidden="true" class="bi bi-check-circle"></i>No pending contact-correction requests.</div>
         }
         else
         {

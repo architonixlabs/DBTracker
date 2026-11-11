@@ -18,12 +18,12 @@
 
 @if (!_loaded)
 {
-    <div class="spinner-ring"></div>
+    <div class="spinner-ring" role="status"><span class="visually-hidden">Loading</span></div>
 }
 else if (_campaign is null)
 {
     <div class="dbt-card" style="max-width:600px;">
-        <div class="empty-state py-4"><i class="bi bi-question-diamond"></i> Campaign #@Id doesn't exist.</div>
+        <div class="empty-state py-4"><i aria-hidden="true" class="bi bi-question-diamond"></i> Campaign #@Id doesn't exist.</div>
         <a class="btn btn-outline-secondary" href="/campaigns">Back to campaigns</a>
     </div>
 }
@@ -31,7 +31,6 @@ else
 {
     <div class="app-topbar">
         <div>
-            <div class="eyebrow">Epic 20 (D12)</div>
             <h1>Scheduled change windows</h1>
             <div class="subtitle">
                 @_campaign.Name · <a href="/campaigns/@Id">Back to campaign</a> ·
@@ -44,24 +43,24 @@ else
         <AuthorizeView Roles="@Roles.CanEditPolicy" Context="editAuth">
             <div class="col-lg-5">
                 <div class="dbt-card">
-                    <h2 class="h6 text-muted text-uppercase mb-3">Plan a change window</h2>
-                    <div class="mb-2"><input class="form-control form-control-sm" placeholder="Title" @bind="_title" @bind:event="oninput" /></div>
+                    <h2 class="h6 text-muted mb-3">Plan a change window</h2>
+                    <div class="mb-2"><label class="form-label small mb-1" for="campaignchangewindows-title">Title</label><input class="form-control form-control-sm" placeholder="Title" id="campaignchangewindows-title" @bind="_title" @bind:event="oninput" /></div>
                     <div class="row g-2 mb-2">
                         <div class="col-6">
-                            <label class="form-label small">Planned start (UTC)</label>
-                            <input type="datetime-local" class="form-control form-control-sm" @bind="_start" />
+                            <label for="campaignchangewindows-planned-start-utc" class="form-label small">Planned start (UTC)</label>
+                            <input id="campaignchangewindows-planned-start-utc" type="datetime-local" class="form-control form-control-sm" @bind="_start" />
                         </div>
                         <div class="col-6">
-                            <label class="form-label small">Planned end (UTC)</label>
-                            <input type="datetime-local" class="form-control form-control-sm" @bind="_end" />
+                            <label for="campaignchangewindows-planned-end-utc" class="form-label small">Planned end (UTC)</label>
+                            <input id="campaignchangewindows-planned-end-utc" type="datetime-local" class="form-control form-control-sm" @bind="_end" />
                         </div>
                     </div>
                     <div class="row g-2 mb-2">
-                        <div class="col-6"><input class="form-control form-control-sm" placeholder="Timezone label (e.g. America/New_York)" @bind="_timeZoneLabel" @bind:event="oninput" /></div>
-                        <div class="col-6"><input type="number" class="form-control form-control-sm" placeholder="Outage estimate (min)" @bind="_outageMinutes" /></div>
+                        <div class="col-6"><label class="form-label small mb-1" for="campaignchangewindows-timezone-label">Timezone label</label><input class="form-control form-control-sm" placeholder="Timezone label (e.g. America/New_York)" id="campaignchangewindows-timezone-label" @bind="_timeZoneLabel" @bind:event="oninput" /></div>
+                        <div class="col-6"><label class="form-label small mb-1" for="campaignchangewindows-outage-estimate-min">Outage estimate (min)</label><input type="number" class="form-control form-control-sm" placeholder="Outage estimate (min)" id="campaignchangewindows-outage-estimate-min" @bind="_outageMinutes" /></div>
                     </div>
                     <div class="mb-2">
-                        <select class="form-select form-select-sm" @bind="_commOwnerTeamId">
+                        <label class="form-label small mb-1" for="changewindows-comm-owner">Communication owner</label><select id="changewindows-comm-owner" class="form-select form-select-sm" @bind="_commOwnerTeamId">
                             <option value="0">Communication owner: none</option>
                             @foreach (var t in _teams)
                             {
@@ -69,7 +68,7 @@ else
                             }
                         </select>
                     </div>
-                    <div class="mb-2"><textarea class="form-control form-control-sm" rows="2" placeholder="Runbook notes" @bind="_runbookNotes"></textarea></div>
+                    <div class="mb-2"><label class="form-label small mb-1" for="campaignchangewindows-runbook-notes">Runbook notes</label><textarea class="form-control form-control-sm" rows="2" placeholder="Runbook notes" id="campaignchangewindows-runbook-notes" @bind="_runbookNotes"></textarea></div>
 
                     <p class="small text-muted mb-1">Required approvals:</p>
                     @foreach (var scope in AllScopes)
@@ -116,12 +115,12 @@ else
         <div class="col-lg-7">
             @if (_windows.Count == 0)
             {
-                <div class="empty-state"><i class="bi bi-calendar-event"></i> No change windows planned yet.</div>
+                <div class="empty-state"><i aria-hidden="true" class="bi bi-calendar-event"></i> No change windows planned yet.</div>
             }
             else
             {
-                <table class="table table-sm dbt-table" data-testid="change-window-table">
-                    <thead><tr><th>Title</th><th>Window (UTC)</th><th>Status</th><th></th></tr></thead>
+                <table aria-label="Planned change windows" class="table table-sm dbt-table" data-testid="change-window-table">
+                    <thead><tr><th>Title</th><th>Window (UTC)</th><th>Status</th><th><span class="visually-hidden">Actions</span></th></tr></thead>
                     <tbody>
                         @foreach (var w in _windows)
                         {
@@ -187,7 +186,7 @@ else
     private async Task CheckConflicts()
     {
         // Same interpretation as CreateWindow: the datetime-local value is treated as the UTC
-        // instant typed (SpecifyKind), not converted from local time — otherwise this check and the
+        // instant typed (SpecifyKind), not converted from local time; otherwise this check and the
         // saved window's own PlannedStartUtc/PlannedEndUtc would disagree by the host's UTC offset.
         _conflictResult = await Windows.DetectConflictsAsync(Id, DateTime.SpecifyKind(_start, DateTimeKind.Utc), DateTime.SpecifyKind(_end, DateTimeKind.Utc));
     }
@@ -206,7 +205,7 @@ else
             RunbookNotes = _runbookNotes
         };
         await Windows.CreateAsync(window, _selectedScopes, _userName ?? "unknown");
-        Toasts.Success($"Change window \"{_title}\" planned — nothing executed by this.");
+        Toasts.Success($"Change window \"{_title}\" planned. Creating the plan does not run anything.");
         _title = _runbookNotes = "";
         _outageMinutes = null;
         _conflictResult = null;

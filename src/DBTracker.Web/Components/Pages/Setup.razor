@@ -8,22 +8,21 @@
 
 <div class="app-topbar">
     <div>
-        <div class="eyebrow">Administration</div>
         <h1>Setup &amp; diagnostics</h1>
-        <div class="subtitle">Admin-only — diagnose configuration without database or log access. Credentials are masked below.</div>
+        <div class="subtitle">Admin only. Diagnose configuration without database or log access. Credentials are masked below.</div>
     </div>
-    <button class="btn btn-outline-secondary" @onclick="Load"><i class="bi bi-arrow-clockwise"></i> Refresh</button>
+    <button class="btn btn-outline-secondary" @onclick="Load"><i aria-hidden="true" class="bi bi-arrow-clockwise"></i> Refresh</button>
 </div>
 
 @if (_items is null)
 {
-    <div class="spinner-ring"></div>
+    <div class="spinner-ring" role="status"><span class="visually-hidden">Loading</span></div>
 }
 else
 {
     <div class="dbt-table mb-4">
-        <table class="table">
-            <thead><tr><th>Area</th><th>Check</th><th>Status</th><th>Detail</th><th></th></tr></thead>
+        <table aria-label="Setup checklist" class="table">
+            <thead><tr><th>Area</th><th>Check</th><th>Status</th><th>Detail</th><th><span class="visually-hidden">Actions</span></th></tr></thead>
             <tbody>
                 @foreach (var item in _items)
                 {
@@ -45,8 +44,8 @@ else
     </div>
 
     <div class="dbt-card mb-4">
-        <h2 class="h6 text-muted text-uppercase mb-3">Backup file path reachability</h2>
-        <p class="text-muted small mb-3">Checked under the service's own process identity — the same identity the background scanner runs as.</p>
+        <h2 class="h6 text-muted mb-3">Backup file path reachability</h2>
+        <p class="text-muted small mb-3">Checked under the service's own process identity, the same one the background scanner runs as.</p>
         @if (_paths is null)
         {
             <button class="btn btn-outline-secondary btn-sm" @onclick="CheckPaths" disabled="@_checkingPaths">@(_checkingPaths ? "Checking…" : "Check configured paths")</button>
@@ -57,7 +56,7 @@ else
         }
         else
         {
-            <table class="table table-sm dbt-table mb-0">
+            <table aria-label="Backup file path reachability" class="table table-sm dbt-table mb-0">
                 <thead><tr><th>Instance</th><th>Path</th><th>Status</th></tr></thead>
                 <tbody>
                     @foreach (var p in _paths)
@@ -73,7 +72,7 @@ else
                                 else
                                 {
                                     <span class="badge-health dot Failed">Unreachable</span>
-                                    <span class="text-muted"> — @p.Error</span>
+                                    <span class="text-muted">: @p.Error</span>
                                 }
                             </td>
                         </tr>
@@ -84,11 +83,11 @@ else
     </div>
 
     <div class="dbt-card" style="max-width:480px;">
-        <h2 class="h6 text-muted text-uppercase mb-3">Send test email</h2>
+        <h2 class="h6 text-muted mb-3">Send test email</h2>
         <div class="d-flex gap-2 align-items-end flex-wrap">
             <div class="field" style="min-width:260px;">
-                <label class="form-label small">Recipient</label>
-                <input class="form-control form-control-sm" @bind="_testEmailAddress" @bind:event="oninput" placeholder="you@architonixlabs.com" />
+                <label for="setup-recipient" class="form-label small">Recipient</label>
+                <input id="setup-recipient" class="form-control form-control-sm" @bind="_testEmailAddress" @bind:event="oninput" placeholder="you@architonixlabs.com" />
             </div>
             <button class="btn btn-outline-secondary btn-sm" @onclick="SendTestEmail" disabled="@(_sendingTest || string.IsNullOrWhiteSpace(_testEmailAddress))">
                 @(_sendingTest ? "Sending…" : "Send test email")
@@ -99,7 +98,7 @@ else
             <div class="small mt-2" style="color:@(_testResult.Outcome == DBTracker.Core.Enums.EmailSendOutcome.Accepted ? "var(--dbt-ontrack)" : "var(--dbt-failed)")">
                 @_testResult.Outcome switch
                 {
-                    DBTracker.Core.Enums.EmailSendOutcome.Disabled => "No email provider is configured — nothing was attempted. See Email:Provider above.",
+                    DBTracker.Core.Enums.EmailSendOutcome.Disabled => "No email provider is configured, so nothing was attempted. See Email:Provider above.",
                     DBTracker.Core.Enums.EmailSendOutcome.Accepted => "The provider accepted the message. (Acceptance isn't proof the recipient received it.)",
                     _ => $"Failed: {_testResult.Detail}"
                 }
@@ -144,7 +143,7 @@ else
         else
         {
             Toasts.Error(_testResult.Outcome == DBTracker.Core.Enums.EmailSendOutcome.Disabled
-                ? "Email is disabled (Email:Provider=None) — nothing was sent."
+                ? "Email is disabled (Email:Provider=None), so nothing was sent."
                 : $"Send failed: {_testResult.Detail}");
         }
     }
