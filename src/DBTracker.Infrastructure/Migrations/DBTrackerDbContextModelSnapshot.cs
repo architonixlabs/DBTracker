@@ -214,6 +214,9 @@ namespace DBTracker.Infrastructure.Migrations
                         .HasMaxLength(1000)
                         .HasColumnType("nvarchar(1000)");
 
+                    b.Property<DateTime?>("RequiredByUtc")
+                        .HasColumnType("datetime2");
+
                     b.Property<DateTime>("ReviewedAtUtc")
                         .HasColumnType("datetime2");
 
@@ -3277,6 +3280,11 @@ namespace DBTracker.Infrastructure.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("nvarchar(200)");
 
+                    b.Property<string>("ReleaseNotesUrl")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
                     b.Property<DateTime?>("RetrievedAtUtc")
                         .HasColumnType("datetime2");
 
@@ -3893,6 +3901,14 @@ namespace DBTracker.Infrastructure.Migrations
                     b.Property<DateTime?>("LastRunwayNoticeAtUtc")
                         .HasColumnType("datetime2");
 
+                    b.Property<string>("LastRunwayNoticeKind")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<DateTime?>("LastRunwayNoticeMilestoneUtc")
+                        .HasColumnType("datetime2");
+
                     b.Property<int?>("LastRunwayNoticeThresholdDays")
                         .HasColumnType("int");
 
@@ -3982,6 +3998,16 @@ namespace DBTracker.Infrastructure.Migrations
                         .IsRequired()
                         .HasMaxLength(320)
                         .HasColumnType("nvarchar(320)");
+
+                    b.Property<string>("ObservedCompatibilityLevel")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("ObservedEdition")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
 
                     b.Property<int>("Outcome")
                         .HasColumnType("int");
