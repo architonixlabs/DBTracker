@@ -24,7 +24,7 @@ public static class SeedData
                 Role = InstanceRole.Active, Environment = EnvironmentTier.Production,
                 DatabaseIp = "192.168.1.8", ServerIp = "192.168.1.8", ExpectedBackupIntervalHours = 24,
                 BackupFileLocation = @"\\192.168.1.8\backups\arxmail-prod",
-                LastScanStatus = ScanStatus.Success, LastScanUtc = now.AddMinutes(-40)
+                LastScanStatus = ScanStatus.Success, LastScanUtc = now.AddMinutes(-40), LastScanSuccessUtc = now.AddMinutes(-40)
             },
             new()
             {
@@ -50,7 +50,7 @@ public static class SeedData
                 Role = InstanceRole.Active, Environment = EnvironmentTier.Production,
                 DatabaseIp = "192.168.1.8", ServerIp = "192.168.1.8", ExpectedBackupIntervalHours = 24,
                 BackupFileLocation = @"\\192.168.1.8\backups\contoso-hr",
-                LastScanStatus = ScanStatus.Error, LastScanUtc = now.AddHours(-26),
+                LastScanStatus = ScanStatus.Error, LastScanUtc = now.AddHours(-26), LastScanSuccessUtc = now.AddHours(-74),
                 LastScanError = "Network path not found: \\\\192.168.1.8\\backups\\contoso-hr is unreachable"
             },
             new()

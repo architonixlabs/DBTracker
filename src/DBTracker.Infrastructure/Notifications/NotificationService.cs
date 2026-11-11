@@ -6,7 +6,8 @@ using Microsoft.EntityFrameworkCore;
 namespace DBTracker.Infrastructure.Notifications;
 
 public record NotificationInboxItem(int Id, int? DatabaseInstanceId, string InstanceName, string Message, NotificationSeverity Severity, DateTime CreatedAtUtc, bool IsRead);
-public record NotificationInboxPage(IReadOnlyList<NotificationInboxItem> Items, int TotalCount, int UnreadCount);
+/// <param name="InboxOptedOut">The user has subscriptions but none deliver in-app, so the inbox is empty by their choice.</param>
+public record NotificationInboxPage(IReadOnlyList<NotificationInboxItem> Items, int TotalCount, int UnreadCount, bool InboxOptedOut = false);
 
 /// <summary>Uses a short-lived DbContext per call because NotificationBell renders beside every page's own scoped context, and sharing one would race.</summary>
 /// <remarks>Notifications are broadcast; read state is per user. On a user's first visit, the notifications that already exist are marked read once, so nobody starts with a backlog of old alerts; later ones arrive unread.</remarks>
@@ -22,9 +23,7 @@ public class NotificationService(IDbContextFactory<DBTrackerDbContext> factory)
         var readSet = readIds.ToHashSet();
 
         var all = await db.Notifications.AsNoTracking().OrderByDescending(n => n.CreatedAtUtc).ToListAsync();
-        var visible = subscriptions.Count == 0
-            ? all
-            : all.Where(n => NotificationSubscriptionMatcher.AnyMatches(subscriptions, n.DatabaseInstanceId ?? 0, n.Company, n.OwnerTeamId)).ToList();
+        var visible = all.Where(n => NotificationSubscriptionMatcher.ShowsInInbox(subscriptions, n.DatabaseInstanceId ?? 0, n.Company, n.OwnerTeamId)).ToList();
 
         var unreadCount = visible.Count(n => !readSet.Contains(n.Id));
         var pageItems = visible
@@ -33,7 +32,7 @@ public class NotificationService(IDbContextFactory<DBTrackerDbContext> factory)
             .Select(n => new NotificationInboxItem(n.Id, n.DatabaseInstanceId, n.InstanceName, n.Message, n.Severity, n.CreatedAtUtc, readSet.Contains(n.Id)))
             .ToList();
 
-        return new NotificationInboxPage(pageItems, visible.Count, unreadCount);
+        return new NotificationInboxPage(pageItems, visible.Count, unreadCount, NotificationSubscriptionMatcher.InboxIsOptedOut(subscriptions));
     }
 
     /// <summary>Bell-dropdown convenience: most recent page of this user's personal inbox.</summary>
@@ -63,9 +62,7 @@ public class NotificationService(IDbContextFactory<DBTrackerDbContext> factory)
         var readIds = await db.NotificationReadStates.AsNoTracking().Where(s => s.UserId == userId).Select(s => s.NotificationId).ToHashSetAsync();
 
         var all = await db.Notifications.AsNoTracking().Select(n => new { n.Id, n.DatabaseInstanceId, n.Company, n.OwnerTeamId }).ToListAsync();
-        var visible = subscriptions.Count == 0
-            ? all
-            : all.Where(n => NotificationSubscriptionMatcher.AnyMatches(subscriptions, n.DatabaseInstanceId ?? 0, n.Company, n.OwnerTeamId)).ToList();
+        var visible = all.Where(n => NotificationSubscriptionMatcher.ShowsInInbox(subscriptions, n.DatabaseInstanceId ?? 0, n.Company, n.OwnerTeamId)).ToList();
 
         var now = DateTime.UtcNow;
         var newlyRead = visible.Where(n => !readIds.Contains(n.Id))

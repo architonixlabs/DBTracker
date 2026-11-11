@@ -22,6 +22,8 @@ public class DBTrackerDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<NotificationInboxStart> NotificationInboxStarts => Set<NotificationInboxStart>();
     public DbSet<NotificationSubscription> NotificationSubscriptions => Set<NotificationSubscription>();
     public DbSet<Incident> Incidents => Set<Incident>();
+    public DbSet<NotificationPreference> NotificationPreferences => Set<NotificationPreference>();
+    public DbSet<DeliveryAttempt> DeliveryAttempts => Set<DeliveryAttempt>();
     public DbSet<BackupRecordCorrection> BackupRecordCorrections => Set<BackupRecordCorrection>();
     public DbSet<RestoreEventCorrection> RestoreEventCorrections => Set<RestoreEventCorrection>();
     public DbSet<ComplianceSnapshot> ComplianceSnapshots => Set<ComplianceSnapshot>();
@@ -324,6 +326,22 @@ public class DBTrackerDbContext : IdentityDbContext<ApplicationUser>
                 .OnDelete(DeleteBehavior.Cascade);
 
             entity.HasIndex(e => e.UserId);
+        });
+
+        modelBuilder.Entity<NotificationPreference>(entity =>
+        {
+            entity.Property(e => e.UserId).HasMaxLength(450).IsRequired();
+            entity.Property(e => e.TimeZoneId).HasMaxLength(100);
+            entity.HasIndex(e => e.UserId).IsUnique();
+        });
+
+        modelBuilder.Entity<DeliveryAttempt>(entity =>
+        {
+            entity.Property(e => e.Channel).HasMaxLength(30);
+            entity.Property(e => e.ScopeDescription).HasMaxLength(500);
+            entity.Property(e => e.Error).HasMaxLength(1000);
+            entity.Property(e => e.TriggeredBy).HasMaxLength(320);
+            entity.HasIndex(e => e.AttemptedAtUtc);
         });
 
         modelBuilder.Entity<Team>(entity =>

@@ -42,6 +42,8 @@ builder.Services.AddHostedService<BackupScanHostedService>();
 builder.Services.AddScoped<NotificationService>();
 builder.Services.AddScoped<NotificationSubscriptionService>();
 builder.Services.AddScoped<IncidentService>();
+builder.Services.AddScoped<NotificationPreferenceService>();
+builder.Services.AddScoped<DeliveryAttemptService>();
 builder.Services.AddHostedService<AlertCheckHostedService>();
 builder.Services.AddScoped<ComplianceReportService>();
 builder.Services.AddHostedService<ReportHostedService>();

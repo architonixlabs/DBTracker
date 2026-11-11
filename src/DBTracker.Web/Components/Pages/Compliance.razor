@@ -63,6 +63,7 @@ else
                     <th>Role</th>
                     <th>Env</th>
                     <th>Last successful backup</th>
+                    <th>Evidence</th>
                     <th>Age</th>
                     <th>Health</th>
                     <th>Restore tested</th>
@@ -78,6 +79,16 @@ else
                         <td><span class="role-pill @o.Instance.Role">@o.Instance.Role</span></td>
                         <td>@o.Instance.Environment</td>
                         <td>@(o.LastBackupUtc is null ? "Never" : o.LastBackupUtc.Value.ToLocalTime().ToString("MMM d, yyyy h:mm tt"))</td>
+                        <td data-testid="compliance-evidence">
+                            @if (Evidence(o) is { } level)
+                            {
+                                <span class="badge-health dot @(level == EvidenceLevel.RestoreTested ? "OnTrack" : level == EvidenceLevel.ReportedSuccess ? "Overdue" : "NeverBackedUp")">@BackupEvidenceClassifier.Describe(level)</span>
+                            }
+                            else
+                            {
+                                <span class="text-muted small">None</span>
+                            }
+                        </td>
                         <td>@Age(o.LastBackupUtc)</td>
                         <td><HealthBadge Health="o.Health" /></td>
                         <td>
@@ -139,7 +150,8 @@ else
     protected override async Task OnInitializedAsync()
     {
         _asOf = DateTime.UtcNow;
-        _overviews = await OverviewService.GetAllAsync();
+        // U06: latest record and latest success per instance, not every backup; enough for health, age and evidence level.
+        _overviews = await OverviewService.GetAllLatestAsync();
         await LoadSnapshots();
     }
 
@@ -182,6 +194,10 @@ else
         return items.OrderBy(o => o.Instance.Name);
     }
 
+    /// <summary>U04: evidence level of the latest successful backup as of the page's as-of time, the same label instance detail shows.</summary>
+    private EvidenceLevel? Evidence(InstanceOverview o) =>
+        BackupEvidenceClassifier.ClassifyLatestSuccess(o.Instance.BackupRecords.ToList(), o.Instance.RestoreEvents.ToList(), _asOf);
+
     private string Age(DateTime? lastBackupUtc)
     {
         if (lastBackupUtc is null)
@@ -195,7 +211,7 @@ else
     private async Task ExportCsv()
     {
         var sb = new System.Text.StringBuilder();
-        sb.AppendLine("Instance,Engine,Company,Department,Owner,ContactEmail,Role,Environment,LastSuccessfulBackupUtc,AgeHours,Health,RestoreTested");
+        sb.AppendLine("Instance,Engine,Company,Department,Owner,ContactEmail,Role,Environment,LastSuccessfulBackupUtc,LastSuccessEvidence,AgeHours,Health,RestoreTested");
         foreach (var o in Filtered())
         {
             var ageHours = o.LastBackupUtc is null ? "" : ((_asOf - o.LastBackupUtc.Value).TotalHours).ToString("N1");
@@ -204,7 +220,7 @@ else
             {
                 Csv(o.Instance.Name), Csv(o.Instance.Engine.ToString()), Csv(o.Instance.Company), Csv(o.Instance.Department),
                 Csv(o.Instance.ContactName), Csv(o.Instance.ContactEmail), Csv(o.Instance.Role.ToString()), Csv(o.Instance.Environment.ToString()),
-                Csv(o.LastBackupUtc?.ToString("O") ?? ""), Csv(ageHours), Csv(o.Health.ToString()), Csv(restoreTested ? "Yes" : "No")
+                Csv(o.LastBackupUtc?.ToString("O") ?? ""), Csv(BackupEvidenceClassifier.DescribeOrEmpty(Evidence(o))), Csv(ageHours), Csv(o.Health.ToString()), Csv(restoreTested ? "Yes" : "No")
             }));
         }
 

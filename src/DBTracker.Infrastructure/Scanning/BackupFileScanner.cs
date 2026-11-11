@@ -88,6 +88,7 @@ public class BackupFileScanner(DBTrackerDbContext db)
             }
 
             instance.LastScanUtc = now;
+            instance.LastScanSuccessUtc = now;
             instance.LastScanStatus = ScanStatus.Success;
             instance.LastScanError = string.Empty;
             await db.SaveChangesAsync(ct);

@@ -55,11 +55,19 @@ else
         </div>
     </div>
 
-    @if (_scanIssueCount > 0)
+    @if (_scanIssues.Count > 0)
     {
-        <div class="alert alert-danger mb-4 d-flex justify-content-between align-items-center flex-wrap gap-2">
-            <span><i aria-hidden="true" class="bi bi-exclamation-triangle"></i> @_scanIssueCount shared-drive scan(s) erroring, stale or never completed.</span>
-            <a class="btn btn-outline-secondary btn-sm" href="/reports?type=ScanActivity">View scan activity</a>
+        <div class="alert alert-danger mb-4 d-flex justify-content-between align-items-center flex-wrap gap-2" data-testid="scan-issue-banner">
+            <span>
+                <i aria-hidden="true" class="bi bi-exclamation-triangle"></i> @_scanIssues.Count shared-drive scan(s) erroring, stale or never completed:
+                @foreach (var (issue, index) in _scanIssues.Take(3).Select((r, i) => (r, i)))
+                {
+                    @(index > 0 ? ", " : " ")<a href="/instances/@issue.InstanceId">@issue.InstanceName</a> <span class="small">(@ScannerStalenessClassifier.Describe(issue.Scanner.Freshness))</span>
+                }
+                @(_scanIssues.Count > 3 ? $" and {_scanIssues.Count - 3} more." : ".")
+                <span class="d-block small">This is scan health only. Backup health below is judged separately, and a scan problem never marks a backup as fine.</span>
+            </span>
+            <a class="btn btn-outline-secondary btn-sm" href="/reports?type=ScanActivity&scan=attention">View scan activity</a>
         </div>
     }
 
@@ -158,7 +166,7 @@ else
     private List<InstanceListRow>? _rows;
     private List<Core.Entities.Incident> _openIncidents = new();
     private BackupHealth? _filterHealth;
-    private int _scanIssueCount;
+    private IReadOnlyList<ScanActivityRow> _scanIssues = [];
     private DateTime _lastUpdatedUtc;
     private string? _refreshError;
     private bool _refreshing;
@@ -185,11 +193,11 @@ else
             _refreshError = null;
 
             var scanRows = ScanActivityReportBuilder.Build(
-                _rows.Select(r => new ScanActivityInput(r.Name, r.BackupFileLocation, r.LastScanUtc, r.LastScanStatus, r.LastScanError)),
+                _rows.Select(r => new ScanActivityInput(r.Name, r.BackupFileLocation, r.LastScanUtc, r.LastScanStatus, r.LastScanError, r.LastScanSuccessUtc, r.Id)),
                 Configuration.GetValue("BackupScan:IntervalMinutes", 15),
                 Configuration.GetValue("BackupScan:StaleAfterMultiplier", 3),
                 DateTime.UtcNow);
-            _scanIssueCount = scanRows.Count(r => r.Scanner.Freshness is ScannerFreshness.Error or ScannerFreshness.NeverScanned or ScannerFreshness.Stale);
+            _scanIssues = ScanActivityReportBuilder.NeedingAttention(scanRows);
         }
         catch (Exception ex)
         {
