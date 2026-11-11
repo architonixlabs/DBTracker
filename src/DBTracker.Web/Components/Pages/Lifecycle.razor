@@ -18,12 +18,11 @@
 
 <div class="app-topbar">
     <div>
-        <div class="eyebrow">DBA lifecycle roadmap · Epic 18-19</div>
         <h1>Release &amp; support lifecycle</h1>
         <div class="subtitle">
             The curated release/support catalogue, approved patch baselines, imported security advisories (D02, D04, D05),
-            and the reviewed source-to-target path rules (D08) instance migration pages are evaluated against.
-            Facts here are curated/imported, not pulled from any live vendor feed — a failed refresh retains last-known facts with a staleness warning.
+            and the reviewed source-to-target path rules that instance migration pages are evaluated against.
+            Facts here are curated/imported, not pulled from a live vendor feed. A failed refresh keeps the last-known facts and shows a staleness warning.
         </div>
     </div>
 </div>
@@ -31,7 +30,7 @@
 <div class="filter-bar">
     @foreach (var tab in TabOrder)
     {
-        <button type="button" class="btn @(tab == _selected ? "btn-primary" : "btn-outline-secondary")" @onclick="() => _selected = tab">@Label(tab)</button>
+        <button type="button" class="btn @(tab == _selected ? "btn-primary" : "btn-outline-secondary")" aria-pressed="@(tab == _selected ? "true" : "false")" @onclick="() => _selected = tab">@Label(tab)</button>
     }
 </div>
 
@@ -42,24 +41,24 @@
         <div class="row g-3">
             <div class="col-lg-5">
                 <div class="dbt-card">
-                    <h2 class="h6 text-muted text-uppercase mb-3">Add a release/support fact</h2>
+                    <h2 class="h6 text-muted mb-3">Add a release/support fact</h2>
                     <div class="row g-2 mb-2">
                         <div class="col-6">
-                            <select class="form-select form-select-sm" @bind="_newEngine">
+                            <label class="form-label small mb-1" for="lifecycle-new-engine">Engine</label><select id="lifecycle-new-engine" class="form-select form-select-sm" @bind="_newEngine">
                                 @foreach (var e in Enum.GetValues<DatabaseEngine>())
                                 {
                                     <option value="@e">@e</option>
                                 }
                             </select>
                         </div>
-                        <div class="col-6"><input class="form-control form-control-sm" placeholder="Family (e.g. PostgreSQL)" @bind="_newFamily" @bind:event="oninput" /></div>
+                        <div class="col-6"><label class="form-label small mb-1" for="lifecycle-family">Family</label><input class="form-control form-control-sm" placeholder="Family (e.g. PostgreSQL)" id="lifecycle-family" @bind="_newFamily" @bind:event="oninput" /></div>
                     </div>
-                    <div class="mb-2"><input class="form-control form-control-sm" placeholder="Release label (e.g. PostgreSQL 16)" @bind="_newLabel" @bind:event="oninput" /></div>
+                    <div class="mb-2"><label class="form-label small mb-1" for="lifecycle-release-label">Release label</label><input class="form-control form-control-sm" placeholder="Release label (e.g. PostgreSQL 16)" id="lifecycle-release-label" @bind="_newLabel" @bind:event="oninput" /></div>
                     <div class="row g-2 mb-2">
-                        <div class="col-4"><input type="number" class="form-control form-control-sm" placeholder="Major" @bind="_newMajor" /></div>
-                        <div class="col-4"><input type="number" class="form-control form-control-sm" placeholder="Minor" @bind="_newMinor" /></div>
+                        <div class="col-4"><label class="form-label small mb-1" for="lifecycle-major">Major</label><input type="number" class="form-control form-control-sm" placeholder="Major" id="lifecycle-major" @bind="_newMajor" /></div>
+                        <div class="col-4"><label class="form-label small mb-1" for="lifecycle-minor">Minor</label><input type="number" class="form-control form-control-sm" placeholder="Minor" id="lifecycle-minor" @bind="_newMinor" /></div>
                         <div class="col-4">
-                            <select class="form-select form-select-sm" @bind="_newChannel">
+                            <label class="form-label small mb-1" for="lifecycle-new-channel">Channel</label><select id="lifecycle-new-channel" class="form-select form-select-sm" @bind="_newChannel">
                                 @foreach (var c in Enum.GetValues<ReleaseChannel>())
                                 {
                                     <option value="@c">@c</option>
@@ -69,26 +68,26 @@
                     </div>
                     <div class="row g-2 mb-2">
                         <div class="col-6">
-                            <label class="form-label small">Mainstream support ends</label>
-                            <input type="date" class="form-control form-control-sm" @bind="_newMainstreamEnd" />
+                            <label for="lifecycle-mainstream-support-ends" class="form-label small">Mainstream support ends</label>
+                            <input id="lifecycle-mainstream-support-ends" type="date" class="form-control form-control-sm" @bind="_newMainstreamEnd" />
                         </div>
                         <div class="col-6">
-                            <label class="form-label small">Extended support ends</label>
-                            <input type="date" class="form-control form-control-sm" @bind="_newExtendedEnd" />
+                            <label for="lifecycle-extended-support-ends" class="form-label small">Extended support ends</label>
+                            <input id="lifecycle-extended-support-ends" type="date" class="form-control form-control-sm" @bind="_newExtendedEnd" />
                         </div>
                     </div>
                     <div class="form-check mb-2">
                         <input class="form-check-input" type="checkbox" @bind="_newDatesAreTbd" id="dates-tbd" />
                         <label class="form-check-label small" for="dates-tbd">Dates are TBD</label>
                     </div>
-                    <div class="mb-2"><input class="form-control form-control-sm" placeholder="Source URL" @bind="_newSourceUrl" @bind:event="oninput" /></div>
+                    <div class="mb-2"><label class="form-label small mb-1" for="lifecycle-source-url">Source URL</label><input class="form-control form-control-sm" placeholder="Source URL" id="lifecycle-source-url" @bind="_newSourceUrl" @bind:event="oninput" /></div>
                     <button class="btn btn-primary btn-sm" @onclick="CreateEntry" disabled="@(string.IsNullOrWhiteSpace(_newFamily) || string.IsNullOrWhiteSpace(_newLabel))">Add entry</button>
                 </div>
             </div>
             <div class="col-lg-7">
                 @if (_entries.Count == 0)
                 {
-                    <div class="empty-state"><i class="bi bi-journal"></i>No release/support facts catalogued yet.</div>
+                    <div class="empty-state"><i aria-hidden="true" class="bi bi-journal"></i>No release/support facts catalogued yet.</div>
                 }
                 else
                 {
@@ -98,21 +97,21 @@
                             <div class="d-flex justify-content-between align-items-start">
                                 <div>
                                     <strong>@e.ReleaseLabel</strong>
-                                    <span class="small text-muted"> — @e.Engine / @e.Family · @e.Channel · rev @e.RevisionNumber</span>
+                                    <span class="small text-muted"> · @e.Engine / @e.Family · @e.Channel · rev @e.RevisionNumber</span>
                                     @if (e.IsManualOverride)
                                     {
                                         <span class="small" style="color:var(--dbt-overdue);"> · manually overridden (@e.OverrideReviewedBy)</span>
                                     }
                                     @if (e.IsStale)
                                     {
-                                        <span class="small" style="color:var(--dbt-failed);"> · stale — @e.LastRefreshError</span>
+                                        <span class="small" style="color:var(--dbt-failed);"> · stale: @e.LastRefreshError</span>
                                     }
                                 </div>
                                 <button class="btn btn-outline-secondary btn-sm" @onclick="() => RefreshEntry(e.Id)">Refresh</button>
                             </div>
                             <p class="small text-muted mb-1">
-                                Mainstream ends: @(e.MainstreamSupportEndUtc?.ToString("yyyy-MM-dd") ?? "—") ·
-                                Extended ends: @(e.ExtendedSupportEndUtc?.ToString("yyyy-MM-dd") ?? "—") ·
+                                Mainstream ends: @(e.MainstreamSupportEndUtc?.ToString("yyyy-MM-dd") ?? "not recorded") ·
+                                Extended ends: @(e.ExtendedSupportEndUtc?.ToString("yyyy-MM-dd") ?? "not recorded") ·
                                 @(e.DatesAreTbd ? "dates TBD" : "")
                             </p>
 
@@ -121,19 +120,19 @@
                                 <div class="mt-2 p-2" style="border:1px dashed var(--dbt-line);">
                                     <div class="row g-2 mb-2">
                                         <div class="col-6">
-                                            <label class="form-label small">New mainstream-end date</label>
-                                            <input type="date" class="form-control form-control-sm" @bind="_overrideMainstreamEnd" />
+                                            <label for="lifecycle-new-mainstream-end-date" class="form-label small">New mainstream-end date</label>
+                                            <input id="lifecycle-new-mainstream-end-date" type="date" class="form-control form-control-sm" @bind="_overrideMainstreamEnd" />
                                         </div>
                                         <div class="col-6">
-                                            <label class="form-label small">New extended-end date</label>
-                                            <input type="date" class="form-control form-control-sm" @bind="_overrideExtendedEnd" />
+                                            <label for="lifecycle-new-extended-end-date" class="form-label small">New extended-end date</label>
+                                            <input id="lifecycle-new-extended-end-date" type="date" class="form-control form-control-sm" @bind="_overrideExtendedEnd" />
                                         </div>
                                     </div>
-                                    <div class="mb-2"><input class="form-control form-control-sm" placeholder="Reason (required)" @bind="_overrideReason" @bind:event="oninput" /></div>
-                                    <div class="mb-2"><input class="form-control form-control-sm" placeholder="Reviewed by (required)" @bind="_overrideReviewedBy" @bind:event="oninput" /></div>
+                                    <div class="mb-2"><label class="form-label small mb-1" for="lifecycle-reason-required">Reason (required)</label><input class="form-control form-control-sm" placeholder="Reason (required)" id="lifecycle-reason-required" @bind="_overrideReason" @bind:event="oninput" /></div>
+                                    <div class="mb-2"><label class="form-label small mb-1" for="lifecycle-reviewed-by-required">Reviewed by (required)</label><input class="form-control form-control-sm" placeholder="Reviewed by (required)" id="lifecycle-reviewed-by-required" @bind="_overrideReviewedBy" @bind:event="oninput" /></div>
                                     <div class="mb-2">
-                                        <label class="form-label small">Override expires</label>
-                                        <input type="date" class="form-control form-control-sm" @bind="_overrideExpires" />
+                                        <label for="lifecycle-override-expires" class="form-label small">Override expires</label>
+                                        <input id="lifecycle-override-expires" type="date" class="form-control form-control-sm" @bind="_overrideExpires" />
                                     </div>
                                     <div class="d-flex gap-2">
                                         <button class="btn btn-primary btn-sm" @onclick="SubmitOverride" disabled="@(string.IsNullOrWhiteSpace(_overrideReason) || string.IsNullOrWhiteSpace(_overrideReviewedBy))">Apply override</button>
@@ -158,20 +157,20 @@
         <div class="row g-3">
             <div class="col-lg-5">
                 <div class="dbt-card">
-                    <h2 class="h6 text-muted text-uppercase mb-3">Set an approved patch baseline</h2>
+                    <h2 class="h6 text-muted mb-3">Set an approved patch baseline</h2>
                     <div class="row g-2 mb-2">
                         <div class="col-6">
-                            <select class="form-select form-select-sm" @bind="_baselineEngine">
+                            <label class="form-label small mb-1" for="lifecycle-baseline-engine">Engine</label><select id="lifecycle-baseline-engine" class="form-select form-select-sm" @bind="_baselineEngine">
                                 @foreach (var e in Enum.GetValues<DatabaseEngine>())
                                 {
                                     <option value="@e">@e</option>
                                 }
                             </select>
                         </div>
-                        <div class="col-6"><input class="form-control form-control-sm" placeholder="Family" @bind="_baselineFamily" @bind:event="oninput" /></div>
+                        <div class="col-6"><label class="form-label small mb-1" for="lifecycle-family-2">Family</label><input class="form-control form-control-sm" placeholder="Family" id="lifecycle-family-2" @bind="_baselineFamily" @bind:event="oninput" /></div>
                     </div>
                     <div class="mb-2">
-                        <select class="form-select form-select-sm" @bind="_baselineTargetEntryId">
+                        <label class="form-label small mb-1" for="lifecycle-baseline-target">Target release</label><select id="lifecycle-baseline-target" class="form-select form-select-sm" @bind="_baselineTargetEntryId">
                             <option value="0">Choose target release…</option>
                             @foreach (var e in _entries)
                             {
@@ -179,23 +178,23 @@
                             }
                         </select>
                     </div>
-                    <div class="mb-2"><input class="form-control form-control-sm" placeholder="Reviewed by (required)" @bind="_baselineReviewedBy" @bind:event="oninput" /></div>
+                    <div class="mb-2"><label class="form-label small mb-1" for="lifecycle-reviewed-by-required-2">Reviewed by (required)</label><input class="form-control form-control-sm" placeholder="Reviewed by (required)" id="lifecycle-reviewed-by-required-2" @bind="_baselineReviewedBy" @bind:event="oninput" /></div>
                     <div class="mb-2">
-                        <label class="form-label small">Expires (optional)</label>
-                        <input type="date" class="form-control form-control-sm" @bind="_baselineExpires" />
+                        <label for="lifecycle-expires-optional" class="form-label small">Expires (optional)</label>
+                        <input id="lifecycle-expires-optional" type="date" class="form-control form-control-sm" @bind="_baselineExpires" />
                     </div>
-                    <div class="mb-2"><input class="form-control form-control-sm" placeholder="Notes" @bind="_baselineNotes" @bind:event="oninput" /></div>
+                    <div class="mb-2"><label class="form-label small mb-1" for="lifecycle-notes">Notes</label><input class="form-control form-control-sm" placeholder="Notes" id="lifecycle-notes" @bind="_baselineNotes" @bind:event="oninput" /></div>
                     <button class="btn btn-primary btn-sm" @onclick="SetBaseline" disabled="@(string.IsNullOrWhiteSpace(_baselineFamily) || _baselineTargetEntryId == 0 || string.IsNullOrWhiteSpace(_baselineReviewedBy))">Set baseline</button>
                 </div>
             </div>
             <div class="col-lg-7">
                 @if (_baselinesList.Count == 0)
                 {
-                    <div class="empty-state"><i class="bi bi-flag"></i>No approved baselines set yet — until one is, no target is auto-recommended.</div>
+                    <div class="empty-state"><i aria-hidden="true" class="bi bi-flag"></i>No approved baselines yet. Until one is set, no upgrade target is recommended automatically.</div>
                 }
                 else
                 {
-                    <table class="table table-sm dbt-table">
+                    <table aria-label="Approved patch baselines" class="table table-sm dbt-table">
                         <thead><tr><th>Engine/family</th><th>Target</th><th>Reviewed by</th><th>Expires</th><th>Active</th></tr></thead>
                         <tbody>
                             @foreach (var b in _baselinesList)
@@ -204,7 +203,7 @@
                                     <td class="small">@b.Engine / @b.Family</td>
                                     <td class="small">@b.TargetReleaseCatalogEntry?.ReleaseLabel</td>
                                     <td class="small">@b.ReviewedBy</td>
-                                    <td class="small">@(b.ExpiresAtUtc?.ToString("yyyy-MM-dd") ?? "—")</td>
+                                    <td class="small">@(b.ExpiresAtUtc?.ToString("yyyy-MM-dd") ?? "No expiry")</td>
                                     <td class="small">@(b.IsActive ? "Yes" : "No")</td>
                                 </tr>
                             }
@@ -221,47 +220,47 @@
         <div class="row g-3">
             <div class="col-lg-5">
                 <div class="dbt-card">
-                    <h2 class="h6 text-muted text-uppercase mb-3">Import an advisory</h2>
+                    <h2 class="h6 text-muted mb-3">Import an advisory</h2>
                     <div class="row g-2 mb-2">
                         <div class="col-6">
-                            <select class="form-select form-select-sm" @bind="_advEngine">
+                            <label class="form-label small mb-1" for="lifecycle-adv-engine">Engine</label><select id="lifecycle-adv-engine" class="form-select form-select-sm" @bind="_advEngine">
                                 @foreach (var e in Enum.GetValues<DatabaseEngine>())
                                 {
                                     <option value="@e">@e</option>
                                 }
                             </select>
                         </div>
-                        <div class="col-6"><input class="form-control form-control-sm" placeholder="Family" @bind="_advFamily" @bind:event="oninput" /></div>
+                        <div class="col-6"><label class="form-label small mb-1" for="lifecycle-family-3">Family</label><input class="form-control form-control-sm" placeholder="Family" id="lifecycle-family-3" @bind="_advFamily" @bind:event="oninput" /></div>
                     </div>
-                    <div class="mb-2"><input class="form-control form-control-sm" placeholder="Vendor advisory ID (e.g. CVE-2025-1234)" @bind="_advVendorId" @bind:event="oninput" /></div>
-                    <div class="mb-2"><input class="form-control form-control-sm" placeholder="Title" @bind="_advTitle" @bind:event="oninput" /></div>
+                    <div class="mb-2"><label class="form-label small mb-1" for="lifecycle-vendor-advisory-id">Vendor advisory ID</label><input class="form-control form-control-sm" placeholder="Vendor advisory ID (e.g. CVE-2025-1234)" id="lifecycle-vendor-advisory-id" @bind="_advVendorId" @bind:event="oninput" /></div>
+                    <div class="mb-2"><label class="form-label small mb-1" for="lifecycle-title">Title</label><input class="form-control form-control-sm" placeholder="Title" id="lifecycle-title" @bind="_advTitle" @bind:event="oninput" /></div>
                     <div class="row g-2 mb-2">
                         <div class="col-6">
-                            <select class="form-select form-select-sm" @bind="_advSeverity">
+                            <label class="form-label small mb-1" for="lifecycle-adv-severity">Severity</label><select id="lifecycle-adv-severity" class="form-select form-select-sm" @bind="_advSeverity">
                                 @foreach (var s in Enum.GetValues<AdvisorySeverity>())
                                 {
                                     <option value="@s">@s</option>
                                 }
                             </select>
                         </div>
-                        <div class="col-6"><input class="form-control form-control-sm" placeholder="Fixed build" @bind="_advFixedBuild" @bind:event="oninput" /></div>
+                        <div class="col-6"><label class="form-label small mb-1" for="lifecycle-fixed-build">Fixed build</label><input class="form-control form-control-sm" placeholder="Fixed build" id="lifecycle-fixed-build" @bind="_advFixedBuild" @bind:event="oninput" /></div>
                     </div>
                     <div class="row g-2 mb-2">
-                        <div class="col-6"><input class="form-control form-control-sm" placeholder="Affected min build" @bind="_advMinBuild" @bind:event="oninput" /></div>
-                        <div class="col-6"><input class="form-control form-control-sm" placeholder="Affected max build" @bind="_advMaxBuild" @bind:event="oninput" /></div>
+                        <div class="col-6"><label class="form-label small mb-1" for="lifecycle-affected-min-build">Affected min build</label><input class="form-control form-control-sm" placeholder="Affected min build" id="lifecycle-affected-min-build" @bind="_advMinBuild" @bind:event="oninput" /></div>
+                        <div class="col-6"><label class="form-label small mb-1" for="lifecycle-affected-max-build">Affected max build</label><input class="form-control form-control-sm" placeholder="Affected max build" id="lifecycle-affected-max-build" @bind="_advMaxBuild" @bind:event="oninput" /></div>
                     </div>
-                    <div class="mb-2"><input class="form-control form-control-sm" placeholder="Provenance URL" @bind="_advProvenance" @bind:event="oninput" /></div>
+                    <div class="mb-2"><label class="form-label small mb-1" for="lifecycle-provenance-url">Provenance URL</label><input class="form-control form-control-sm" placeholder="Provenance URL" id="lifecycle-provenance-url" @bind="_advProvenance" @bind:event="oninput" /></div>
                     <button class="btn btn-primary btn-sm" @onclick="ImportAdvisory" disabled="@(string.IsNullOrWhiteSpace(_advVendorId) || string.IsNullOrWhiteSpace(_advFamily))">Import advisory</button>
                 </div>
             </div>
             <div class="col-lg-7">
                 @if (_advisoriesList.Count == 0)
                 {
-                    <div class="empty-state"><i class="bi bi-shield-exclamation"></i>No advisories imported yet.</div>
+                    <div class="empty-state"><i aria-hidden="true" class="bi bi-shield-exclamation"></i>No advisories imported yet.</div>
                 }
                 else
                 {
-                    <table class="table table-sm dbt-table">
+                    <table aria-label="Imported advisories" class="table table-sm dbt-table">
                         <thead><tr><th>Vendor ID</th><th>Family</th><th>Severity</th><th>Affected range</th><th>Fixed build</th></tr></thead>
                         <tbody>
                             @foreach (var a in _advisoriesList)
@@ -292,10 +291,10 @@
         <div class="row g-3">
             <div class="col-lg-5">
                 <div class="dbt-card">
-                    <h2 class="h6 text-muted text-uppercase mb-3">Add a reviewed path rule (D08)</h2>
+                    <h2 class="h6 text-muted mb-3">Add a reviewed path rule</h2>
                     <div class="row g-2 mb-2">
                         <div class="col-4">
-                            <select class="form-select form-select-sm" @bind="_ruleEngine">
+                            <label class="form-label small mb-1" for="lifecycle-rule-engine">Engine</label><select id="lifecycle-rule-engine" class="form-select form-select-sm" @bind="_ruleEngine">
                                 @foreach (var e in Enum.GetValues<DatabaseEngine>())
                                 {
                                     <option value="@e">@e</option>
@@ -303,7 +302,7 @@
                             </select>
                         </div>
                         <div class="col-4">
-                            <select class="form-select form-select-sm" @bind="_ruleAssessmentType">
+                            <label class="form-label small mb-1" for="lifecycle-rule-assessment">Assessment type</label><select id="lifecycle-rule-assessment" class="form-select form-select-sm" @bind="_ruleAssessmentType">
                                 @foreach (var t in Enum.GetValues<MigrationAssessmentType>())
                                 {
                                     <option value="@t">@t</option>
@@ -311,7 +310,7 @@
                             </select>
                         </div>
                         <div class="col-4">
-                            <select class="form-select form-select-sm" @bind="_ruleMethod">
+                            <label class="form-label small mb-1" for="lifecycle-rule-method">Method</label><select id="lifecycle-rule-method" class="form-select form-select-sm" @bind="_ruleMethod">
                                 @foreach (var m in Enum.GetValues<MigrationMethod>())
                                 {
                                     <option value="@m">@m</option>
@@ -320,37 +319,37 @@
                         </div>
                     </div>
                     <div class="row g-2 mb-2">
-                        <div class="col-6"><input class="form-control form-control-sm" placeholder="Source family" @bind="_ruleSourceFamily" @bind:event="oninput" /></div>
-                        <div class="col-6"><input class="form-control form-control-sm" placeholder="Target family" @bind="_ruleTargetFamily" @bind:event="oninput" /></div>
+                        <div class="col-6"><label class="form-label small mb-1" for="lifecycle-source-family">Source family</label><input class="form-control form-control-sm" placeholder="Source family" id="lifecycle-source-family" @bind="_ruleSourceFamily" @bind:event="oninput" /></div>
+                        <div class="col-6"><label class="form-label small mb-1" for="lifecycle-target-family">Target family</label><input class="form-control form-control-sm" placeholder="Target family" id="lifecycle-target-family" @bind="_ruleTargetFamily" @bind:event="oninput" /></div>
                     </div>
                     <div class="row g-2 mb-2">
-                        <div class="col-3"><input class="form-control form-control-sm" placeholder="Src build min" @bind="_ruleSourceMin" @bind:event="oninput" /></div>
-                        <div class="col-3"><input class="form-control form-control-sm" placeholder="Src build max" @bind="_ruleSourceMax" @bind:event="oninput" /></div>
-                        <div class="col-3"><input class="form-control form-control-sm" placeholder="Tgt build min" @bind="_ruleTargetMin" @bind:event="oninput" /></div>
-                        <div class="col-3"><input class="form-control form-control-sm" placeholder="Tgt build max" @bind="_ruleTargetMax" @bind:event="oninput" /></div>
+                        <div class="col-3"><label class="form-label small mb-1" for="lifecycle-src-build-min">Src build min</label><input class="form-control form-control-sm" placeholder="Src build min" id="lifecycle-src-build-min" @bind="_ruleSourceMin" @bind:event="oninput" /></div>
+                        <div class="col-3"><label class="form-label small mb-1" for="lifecycle-src-build-max">Src build max</label><input class="form-control form-control-sm" placeholder="Src build max" id="lifecycle-src-build-max" @bind="_ruleSourceMax" @bind:event="oninput" /></div>
+                        <div class="col-3"><label class="form-label small mb-1" for="lifecycle-tgt-build-min">Tgt build min</label><input class="form-control form-control-sm" placeholder="Tgt build min" id="lifecycle-tgt-build-min" @bind="_ruleTargetMin" @bind:event="oninput" /></div>
+                        <div class="col-3"><label class="form-label small mb-1" for="lifecycle-tgt-build-max">Tgt build max</label><input class="form-control form-control-sm" placeholder="Tgt build max" id="lifecycle-tgt-build-max" @bind="_ruleTargetMax" @bind:event="oninput" /></div>
                     </div>
                     <div class="row g-2 mb-2">
                         <div class="col-6">
-                            <select class="form-select form-select-sm" @bind="_ruleStatus">
+                            <label class="form-label small mb-1" for="lifecycle-rule-status">Support status</label><select id="lifecycle-rule-status" class="form-select form-select-sm" @bind="_ruleStatus">
                                 <option value="@PathSupportStatus.Supported">Supported</option>
                                 <option value="@PathSupportStatus.Blocked">Blocked</option>
                             </select>
                         </div>
-                        <div class="col-6"><input class="form-control form-control-sm" placeholder="Reviewed by (required)" @bind="_ruleReviewedBy" @bind:event="oninput" /></div>
+                        <div class="col-6"><label class="form-label small mb-1" for="lifecycle-reviewed-by-required-3">Reviewed by (required)</label><input class="form-control form-control-sm" placeholder="Reviewed by (required)" id="lifecycle-reviewed-by-required-3" @bind="_ruleReviewedBy" @bind:event="oninput" /></div>
                     </div>
-                    <div class="mb-2"><input class="form-control form-control-sm" placeholder="Vendor guidance URL" @bind="_ruleGuidanceUrl" @bind:event="oninput" /></div>
+                    <div class="mb-2"><label class="form-label small mb-1" for="lifecycle-vendor-guidance-url">Vendor guidance URL</label><input class="form-control form-control-sm" placeholder="Vendor guidance URL" id="lifecycle-vendor-guidance-url" @bind="_ruleGuidanceUrl" @bind:event="oninput" /></div>
                     <button class="btn btn-primary btn-sm" @onclick="CreateRule" disabled="@(string.IsNullOrWhiteSpace(_ruleSourceFamily) || string.IsNullOrWhiteSpace(_ruleTargetFamily) || string.IsNullOrWhiteSpace(_ruleReviewedBy))">Add rule</button>
-                    <p class="small text-muted mt-2 mb-0">A pairing with no matching rule below is always evaluated as Unknown on an instance's Migration page — never assumed Supported.</p>
+                    <p class="small text-muted mt-2 mb-0">A pairing with no matching rule below is always evaluated as Unknown on an instance's Migration page. It is never assumed to be Supported.</p>
                 </div>
             </div>
             <div class="col-lg-7">
                 @if (_pathRulesList.Count == 0)
                 {
-                    <div class="empty-state"><i class="bi bi-signpost-2"></i>No path rules reviewed yet — every pairing evaluates as Unknown until one is added.</div>
+                    <div class="empty-state"><i aria-hidden="true" class="bi bi-signpost-2"></i>No path rules reviewed yet. Every pairing evaluates as Unknown until one is added.</div>
                 }
                 else
                 {
-                    <table class="table table-sm dbt-table" data-testid="path-rule-table">
+                    <table aria-label="Reviewed path rules" class="table table-sm dbt-table" data-testid="path-rule-table">
                         <thead><tr><th>Engine</th><th>Type/Method</th><th>Source → target</th><th>Status</th><th>Reviewed by</th></tr></thead>
                         <tbody>
                             @foreach (var r in _pathRulesList)
@@ -476,7 +475,7 @@
             entry.ExtendedSupportEndUtc = _overrideExtendedEnd;
         }, _userName ?? "unknown");
 
-        Toasts.Success(ok ? "Manual override applied." : "Override failed — reason and reviewer are required.");
+        if (ok) Toasts.Success("Manual override applied."); else Toasts.Error("Override not applied. A reason and a reviewer are required.");
         _overridingId = null;
         await LoadAll();
     }
@@ -486,7 +485,7 @@
         var outcome = await Catalog.RefreshAsync(id, _userName ?? "unknown");
         if (outcome.Succeeded)
         {
-            Toasts.Success("Entry refreshed — facts confirmed current.");
+            Toasts.Success("Entry refreshed. Facts confirmed current.");
         }
         else
         {

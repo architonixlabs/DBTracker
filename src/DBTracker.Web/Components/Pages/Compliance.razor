@@ -11,9 +11,8 @@
 
 <div class="app-topbar">
     <div>
-        <div class="eyebrow">Governance</div>
         <h1>Compliance snapshot</h1>
-        <div class="subtitle">As of @_asOf.ToLocalTime().ToString("MMM d, yyyy h:mm tt") — last-backup age per instance</div>
+        <div class="subtitle">Last-backup age per instance as of @_asOf.ToLocalTime().ToString("MMM d, yyyy h:mm tt")</div>
     </div>
     <div class="d-flex gap-2">
         <AuthorizeView Roles="@Roles.ReportingPolicy">
@@ -23,30 +22,30 @@
         </AuthorizeView>
         <AuthorizeView Roles="@Roles.ReportingPolicy">
             <button class="btn btn-outline-secondary" @onclick="SaveSnapshot" disabled="@(_overviews is null || _savingSnapshot)">
-                <i class="bi bi-camera"></i> @(_savingSnapshot ? "Saving…" : "Save snapshot")
+                <i aria-hidden="true" class="bi bi-camera"></i> @(_savingSnapshot ? "Saving…" : "Save snapshot")
             </button>
         </AuthorizeView>
         <button class="btn btn-outline-primary" @onclick="ExportCsv" disabled="@(_overviews is null)">
-            <i class="bi bi-download"></i> Export CSV
+            <i aria-hidden="true" class="bi bi-download"></i> Export CSV
         </button>
     </div>
 </div>
 
 @if (_overviews is null)
 {
-    <div class="spinner-ring"></div>
+    <div class="spinner-ring" role="status"><span class="visually-hidden">Loading</span></div>
 }
 else
 {
     <div class="filter-bar">
-        <select class="form-select" style="max-width:150px;" @bind="_role">
+        <label class="visually-hidden" for="compliance-role">Instance role</label><select id="compliance-role" class="form-select" style="max-width:150px;" @bind="_role">
             <option value="">Active + passive</option>
             @foreach (var r in Enum.GetValues<InstanceRole>())
             {
                 <option value="@r">@r</option>
             }
         </select>
-        <select class="form-select" style="max-width:170px;" @bind="_envTier">
+        <label class="visually-hidden" for="compliance-environment">Environment</label><select id="compliance-environment" class="form-select" style="max-width:170px;" @bind="_envTier">
             <option value="">All environments</option>
             @foreach (var e in Enum.GetValues<EnvironmentTier>())
             {
@@ -56,7 +55,7 @@ else
     </div>
 
     <div class="dbt-table">
-        <table class="table">
+        <table aria-label="Last-backup age per instance" class="table">
             <thead>
                 <tr>
                     <th>Instance</th>
@@ -100,16 +99,16 @@ else
     <div class="row g-0 mt-4" style="border-top:1px solid var(--dbt-line);padding-top:28px;">
         <div class="col-12">
             <div class="dbt-card">
-                <h2 class="h6 text-muted text-uppercase mb-3">Saved snapshots</h2>
-                <p class="text-muted small mb-3">A snapshot freezes the rows above at the moment it's saved — reopening it later reproduces those exact values even if instances are since edited, archived or backdated. Evidence for an audit period, not a live view.</p>
+                <h2 class="h6 text-muted mb-3">Saved snapshots</h2>
+                <p class="text-muted small mb-3">A snapshot freezes the rows above at the moment it's saved. Reopening it later reproduces those exact values even if instances are since edited, archived or backdated. Evidence for an audit period, not a live view.</p>
                 @if (_snapshots.Count == 0)
                 {
-                    <div class="empty-state py-3"><i class="bi bi-camera"></i>No snapshots saved yet.</div>
+                    <div class="empty-state py-3"><i aria-hidden="true" class="bi bi-camera"></i>No snapshots saved yet.</div>
                 }
                 else
                 {
-                    <table class="table table-sm mb-0 dbt-table">
-                        <thead><tr><th>Generated</th><th>By</th><th>Scope</th><th>Rows</th><th></th></tr></thead>
+                    <table aria-label="Saved compliance snapshots" class="table table-sm mb-0 dbt-table">
+                        <thead><tr><th>Generated</th><th>By</th><th>Scope</th><th>Rows</th><th><span class="visually-hidden">Actions</span></th></tr></thead>
                         <tbody>
                             @foreach (var s in _snapshots)
                             {
@@ -187,7 +186,7 @@ else
     {
         if (lastBackupUtc is null)
         {
-            return "—";
+            return "Never";
         }
         var span = _asOf - lastBackupUtc.Value;
         return span.TotalHours < 48 ? $"{span.TotalHours:N0} h" : $"{span.TotalDays:N0} d";

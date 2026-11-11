@@ -19,11 +19,10 @@
 
 <div class="app-topbar">
     <div>
-        <div class="eyebrow">Migration planning · Epic 19 (D10)</div>
         <h1>Migration campaigns</h1>
         <div class="subtitle">
             Waves of affected deployments with accountable owners, recorded alternatives, blockers and a state-transition history.
-            Scheduling a campaign is a planning fact only — it never changes or implies reduced risk/readiness status recorded elsewhere.
+            Scheduling a campaign records a plan only. It never changes the risk or readiness status recorded elsewhere, and never implies that it has improved.
         </div>
     </div>
 </div>
@@ -31,28 +30,28 @@
 <div class="row g-3">
     <div class="col-lg-5">
         <div class="dbt-card">
-            <h2 class="h6 text-muted text-uppercase mb-3">New campaign</h2>
-            <div class="mb-2"><input class="form-control form-control-sm" placeholder="Campaign name" @bind="_name" @bind:event="oninput" /></div>
+            <h2 class="h6 text-muted mb-3">New campaign</h2>
+            <div class="mb-2"><label class="form-label small mb-1" for="campaigns-campaign-name">Campaign name</label><input class="form-control form-control-sm" placeholder="Campaign name" id="campaigns-campaign-name" @bind="_name" @bind:event="oninput" /></div>
             <div class="row g-2 mb-2">
-                <div class="col-6"><input class="form-control form-control-sm" placeholder="Source label" @bind="_sourceLabel" @bind:event="oninput" /></div>
-                <div class="col-6"><input class="form-control form-control-sm" placeholder="Target label" @bind="_targetLabel" @bind:event="oninput" /></div>
+                <div class="col-6"><label class="form-label small mb-1" for="campaigns-source-label">Source label</label><input class="form-control form-control-sm" placeholder="Source label" id="campaigns-source-label" @bind="_sourceLabel" @bind:event="oninput" /></div>
+                <div class="col-6"><label class="form-label small mb-1" for="campaigns-target-label">Target label</label><input class="form-control form-control-sm" placeholder="Target label" id="campaigns-target-label" @bind="_targetLabel" @bind:event="oninput" /></div>
             </div>
-            <div class="mb-2"><input class="form-control form-control-sm" placeholder="Reason" @bind="_reason" @bind:event="oninput" /></div>
+            <div class="mb-2"><label class="form-label small mb-1" for="campaigns-reason">Reason</label><input class="form-control form-control-sm" placeholder="Reason" id="campaigns-reason" @bind="_reason" @bind:event="oninput" /></div>
             <div class="row g-2 mb-2">
                 <div class="col-6">
-                    <select class="form-select form-select-sm" @bind="_method">
+                    <label class="form-label small mb-1" for="campaigns-method">Method</label><select id="campaigns-method" class="form-select form-select-sm" @bind="_method">
                         @foreach (var m in Enum.GetValues<MigrationMethod>())
                         {
                             <option value="@m">@m</option>
                         }
                     </select>
                 </div>
-                <div class="col-6"><input class="form-control form-control-sm" placeholder="Change-ticket reference" @bind="_changeTicketReference" @bind:event="oninput" /></div>
+                <div class="col-6"><label class="form-label small mb-1" for="campaigns-change-ticket-reference">Change-ticket reference</label><input class="form-control form-control-sm" placeholder="Change-ticket reference" id="campaigns-change-ticket-reference" @bind="_changeTicketReference" @bind:event="oninput" /></div>
             </div>
             <div class="row g-2 mb-2">
                 <div class="col-4">
-                    <label class="form-label small">DBA team</label>
-                    <select class="form-select form-select-sm" @bind="_dbaTeamId">
+                    <label for="campaigns-dba-team" class="form-label small">DBA team</label>
+                    <select id="campaigns-dba-team" class="form-select form-select-sm" @bind="_dbaTeamId">
                         <option value="0">None</option>
                         @foreach (var t in _teams)
                         {
@@ -61,8 +60,8 @@
                     </select>
                 </div>
                 <div class="col-4">
-                    <label class="form-label small">App team</label>
-                    <select class="form-select form-select-sm" @bind="_appTeamId">
+                    <label for="campaigns-app-team" class="form-label small">App team</label>
+                    <select id="campaigns-app-team" class="form-select form-select-sm" @bind="_appTeamId">
                         <option value="0">None</option>
                         @foreach (var t in _teams)
                         {
@@ -71,8 +70,8 @@
                     </select>
                 </div>
                 <div class="col-4">
-                    <label class="form-label small">Platform team</label>
-                    <select class="form-select form-select-sm" @bind="_platformTeamId">
+                    <label for="campaigns-platform-team" class="form-label small">Platform team</label>
+                    <select id="campaigns-platform-team" class="form-select form-select-sm" @bind="_platformTeamId">
                         <option value="0">None</option>
                         @foreach (var t in _teams)
                         {
@@ -100,12 +99,12 @@
     <div class="col-lg-7">
         @if (_campaigns.Count == 0)
         {
-            <div class="empty-state"><i class="bi bi-signpost-2"></i> No migration campaigns yet.</div>
+            <div class="empty-state"><i aria-hidden="true" class="bi bi-signpost-2"></i> No migration campaigns yet.</div>
         }
         else
         {
-            <table class="table table-sm dbt-table" data-testid="campaign-table">
-                <thead><tr><th>Name</th><th>Source → target</th><th>State</th><th>Instances</th><th></th></tr></thead>
+            <table aria-label="Migration campaigns" class="table table-sm dbt-table" data-testid="campaign-table">
+                <thead><tr><th>Name</th><th>Source → target</th><th>State</th><th>Instances</th><th><span class="visually-hidden">Actions</span></th></tr></thead>
                 <tbody>
                     @foreach (var c in _campaigns)
                     {

@@ -12,10 +12,9 @@
 
 <div class="app-topbar">
     <div>
-        <div class="eyebrow">Epic 20 (D15)</div>
         <h1>DBA lifecycle workspace</h1>
         <div class="subtitle">
-            One instance, one row — cluster nodes are counted, never double-counted as separate rows. Backup health is tracked
+            One row per instance. Cluster nodes are counted within it, never as separate rows. Backup health is tracked
             elsewhere and deliberately not blended in here; every view below shows its denominator and unknown counts.
         </div>
     </div>
@@ -23,7 +22,7 @@
 
 @if (_view is null)
 {
-    <div class="spinner-ring"></div>
+    <div class="spinner-ring" role="status"><span class="visually-hidden">Loading</span></div>
 }
 else
 {
@@ -36,42 +35,42 @@ else
     </div>
 
     <div class="filter-bar" style="flex-wrap:wrap;gap:10px;">
-        <select class="form-select form-select-sm" style="width:auto;" @bind="_engineFilter" @bind:after="Apply">
+        <label class="visually-hidden" for="workspace-engine">Engine</label><select id="workspace-engine" class="form-select form-select-sm" style="width:auto;" @bind="_engineFilter" @bind:after="Apply">
             <option value="">Engine: any</option>
             @foreach (var e in Enum.GetValues<DatabaseEngine>())
             {
                 <option value="@e">@e</option>
             }
         </select>
-        <select class="form-select form-select-sm" style="width:auto;" @bind="_phaseFilter" @bind:after="Apply">
+        <label class="visually-hidden" for="workspace-phase">Support phase</label><select id="workspace-phase" class="form-select form-select-sm" style="width:auto;" @bind="_phaseFilter" @bind:after="Apply">
             <option value="">Support phase: any</option>
             @foreach (var p in Enum.GetValues<SupportPhase>())
             {
                 <option value="@p">@p</option>
             }
         </select>
-        <select class="form-select form-select-sm" style="width:auto;" @bind="_coverageFilter" @bind:after="Apply">
+        <label class="visually-hidden" for="workspace-coverage">Coverage</label><select id="workspace-coverage" class="form-select form-select-sm" style="width:auto;" @bind="_coverageFilter" @bind:after="Apply">
             <option value="">Coverage: any</option>
             @foreach (var c in Enum.GetValues<LifecycleCoverageStatus>())
             {
                 <option value="@c">@c</option>
             }
         </select>
-        <select class="form-select form-select-sm" style="width:auto;" @bind="_criticalityFilter" @bind:after="Apply">
+        <label class="visually-hidden" for="workspace-criticality">Criticality</label><select id="workspace-criticality" class="form-select form-select-sm" style="width:auto;" @bind="_criticalityFilter" @bind:after="Apply">
             <option value="">Criticality: any</option>
             @foreach (var c in Enum.GetValues<InstanceCriticality>())
             {
                 <option value="@c">@c</option>
             }
         </select>
-        <select class="form-select form-select-sm" style="width:auto;" @bind="_campaignStateFilter" @bind:after="Apply">
+        <label class="visually-hidden" for="workspace-campaign-state">Campaign state</label><select id="workspace-campaign-state" class="form-select form-select-sm" style="width:auto;" @bind="_campaignStateFilter" @bind:after="Apply">
             <option value="">Campaign state: any</option>
             @foreach (var s in Enum.GetValues<CampaignState>())
             {
                 <option value="@s">@s</option>
             }
         </select>
-        <input class="form-control form-control-sm" style="width:160px;" placeholder="Deadline within (days)" @bind="_deadlineWithinDays" @bind:after="Apply" data-testid="deadline-horizon-input" />
+        <label class="visually-hidden" for="workspace-deadline-days">Deadline within (days)</label><input id="workspace-deadline-days" class="form-control form-control-sm" style="width:160px;" placeholder="Deadline within (days)" @bind="_deadlineWithinDays" @bind:after="Apply" data-testid="deadline-horizon-input" />
         <div class="form-check">
             <input class="form-check-input" type="checkbox" id="unknown-stale" @bind="_unknownOrStaleOnly" @bind:after="Apply" />
             <label class="form-check-label small" for="unknown-stale">Unknown/stale identity only</label>
@@ -81,7 +80,7 @@ else
 
     @if (_view.MatchingRows.Count == 0)
     {
-        <div class="empty-state"><i class="bi bi-filter"></i> No instances match this filter.</div>
+        <div class="empty-state"><i aria-hidden="true" class="bi bi-filter"></i> No instances match this filter.</div>
     }
     else
     {
@@ -95,12 +94,12 @@ else
                             <td class="small">@r.InstanceName @(r.IsIdentityUnknownOrStale ? "⚠" : "")</td>
                             <td class="small">@r.Engine / @(r.IdentityFamily ?? "Unknown")</td>
                             <td class="small">@r.SupportPhase</td>
-                            <td class="small">@(r.DaysToNextMilestone?.ToString() ?? "—")</td>
+                            <td class="small">@(r.DaysToNextMilestone?.ToString() ?? "No milestone")</td>
                             <td class="small">@r.Coverage</td>
                             <td class="small">@r.Criticality</td>
-                            <td class="small">@(r.OwnerTeamName ?? "—")</td>
+                            <td class="small">@(r.OwnerTeamName ?? "Unassigned")</td>
                             <td class="small">@r.ClusterNodeCount</td>
-                            <td class="small">@(r.LatestCampaignState?.ToString() ?? "—") @(r.IsBlockedOrLate ? "(blocked)" : "")</td>
+                            <td class="small">@(r.LatestCampaignState?.ToString() ?? "No campaign") @(r.IsBlockedOrLate ? "(blocked)" : "")</td>
                             <td class="small">@r.ExpiringExceptionCount</td>
                         </tr>
                     }
@@ -112,7 +111,7 @@ else
     <div class="row g-3 mt-3">
         <div class="col-lg-4">
             <div class="dbt-card h-100">
-                <h2 class="h6 text-muted text-uppercase mb-2">Support runway</h2>
+                <h2 class="h6 text-muted mb-2">Support runway</h2>
                 @foreach (var kv in _report!.SupportPhaseCounts.OrderByDescending(kv => kv.Value))
                 {
                     <div class="small">@kv.Key: @kv.Value</div>
@@ -121,7 +120,7 @@ else
         </div>
         <div class="col-lg-4">
             <div class="dbt-card h-100">
-                <h2 class="h6 text-muted text-uppercase mb-2">Patch-baseline coverage</h2>
+                <h2 class="h6 text-muted mb-2">Patch-baseline coverage</h2>
                 @foreach (var kv in _report!.CoverageCounts.OrderByDescending(kv => kv.Value))
                 {
                     <div class="small">@kv.Key: @kv.Value</div>
@@ -130,7 +129,7 @@ else
         </div>
         <div class="col-lg-4">
             <div class="dbt-card h-100">
-                <h2 class="h6 text-muted text-uppercase mb-2">Expiring exceptions &amp; blocked migrations</h2>
+                <h2 class="h6 text-muted mb-2">Expiring exceptions &amp; blocked migrations</h2>
                 <div class="small" data-testid="expiring-exceptions-count">Expiring exceptions: @_report!.ExpiringExceptionRows.Count instance(s)</div>
                 <div class="small" data-testid="blocked-migrations-count">Blocked migrations: @_report!.BlockedOrLateRows.Count instance(s)</div>
             </div>
@@ -179,7 +178,7 @@ else
                 Csv(r.ClusterNodeCount.ToString()), Csv(r.LatestCampaignState?.ToString() ?? ""), Csv(r.ExpiringExceptionCount.ToString())));
         }
         await JS.InvokeVoidAsync("dbtracker.downloadCsv", $"dbtracker-lifecycle-workspace-{DateTime.UtcNow:yyyyMMdd-HHmm}.csv", sb.ToString());
-        Toasts.Success($"Exported {_view.MatchingRows.Count} row(s) — exactly the filtered view shown above.");
+        Toasts.Success($"Exported {_view.MatchingRows.Count} row(s), exactly the filtered view shown above.");
     }
 
     private static string Csv(string value) =>

@@ -7,21 +7,20 @@
 
 <div class="app-topbar">
     <div>
-        <div class="eyebrow">Governance · frozen snapshot</div>
         <h1>Compliance snapshot</h1>
         @if (_snapshot is not null)
         {
             <div class="subtitle">
                 Generated @_snapshot.GeneratedAtUtc.ToLocalTime().ToString("MMM d, yyyy h:mm tt") by @_snapshot.GeneratedByUserName
-                — scope: @_snapshot.ScopeDescription — policy @_snapshot.PolicyVersion
+                · scope: @_snapshot.ScopeDescription · policy @_snapshot.PolicyVersion
             </div>
         }
     </div>
     <div class="d-flex gap-2">
-        <a class="btn btn-outline-secondary" href="/compliance"><i class="bi bi-arrow-left"></i> Back to Compliance</a>
+        <a class="btn btn-outline-secondary" href="/compliance"><i aria-hidden="true" class="bi bi-arrow-left"></i> Back to Compliance</a>
         @if (_snapshot is not null)
         {
-            <button class="btn btn-outline-primary" @onclick="ExportCsv"><i class="bi bi-download"></i> Export CSV</button>
+            <button class="btn btn-outline-primary" @onclick="ExportCsv"><i aria-hidden="true" class="bi bi-download"></i> Export CSV</button>
         }
     </div>
 </div>
@@ -30,23 +29,23 @@
 {
     @if (_loaded)
     {
-        <div class="empty-state"><i class="bi bi-camera"></i>Snapshot not found — it may have been removed.</div>
+        <div class="empty-state"><i aria-hidden="true" class="bi bi-camera"></i>Snapshot not found. It may have been removed. <a href="/compliance">Open Compliance</a> to save a new one.</div>
     }
     else
     {
-        <div class="spinner-ring"></div>
+        <div class="spinner-ring" role="status"><span class="visually-hidden">Loading</span></div>
     }
 }
 else
 {
     <p class="text-muted small mb-3">
-        These values are frozen as of generation time — they will not change even if the underlying
+        These values are frozen as of generation time. They will not change even if the underlying
         instances are later edited, archived, or have backdated backup/restore entries added.
         Evidence: @_snapshot.EvidenceProvenance
     </p>
 
     <div class="dbt-table">
-        <table class="table">
+        <table aria-label="Frozen snapshot rows" class="table">
             <thead>
                 <tr><th>Instance</th><th>Owner</th><th>Role</th><th>Env</th><th>Last successful backup</th><th>Health</th><th>Restore tested</th></tr>
             </thead>

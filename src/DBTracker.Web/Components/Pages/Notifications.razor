@@ -11,15 +11,14 @@
 
 <div class="app-topbar">
     <div>
-        <div class="eyebrow">Personal</div>
         <h1>Notifications</h1>
-        <div class="subtitle">Your own read state and subscriptions — reading a notification here never affects what anyone else sees as unread.</div>
+        <div class="subtitle">Your own read state and subscriptions. Reading a notification here never affects what anyone else sees as unread.</div>
     </div>
 </div>
 
 @if (_page is null)
 {
-    <div class="spinner-ring"></div>
+    <div class="spinner-ring" role="status"><span class="visually-hidden">Loading</span></div>
 }
 else
 {
@@ -27,7 +26,7 @@ else
         <div class="col-lg-7">
             <div class="dbt-card">
                 <div class="d-flex justify-content-between align-items-center mb-3">
-                    <h2 class="h6 text-muted text-uppercase mb-0">Inbox (@_page.UnreadCount unread of @_page.TotalCount)</h2>
+                    <h2 class="h6 text-muted mb-0">Inbox (@_page.UnreadCount unread of @_page.TotalCount)</h2>
                     @if (_page.UnreadCount > 0)
                     {
                         <button class="btn btn-outline-secondary btn-sm" @onclick="MarkAllRead">Mark all read</button>
@@ -36,19 +35,19 @@ else
 
                 @if (_page.Items.Count == 0)
                 {
-                    <div class="empty-state py-3"><i class="bi bi-inbox"></i>No notifications yet.</div>
+                    <div class="empty-state py-3"><i aria-hidden="true" class="bi bi-inbox"></i>No notifications yet.</div>
                 }
                 else
                 {
                     @foreach (var n in _page.Items)
                     {
-                        <div class="notif-item @(n.IsRead ? "" : "unread")" style="cursor:pointer" @onclick="() => OpenItem(n)">
-                            <span class="dot" style="background:@SeverityColor(n.Severity)"></span>
-                            <div>
-                                <div class="notif-message">@n.Message</div>
-                                <div class="notif-time">@n.CreatedAtUtc.ToLocalTime().ToString("MMM d, h:mm tt") @(n.IsRead ? "" : "· unread")</div>
-                            </div>
-                        </div>
+                        <button type="button" class="notif-item @(n.IsRead ? "" : "unread")" style="cursor:pointer;width:100%;text-align:left;border-width:0 0 1px 0;color:inherit;font:inherit;@(n.IsRead ? "background:transparent;" : "")" @onclick="() => OpenItem(n)">
+                            <span class="dot" aria-hidden="true" style="background:@SeverityColor(n.Severity)"></span>
+                            <span class="d-block">
+                                <span class="notif-message d-block">@n.Message</span>
+                                <span class="notif-time d-block">@n.CreatedAtUtc.ToLocalTime().ToString("MMM d, h:mm tt") @(n.IsRead ? "" : "· unread")</span>
+                            </span>
+                        </button>
                     }
 
                     <div class="d-flex justify-content-between align-items-center pt-3">
@@ -64,12 +63,12 @@ else
 
         <div class="col-lg-5">
             <div class="dbt-card">
-                <h2 class="h6 text-muted text-uppercase mb-3">Subscriptions</h2>
-                <p class="small text-muted">Narrows which broadcast alerts land in your inbox/email. No subscriptions = everything (today's default). A subscription can only narrow what you already see — it never grants visibility into an instance your role couldn't already see.</p>
+                <h2 class="h6 text-muted mb-3">Subscriptions</h2>
+                <p class="small text-muted">Narrows which broadcast alerts land in your inbox/email. With no subscriptions you get every alert, which is the default. A subscription can only narrow what you already see. It never grants visibility into an instance your role couldn't already see.</p>
 
                 @if (_subscriptions.Count == 0)
                 {
-                    <div class="text-muted small mb-3">No subscriptions — you see every alert.</div>
+                    <div class="text-muted small mb-3">No subscriptions. You see every alert.</div>
                 }
                 else
                 {
@@ -81,7 +80,7 @@ else
                                 @(s.Scope == SubscriptionScope.Instance ? s.DatabaseInstance?.Name ?? "(deleted instance)" : s.Scope == SubscriptionScope.Company ? s.Company : "")
                                 <span class="text-muted">· @s.Channel</span>
                             </span>
-                            <button class="btn btn-link btn-sm text-danger p-0" @onclick="() => DeleteSubscription(s.Id)"><i class="bi bi-trash"></i></button>
+                            <button type="button" class="btn btn-link btn-sm text-danger p-0" aria-label="Delete subscription" title="Delete subscription" @onclick="() => DeleteSubscription(s.Id)"><i aria-hidden="true" class="bi bi-trash"></i></button>
                         </div>
                     }
                     <hr />
@@ -89,8 +88,8 @@ else
 
                 <div class="d-flex gap-2 flex-wrap align-items-end">
                     <div class="field">
-                        <label class="form-label small">Scope</label>
-                        <select class="form-select form-select-sm" @bind="_newScope">
+                        <label for="notifications-scope" class="form-label small">Scope</label>
+                        <select id="notifications-scope" class="form-select form-select-sm" @bind="_newScope">
                             <option value="@SubscriptionScope.AllInstances">All instances</option>
                             <option value="@SubscriptionScope.Instance">One instance</option>
                             <option value="@SubscriptionScope.Company">Company</option>
@@ -99,8 +98,8 @@ else
                     @if (_newScope == SubscriptionScope.Instance)
                     {
                         <div class="field">
-                            <label class="form-label small">Instance</label>
-                            <select class="form-select form-select-sm" @bind="_newInstanceId">
+                            <label for="notifications-instance" class="form-label small">Instance</label>
+                            <select id="notifications-instance" class="form-select form-select-sm" @bind="_newInstanceId">
                                 @foreach (var i in _instances)
                                 {
                                     <option value="@i.Id">@i.Name</option>
@@ -111,8 +110,8 @@ else
                     @if (_newScope == SubscriptionScope.Company)
                     {
                         <div class="field">
-                            <label class="form-label small">Company</label>
-                            <select class="form-select form-select-sm" @bind="_newCompany">
+                            <label for="notifications-company" class="form-label small">Company</label>
+                            <select id="notifications-company" class="form-select form-select-sm" @bind="_newCompany">
                                 @foreach (var c in _companies)
                                 {
                                     <option value="@c">@c</option>
@@ -121,14 +120,14 @@ else
                         </div>
                     }
                     <div class="field">
-                        <label class="form-label small">Channel</label>
-                        <select class="form-select form-select-sm" @bind="_newChannel">
+                        <label for="notifications-channel" class="form-label small">Channel</label>
+                        <select id="notifications-channel" class="form-select form-select-sm" @bind="_newChannel">
                             <option value="@NotificationChannel.InApp">In-app only</option>
                             <option value="@NotificationChannel.Email">Email only</option>
                             <option value="@NotificationChannel.Both">In-app + email</option>
                         </select>
                     </div>
-                    <button class="btn btn-primary btn-sm" @onclick="AddSubscription">Add</button>
+                    <button class="btn btn-primary btn-sm" @onclick="AddSubscription">Add subscription</button>
                 </div>
             </div>
         </div>

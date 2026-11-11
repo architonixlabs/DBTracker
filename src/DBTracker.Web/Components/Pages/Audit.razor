@@ -8,38 +8,37 @@
 
 <div class="app-topbar">
     <div>
-        <div class="eyebrow">Administration</div>
         <h1>Audit trail</h1>
         <div class="subtitle">
-            Application-level activity log (U19) — append-only. This is not tamper-proof against someone with
+            Application-level activity log. Entries are append-only. This is not tamper-proof against someone with
             direct database access; it records normal application activity, not a cryptographic chain of custody.
         </div>
     </div>
-    <button class="btn btn-outline-secondary" @onclick="Export"><i class="bi bi-download"></i> Export CSV</button>
+    <button class="btn btn-outline-secondary" @onclick="Export"><i aria-hidden="true" class="bi bi-download"></i> Export CSV</button>
 </div>
 
 <div class="filter-bar mb-3">
-    <input class="form-control" style="max-width:260px;" placeholder="Search actor, action, target, reason…" value="@_search" @oninput="OnSearch" />
-    <select class="form-select" style="max-width:160px;" value="@_actorType" @onchange="OnActorTypeChanged">
+    <label class="visually-hidden" for="audit-search">Search audit entries</label><input id="audit-search" class="form-control" style="max-width:260px;" placeholder="Search actor, action, target, reason…" value="@_search" @oninput="OnSearch" />
+    <label class="visually-hidden" for="audit-actor-type">Actor type</label><select id="audit-actor-type" class="form-select" style="max-width:160px;" value="@_actorType" @onchange="OnActorTypeChanged">
         <option value="">Any actor type</option>
         <option value="User">User</option>
         <option value="System">System</option>
     </select>
-    <input class="form-control" style="max-width:200px;" placeholder="Target type (e.g. DatabaseInstance)" value="@_targetType" @oninput="OnTargetTypeChanged" />
+    <label class="visually-hidden" for="audit-target-type">Target type</label><input id="audit-target-type" class="form-control" style="max-width:200px;" placeholder="Target type (e.g. DatabaseInstance)" value="@_targetType" @oninput="OnTargetTypeChanged" />
 </div>
 
 @if (_rows is null)
 {
-    <div class="spinner-ring"></div>
+    <div class="spinner-ring" role="status"><span class="visually-hidden">Loading</span></div>
 }
 else if (_rows.Count == 0)
 {
-    <div class="empty-state"><i class="bi bi-journal-x"></i> No audit events match this filter.</div>
+    <div class="empty-state"><i aria-hidden="true" class="bi bi-journal-x"></i> No audit events match this filter.</div>
 }
 else
 {
     <div class="dbt-table">
-        <table class="table">
+        <table aria-label="Audit entries" class="table">
             <thead><tr><th>When</th><th>Actor</th><th>Action</th><th>Target</th><th>Reason</th></tr></thead>
             <tbody>
                 @foreach (var e in _rows)
@@ -51,7 +50,7 @@ else
                             @e.ActorName
                         </td>
                         <td class="small">@e.Action</td>
-                        <td class="small">@e.TargetType @(string.IsNullOrEmpty(e.TargetName) ? "" : $"— {e.TargetName}")</td>
+                        <td class="small">@e.TargetType@(string.IsNullOrEmpty(e.TargetName) ? "" : $": {e.TargetName}")</td>
                         <td class="small text-muted">@e.Reason</td>
                     </tr>
                 }
