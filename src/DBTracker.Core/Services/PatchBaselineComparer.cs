@@ -66,7 +66,7 @@ public static class PatchBaselineComparer
                 approvedTarget = baseline.TargetReleaseCatalogEntry;
                 if (approvedTarget?.Channel == ReleaseChannel.Preview)
                 {
-                    notes = "The approved target is a preview release — confirm this was an intentional, reviewed exception.";
+                    notes = "The approved target is a preview release. Confirm this was an intentional, reviewed exception.";
                 }
             }
         }

@@ -13,7 +13,7 @@ public static class AdvisoryApplicabilityClassifier
         if (installed.ResolutionStatus != VersionResolutionStatus.Resolved)
         {
             return new AdvisoryClassificationResult(AdvisoryClassification.Unknown,
-                "Installed version identity is unresolved — applicability cannot be determined from version alone.");
+                "Installed version identity is unresolved, so applicability cannot be determined from version alone.");
         }
 
         if (!string.Equals(advisory.Family, installed.Family, StringComparison.OrdinalIgnoreCase))
@@ -40,11 +40,11 @@ public static class AdvisoryApplicabilityClassifier
         if (distributionProvidesBackport)
         {
             return new AdvisoryClassificationResult(AdvisoryClassification.Potential,
-                "Installed build falls in the affected range, but the distribution may backport the fix independently of upstream version numbers — review required before confirming or dismissing.");
+                "Installed build falls in the affected range, but the distribution may backport the fix independently of upstream version numbers. Review it before confirming or dismissing.");
         }
 
         return new AdvisoryClassificationResult(AdvisoryClassification.Potential,
-            "Installed build falls in the advisory's affected range. Version matching alone cannot confirm vulnerability — reviewer evidence is required to confirm or dismiss.");
+            "Installed build falls in the advisory's affected range. Version matching alone cannot confirm vulnerability; reviewer evidence is required to confirm or dismiss.");
     }
 
     private static string BuildKey(VersionIdentity id) =>

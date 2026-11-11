@@ -13,7 +13,7 @@ public static class BackupCopyAvailabilityEvaluator
         if (copy.VerificationStatus == CopyVerificationStatus.NeverVerified)
         {
             var explanation = copy.FirstDiscoveredAtUtc is { } discovered
-                ? $"Discovered on {discovered:u}, but never actually verified since — historical discovery is not current availability."
+                ? $"Discovered on {discovered:u}, but never verified since. A historical discovery is not proof of current availability."
                 : "Never verified.";
             return new CopyAvailabilityResult(false, false, explanation);
         }
@@ -23,11 +23,11 @@ public static class BackupCopyAvailabilityEvaluator
         return copy.VerificationStatus switch
         {
             CopyVerificationStatus.Accessible when isStale =>
-                new CopyAvailabilityResult(false, true, $"Last verified accessible on {copy.LastVerifiedAtUtc:u}, which is now stale (older than {staleAfterDays} day(s)) — re-verify before relying on it."),
+                new CopyAvailabilityResult(false, true, $"Last verified accessible on {copy.LastVerifiedAtUtc:u}, which is now stale (older than {staleAfterDays} day(s)). Re-verify before relying on it."),
             CopyVerificationStatus.Accessible =>
                 new CopyAvailabilityResult(true, false, $"Currently verified accessible (as of {copy.LastVerifiedAtUtc:u})."),
             CopyVerificationStatus.CannotVerify =>
-                new CopyAvailabilityResult(false, isStale, "Last check could not confirm the copy — not the same claim as confirmed missing."),
+                new CopyAvailabilityResult(false, isStale, "Last check could not confirm the copy. That is not the same as confirming it missing."),
             CopyVerificationStatus.Missing =>
                 new CopyAvailabilityResult(false, isStale, "Last check confirmed the copy is missing."),
             _ => new CopyAvailabilityResult(false, isStale, "Unverified.")

@@ -19,7 +19,7 @@ public static class ComplianceReportBuilder
         var never = rows.Count(r => r.Health == BackupHealth.NeverBackedUp);
         var restoreTested = rows.Count(r => r.RestoreTested);
 
-        sb.AppendLine($"DBTracker backup compliance report — as of {asOfUtc:yyyy-MM-dd HH:mm} UTC");
+        sb.AppendLine($"DBTracker backup compliance report, as of {asOfUtc:yyyy-MM-dd HH:mm} UTC");
         sb.AppendLine(new string('-', 60));
         sb.AppendLine($"Total instances tracked: {total}");
         sb.AppendLine($"  On track:          {onTrack}");
@@ -37,7 +37,7 @@ public static class ComplianceReportBuilder
 
         if (atRisk.Count == 0)
         {
-            sb.AppendLine("No instances currently at risk — every tracked instance is on track.");
+            sb.AppendLine("No instances currently at risk. Every tracked instance is on track.");
         }
         else
         {
@@ -45,7 +45,7 @@ public static class ComplianceReportBuilder
             foreach (var row in atRisk)
             {
                 var lastBackup = row.LastBackupUtc is null ? "never" : row.LastBackupUtc.Value.ToString("yyyy-MM-dd HH:mm") + " UTC";
-                sb.AppendLine($"  [{row.Health,-14}] {row.Instance.Name} ({row.Instance.Company}/{row.Instance.Department}) — last backup: {lastBackup}");
+                sb.AppendLine($"  [{row.Health,-14}] {row.Instance.Name} ({row.Instance.Company}/{row.Instance.Department}), last backup: {lastBackup}");
             }
         }
 
@@ -59,7 +59,7 @@ public static class ComplianceReportBuilder
     {
         var atRisk = rows.Count(r => r.Health is BackupHealth.Failed or BackupHealth.Overdue or BackupHealth.NeverBackedUp);
         return atRisk == 0
-            ? $"DBTracker compliance report {asOfUtc:yyyy-MM-dd} — all clear"
-            : $"DBTracker compliance report {asOfUtc:yyyy-MM-dd} — {atRisk} instance(s) need attention";
+            ? $"DBTracker compliance report {asOfUtc:yyyy-MM-dd}: all clear"
+            : $"DBTracker compliance report {asOfUtc:yyyy-MM-dd}: {atRisk} instance(s) need attention";
     }
 }

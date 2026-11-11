@@ -62,6 +62,6 @@ public static class EntitlementStatusClassifier
         // Contracts exist (e.g. starting in the future) but none is current or lapsed yet.
         var upcoming = contracts.OrderBy(c => c.CoverageStartUtc ?? DateTime.MaxValue).First();
         return new EntitlementResult(EntitlementStatus.Expired, upcoming, null,
-            $"No currently effective coverage — the recorded {upcoming.CoverageType} agreement from {upcoming.Vendor} does not cover today.");
+            $"No currently effective coverage. The recorded {upcoming.CoverageType} agreement from {upcoming.Vendor} does not cover today.");
     }
 }

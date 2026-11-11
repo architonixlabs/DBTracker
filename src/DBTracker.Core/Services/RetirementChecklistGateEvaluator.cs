@@ -64,7 +64,7 @@ public static class RetirementChecklistGateEvaluator
         if (consumers.Count == 0)
         {
             return new RetirementGateResult("ConsumersResolved", "Downstream consumers moved/confirmed resolved", RetirementGateStatus.Unknown,
-                "No downstream-consumer dependencies recorded — confirm none exist before retiring.");
+                "No downstream-consumer dependencies recorded. Confirm none exist before retiring.");
         }
 
         var unresolved = consumers.Where(d => !d.IsResolved).Select(d => d.Name).ToList();
@@ -83,7 +83,7 @@ public static class RetirementChecklistGateEvaluator
         if (jobsReplicas.Count == 0)
         {
             return new RetirementGateResult("JobsReplicasResolved", "Jobs/replicas removed or redirected", RetirementGateStatus.Unknown,
-                "No job/replica/linked-service/backup-tooling dependencies recorded — confirm none remain pointed at this instance.");
+                "No job/replica/linked-service/backup-tooling dependencies recorded. Confirm none still point at this instance.");
         }
 
         var unresolved = jobsReplicas.Where(d => !d.IsResolved).Select(d => $"{d.Kind}: {d.Name}").ToList();
@@ -136,14 +136,14 @@ public static class RetirementChecklistGateEvaluator
         if (rollbackRetentionDeadlineUtc is null)
         {
             return new RetirementGateResult("RollbackWindowClosed", "Change rollback window closed", RetirementGateStatus.NotApplicable,
-                "No rollback-retention deadline recorded for this instance — no active change to close out.");
+                "No rollback-retention deadline recorded for this instance, so there's no active change to close out.");
         }
 
         return nowUtc >= rollbackRetentionDeadlineUtc
             ? new RetirementGateResult("RollbackWindowClosed", "Change rollback window closed", RetirementGateStatus.Passed,
                 $"Rollback-retention deadline ({rollbackRetentionDeadlineUtc:u}) has passed.")
             : new RetirementGateResult("RollbackWindowClosed", "Change rollback window closed", RetirementGateStatus.Blocked,
-                $"Rollback-retention deadline is {rollbackRetentionDeadlineUtc:u} — the window hasn't closed yet.");
+                $"Rollback-retention deadline is {rollbackRetentionDeadlineUtc:u}, so the window hasn't closed yet.");
     }
 
     private static RetirementGateResult LegalHoldReviewedGate(RetirementChecklist checklist) =>

@@ -34,7 +34,7 @@ public static class ScannerStalenessClassifier
         if (!backupFileLocationConfigured)
         {
             return new ScannerHealth(ScannerFreshness.NotConfigured, lastScanUtc, null, null,
-                "No backup file location configured — nothing to scan.");
+                "No backup file location configured, so there's nothing to scan.");
         }
 
         if (lastScanUtc is null || lastScanStatus == ScanStatus.NeverScanned)
@@ -66,7 +66,7 @@ public static class ScannerStalenessClassifier
 
         return isStale
             ? new ScannerHealth(ScannerFreshness.Stale, lastScanUtc, lastScanUtc, nextExpected,
-                $"No successful scan in over {staleAfter.TotalHours:N0}h — the background scanner may have stopped. Check it's still running, or scan now.")
+                $"No successful scan in over {staleAfter.TotalHours:N0}h. The background scanner may have stopped. Check it's still running, or scan now.")
             : new ScannerHealth(ScannerFreshness.Healthy, lastScanUtc, lastScanUtc, nextExpected, "");
     }
 }

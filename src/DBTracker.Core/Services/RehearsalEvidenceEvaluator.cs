@@ -38,7 +38,7 @@ public static class RehearsalEvidenceEvaluator
         if (expiresAtUtc <= nowUtc)
         {
             return new RehearsalReadinessResult(RehearsalReadinessStatus.Stale,
-                $"The last rehearsal ({latest.PerformedAtUtc:yyyy-MM-dd}) is older than its {validityDays}-day validity window — a fresh rehearsal is required.");
+                $"The last rehearsal ({latest.PerformedAtUtc:yyyy-MM-dd}) is older than its {validityDays}-day validity window. A fresh rehearsal is required.");
         }
 
         if (latest.BackupRestoreOutcome != EvidenceCheckOutcome.Passed)

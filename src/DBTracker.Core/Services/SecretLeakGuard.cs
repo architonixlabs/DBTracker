@@ -25,5 +25,5 @@ public static class SecretLeakGuard
     }
 
     /// <summary>Returns the value unchanged unless it looks like secret material, which is replaced whole with a redaction marker.</summary>
-    public static string Redact(string? value) => LooksLikeSecretMaterial(value) ? "[redacted — looked like secret/private-key material]" : value ?? string.Empty;
+    public static string Redact(string? value) => LooksLikeSecretMaterial(value) ? "[redacted: looked like secret or private-key material]" : value ?? string.Empty;
 }
