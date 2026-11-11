@@ -1,10 +1,14 @@
 # DBTracker
 
 A .NET Core Blazor app for tracking database backups across a heterogeneous
-environment — SQL Server, MySQL, PostgreSQL, MongoDB, Oracle and more. Tracks
+environment: SQL Server, MySQL, PostgreSQL, MongoDB, Oracle and more. Tracks
 which application/company/department owns each instance, contact info,
 active/passive role, server and database IPs, and whether backups are
 actually happening on schedule.
+
+## Install
+Download **DBTracker-Setup.exe** from [Releases](https://github.com/architonixlabs/DBTracker/releases)
+and follow the [setup guide](SETUP-GUIDE.md). What changed in each version: [CHANGELOG.md](CHANGELOG.md).
 
 ## Stack
 - .NET 10, Blazor Web App (interactive server)
