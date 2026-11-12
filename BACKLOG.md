@@ -2407,6 +2407,15 @@ fallback.
   - Full E2E: 145 of 147, with the 2 wizard failures fixed and rerun green.
   - Verified in the Hyper-V upgrade rerun (1.1.0 to 1.1.1): the site answered after the upgrade and reboot.
 
+- 2026-11-12 | Release 1.2.0 verification.
+  - Merged G16 and G20 (installer, track H), the light theme and empty states (track I), G34, the password sign-out fix
+    and the first full SonarQube scan (G21).
+  - Results:
+    - Unit tests 1087/1087, tray tests 62/62, custom-action tests 32/32.
+    - Full headed E2E 152/153. The 1 failure was a toast-order race in
+      `Campaign_CannotReachReadyWithoutRehearsal_NorScheduledWithoutApproval`; after fixing it, that class passed 4/4.
+  - No Hyper-V run this round, as the owner asked, so the installer changes in G16 and G20 still need G18.
+
 ### Audit corrections to existing text
 
 - 2026-11-11 | UPDATE-017 | Clarifies the Epic 13-17 intro ("All items below are proposed and unimplemented"), the "planning checkboxes remain open" sentence, and the Epic 18-22 intro ("All D items below are proposed and unimplemented"): all are now ticked, with remaining gaps tracked as G09-G16. The original wording is kept as history.

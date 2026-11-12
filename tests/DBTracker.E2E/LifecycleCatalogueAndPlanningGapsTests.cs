@@ -109,7 +109,8 @@ public class LifecycleCatalogueAndPlanningGapsTests
         await Assertions.Expect(stateCard.Locator("[data-testid=transition-gate]")).ToContainTextAsync("rehearsal Missing");
         await stateCard.Locator("[data-testid=transition-button]").ClickAsync();
         await _page.WaitForTimeoutAsync(500);
-        await Assertions.Expect(_page.Locator(".dbt-toast").First).ToContainTextAsync("rejected");
+        // Toasts stack, and the earlier "transitioned to Assessing" one can still be showing: look for the rejection itself.
+        await Assertions.Expect(_page.Locator(".dbt-toast", new PageLocatorOptions { HasText = "rejected" }).First).ToBeVisibleAsync();
         await Assertions.Expect(_page.Locator("[data-testid=campaign-detail-state]")).ToContainTextAsync("Assessing");
 
         // A rehearsal whose performance check wasn't performed still doesn't count.

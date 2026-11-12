@@ -4,6 +4,10 @@ All notable changes to DBTracker are recorded here. Versions follow [Semantic Ve
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-11-12
+
+Still a pre-release: the installers aren't code-signed yet.
+
 ### Added
 
 - **Installer: optional HTTPS and a keep-data choice on uninstall.** `CertThumbprint` / `CERT_THUMBPRINT`
@@ -27,6 +31,8 @@ All notable changes to DBTracker are recorded here. Versions follow [Semantic Ve
 - **Capacity times.** Capacity measurements are entered and shown in your own time zone or UTC, named
   on the page, and a future time is refused.
 - **Delivery history.** Support-runway notice emails now appear in the delivery history on **Setup**.
+- **Workload comparisons.** A before-and-after comparison against a zero or near-zero baseline no longer
+  shows a meaningless percentage.
 
 ## [1.1.0] - 2026-11-12
 
