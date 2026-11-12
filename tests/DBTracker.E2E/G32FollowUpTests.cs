@@ -93,14 +93,14 @@ public class G32FollowUpTests
         await card.Locator("[data-testid=capacity-measured-at]").FillAsync(tomorrowNoonUtc.ToString("yyyy-MM-ddTHH:mm"));
         await card.Locator("[data-testid=add-capacity-measurement]").ClickAsync();
         await Assertions.Expect(card.Locator("[role=alert]")).ToContainTextAsync("future");
-        await Assertions.Expect(card.Locator("[data-testid=capacity-measurement-row]", new PageLocatorOptions { HasText = source })).ToHaveCountAsync(0);
+        await Assertions.Expect(card.Locator("[data-testid=capacity-measurement-row]", new LocatorLocatorOptions { HasText = source })).ToHaveCountAsync(0);
 
         var pastNoonUtc = DateTime.UtcNow.Date.AddDays(-3).AddHours(12);
         await card.Locator("[data-testid=capacity-measured-at]").FillAsync(pastNoonUtc.ToString("yyyy-MM-ddTHH:mm"));
         await card.Locator("[data-testid=add-capacity-measurement]").ClickAsync();
         await Assertions.Expect(_page.Locator(".dbt-toast").First).ToContainTextAsync("Capacity measurement recorded", new LocatorAssertionsToContainTextOptions { Timeout = 10000 });
 
-        var row = card.Locator("[data-testid=capacity-measurement-row]", new PageLocatorOptions { HasText = source });
+        var row = card.Locator("[data-testid=capacity-measurement-row]", new LocatorLocatorOptions { HasText = source });
         await Assertions.Expect(row).ToContainTextAsync(pastNoonUtc.ToString("MMM d, yyyy", System.Globalization.CultureInfo.InvariantCulture));
     }
 

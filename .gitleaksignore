@@ -1,0 +1,3 @@
+# Deliberate fake secrets: SecretLeakGuardTests checks that DBTracker redacts these patterns. Not real credentials.
+tests/DBTracker.UnitTests/SecretLeakGuardTests.cs:generic-api-key:13
+tests/DBTracker.UnitTests/SecretLeakGuardTests.cs:private-key:9
