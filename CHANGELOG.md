@@ -4,6 +4,16 @@ All notable changes to DBTracker are recorded here. Versions follow [Semantic Ve
 
 ## [Unreleased]
 
+### Fixed
+
+- **Password changes.** Changing your own password no longer signs you out of this browser; other
+  sessions still end.
+- **Change evidence.** A backup or restore corrected after the fact is judged by its corrected result
+  when linked as post-change evidence, and imported history can't be linked.
+- **Capacity times.** Capacity measurements are entered and shown in your own time zone or UTC, named
+  on the page, and a future time is refused.
+- **Delivery history.** Support-runway notice emails now appear in the delivery history on **Setup**.
+
 ## [1.1.0] - 2026-11-12
 
 This is still a pre-release: the installers aren't code-signed yet.

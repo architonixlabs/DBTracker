@@ -2300,12 +2300,23 @@ fallback.
   **Acceptance:** find the shifting element with the Layout Shift API or DevTools, reserve its space, and re-measure with
   `CoreWebVitalsBaseline` to below 0.1.
 
-- [ ] **2026-11-12 | G34 | NEW | P3 | S - Follow-ups found while closing G32.**
+- [x] **2026-11-12 | G34 | NEW | P3 | S - Follow-ups found while closing G32.**
   - Post-change evidence candidates (`ChangeValidationService`) and `ChangeEvidenceRules` still use the original restore
     outcome, ignoring corrections (Angela).
   - Capacity measurement times on the assurance page are entered and shown as plain UTC with no zone choice. The capacity
     table, saved capacity limit and forecast dates print UTC timestamps with no label (Priya, Noor).
   - Support-runway notice emails are not stored as delivery attempts (Sam).
+  **Delivered (2026-11-12):**
+  - Post-change evidence uses the effective outcome: the evidence pickers and `ChangeEvidenceRules` apply backup and restore
+    corrections, and imported history is refused as post-change evidence (Angela). Unit tested.
+  - Capacity measurements are entered in the viewer's zone or UTC with the zone named, like maintenance results, and future
+    times are refused. The measurement table, saved limit, comparisons and forecast range show the viewer's zone (Priya, Noor).
+    E2E: `CapacityMeasurement_CanBeBackdatedInUtc_AndAFutureTimeIsRejected`.
+  - Support-runway notice emails are stored as delivery attempts (kind "Support-runway notice") and shown on /setup (Sam).
+  - Also fixed, from the 1.1.0 known issues: changing your own password no longer signs you out. The change happens over the
+    circuit, which can't write cookies, so the page now opens a one-time, two-minute link that re-issues this browser's
+    cookie with the new security stamp. Other sessions still end. A link whose stamp is no longer current is refused (Dev, Noor,
+    Angela). E2E checks the cookie is re-issued and the user stays signed in.
 
 - [x] **2026-11-12 | G35 | NEW | P1 | S - An installed app must survive a database that starts after it.**
   Found by the first Hyper-V upgrade run (G18). After the VM restarted, IIS started DBTracker while SQL Server Express was
