@@ -2146,6 +2146,11 @@ verifiable downloads.*
   kept), and test Hosting Bundle before IIS (500.19, see DEPLOYMENT.md). Test on Windows Server 2016
   or 2019 and on Windows 10/11, which SETUP-GUIDE.md claims; only Server 2025 has been tested.
   Rerun `Start-HyperVTest.ps1` for each.
+  - **2026-11-12 progress: major upgrade verified.** `installer/test/Test-HyperVUpgrade.ps1` installed 1.1.1 over
+    1.1.0 on Server 2025. The version moved forward, the setup key and data-protection keys were kept (same hash), and
+    `/healthz` answered 200 before and after. The uninstall test phases that follow all passed: keep data, then full
+    removal, then reinstall. The first run (1.1.0 over 1.0.1) found G35. Still open: the Options page click-through,
+    Hosting Bundle before IIS, and the older Windows versions.
 
 - [x] **2026-11-11 | G19 | NEW | P1 | S - Release checksums.** SETUP-GUIDE.md tells users to
   download `SHA256SUMS.txt`, but nothing generates it. `installer/build.ps1` writes it next to the
@@ -2317,6 +2322,7 @@ fallback.
   - The first version gated on "not migrated yet", which held the sign-in page after a fresh install finished the wizard;
     the install E2E tests caught it. The gate now applies only while an installed app is actually waiting for its database.
   - Full E2E: 145 of 147, with the 2 wizard failures fixed and rerun green.
+  - Verified in the Hyper-V upgrade rerun (1.1.0 to 1.1.1): the site answered after the upgrade and reboot.
 
 ### Audit corrections to existing text
 
