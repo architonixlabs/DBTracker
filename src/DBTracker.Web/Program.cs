@@ -222,6 +222,7 @@ app.MapRazorComponents<App>()
 app.MapIdentityLogoutEndpoint();
 app.MapDeviceLinkEndpoints();
 app.MapPasskeyEndpoints();
+app.MapSignInRefreshEndpoint();
 app.MapTrayApi();
 app.MapCspReports();
 

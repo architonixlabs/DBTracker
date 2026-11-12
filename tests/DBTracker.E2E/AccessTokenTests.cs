@@ -136,7 +136,7 @@ public class AccessTokenTests
             await FillByLabel(_page, "New password", "N3wOwnPassword!");
             // Not a bare button[type=submit]: the sidebar's Log out button is one too.
             await _page.ClickAsync("button[type=submit]:text('Change password')");
-            await Assertions.Expect(_page.Locator(".dbt-toast")).ToContainTextAsync("Password changed");
+            await Assertions.Expect(_page.Locator("[data-testid=password-changed]")).ToBeVisibleAsync();
 
             var token = await CreateTokenAsync(_page, "E2E deactivation");
             using (var before = await GetSummaryAsync(token))

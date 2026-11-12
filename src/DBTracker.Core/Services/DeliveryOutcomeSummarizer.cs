@@ -49,6 +49,7 @@ public static class DeliveryOutcomeSummarizer
         DeliveryKind.Alert => "Alert",
         DeliveryKind.Recovery => "Recovery notice",
         DeliveryKind.TestEmail => "Test email",
+        DeliveryKind.SupportRunwayNotice => "Support-runway notice",
         _ => kind.ToString()
     };
 

@@ -219,13 +219,13 @@ else
                 {
                     <div class="table-responsive mb-3" role="region" aria-label="Capacity measurements" tabindex="0">
                         <table class="table table-sm dbt-table mb-0" data-testid="capacity-measurement-table">
-                            <thead><tr><th scope="col">Type</th><th scope="col">Measured at (UTC)</th><th scope="col">Age</th><th scope="col">Value</th><th scope="col">Period</th><th scope="col">Source</th></tr></thead>
+                            <thead><tr><th scope="col">Type</th><th scope="col">Measured at</th><th scope="col">Age</th><th scope="col">Value</th><th scope="col">Period</th><th scope="col">Source</th></tr></thead>
                             <tbody>
                                 @foreach (var m in _measurements)
                                 {
                                     <tr data-testid="capacity-measurement-row">
                                         <td class="small">@m.MeasurementType</td>
-                                        <td class="small">@m.MeasuredAtUtc.ToString("MMM d, yyyy HH:mm")</td>
+                                        <td class="small"><LocalTime Utc="m.MeasuredAtUtc" Format="MMM d, yyyy h:mm tt" ShowUtc="false" /></td>
                                         <td class="small">@AgeLabel(m.MeasuredAtUtc)</td>
                                         <td class="small">@m.Value.ToString("N1") @m.Unit</td>
                                         <td class="small">@m.MeasurementPeriodDescription</td>
@@ -256,7 +256,17 @@ else
                         <div class="col-md-2"><label class="form-label small mb-1" for="cap-unit">Unit</label><input id="cap-unit" class="form-control form-control-sm" placeholder="Unit (GB, IOPS, ms…)" @bind="_measurementUnit" @bind:event="oninput" /></div>
                         <div class="col-md-2"><label class="form-label small mb-1" for="cap-period">Measurement period</label><input id="cap-period" class="form-control form-control-sm" placeholder="Measurement period" @bind="_measurementPeriod" @bind:event="oninput" /></div>
                         <div class="col-md-2"><label class="form-label small mb-1" for="cap-source">Source</label><input id="cap-source" class="form-control form-control-sm" placeholder="Source" @bind="_measurementSource" @bind:event="oninput" /></div>
-                        <div class="col-md-2"><label class="form-label small mb-1" for="cap-measured-at">Measured at (UTC)</label><input id="cap-measured-at" type="datetime-local" class="form-control form-control-sm" @bind="_measuredAt" /></div>
+                        <div class="col-md-4">
+                            <label class="form-label small mb-1" for="cap-measured-at">Measured at (@EventTimeZones.Label(MeasuredAtZone, DateTime.UtcNow))</label>
+                            <div class="d-flex gap-1">
+                                <input id="cap-measured-at" type="datetime-local" class="form-control form-control-sm" @bind="_measuredAtLocal" data-testid="capacity-measured-at" />
+                                <label class="visually-hidden" for="cap-measured-at-zone">Time zone of the measurement time</label>
+                                <select id="cap-measured-at-zone" class="form-select form-select-sm" style="max-width:150px;" @bind="_measuredAtZone" data-testid="capacity-measured-at-zone">
+                                    <option value="viewer">Your time zone</option>
+                                    <option value="UTC">UTC</option>
+                                </select>
+                            </div>
+                        </div>
                     </div>
                     <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="AddMeasurement" data-testid="add-capacity-measurement">Record measurement</button>
                     @if (!string.IsNullOrWhiteSpace(_measurementError))
@@ -270,7 +280,7 @@ else
                 <p class="small text-muted mb-2" data-testid="saved-capacity-limit">
                     @if (_savedLimit is { } limit)
                     {
-                        <span>Saved capacity limit: @limit.CapacityLimitGb.ToString("N0") GB@(string.IsNullOrWhiteSpace(limit.Source) ? "" : $" ({limit.Source})"), set by @limit.UpdatedBy on @limit.UpdatedAtUtc.ToString("yyyy-MM-dd").</span>
+                        <span>Saved capacity limit: @limit.CapacityLimitGb.ToString("N0") GB@(string.IsNullOrWhiteSpace(limit.Source) ? "" : $" ({limit.Source})"), set by @limit.UpdatedBy on <LocalTime Utc="limit.UpdatedAtUtc" Format="MMM d, yyyy" ShowUtc="false" />.</span>
                     }
                     else
                     {
@@ -306,7 +316,7 @@ else
                 else
                 {
                     <p class="small mb-1" data-testid="forecast-range">
-                        Plausible exhaustion: between @(_forecast.EarliestPlausibleExhaustionUtc?.ToString("MMM d, yyyy") ?? "n/a") and @(_forecast.LatestPlausibleExhaustionUtc?.ToString("MMM d, yyyy") ?? "n/a")
+                        Plausible exhaustion: between <LocalTime Utc="_forecast.EarliestPlausibleExhaustionUtc" Format="MMM d, yyyy" ShowUtc="false" Empty="n/a" /> and <LocalTime Utc="_forecast.LatestPlausibleExhaustionUtc" Format="MMM d, yyyy" ShowUtc="false" Empty="n/a" />
                         (@(_forecast.ProjectedGrowthPerDayGb?.ToString("N2") ?? "?") units/day observed)
                     </p>
                 }
@@ -377,7 +387,7 @@ else
                                 @foreach (var row in _comparisons)
                                 {
                                     <tr data-testid="workload-comparison-row">
-                                        <td class="small">@row.Comparison.RecordedAtUtc.ToString("yyyy-MM-dd")</td>
+                                        <td class="small"><LocalTime Utc="row.Comparison.RecordedAtUtc" Format="MMM d, yyyy" ShowUtc="false" /></td>
                                         <td class="small">@(row.Comparison.MigrationCampaign?.Name ?? "None")</td>
                                         <td class="small">@MeasurementLabel(row.Comparison.PreMeasurement)</td>
                                         <td class="small">@MeasurementLabel(row.Comparison.PostMeasurement)</td>
@@ -475,6 +485,19 @@ else
         _ranAtLocal = _ranAtDefaultLocal;
     }
 
+    // G34: capacity measurements are entered in the viewer's zone (or UTC), like maintenance results.
+    private DateTime _measuredAtLocal, _measuredAtDefaultLocal;
+    private string _measuredAtZone = "viewer";
+
+    private TimeZoneInfo MeasuredAtZone => _measuredAtZone == EventTimeZones.Utc ? TimeZoneInfo.Utc : Viewer.Zone;
+
+    private void ResetMeasuredAt()
+    {
+        var now = Viewer.ToViewer(DateTime.UtcNow);
+        _measuredAtDefaultLocal = new DateTime(now.Year, now.Month, now.Day, now.Hour, now.Minute, 0);
+        _measuredAtLocal = _measuredAtDefaultLocal;
+    }
+
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (firstRender)
@@ -494,6 +517,10 @@ else
         {
             ResetRanAt();
         }
+        if (_measuredAtLocal == _measuredAtDefaultLocal)
+        {
+            ResetMeasuredAt();
+        }
         StateHasChanged();
     });
 
@@ -511,7 +538,6 @@ else
     private CapacityMeasurementType _measurementType = CapacityMeasurementType.Growth;
     private double? _measurementValue;
     private string _measurementUnit = "GB", _measurementPeriod = "", _measurementSource = "", _measurementError = "";
-    private DateTime _measuredAt = UtcNowToMinute();
     private double? _estimateSpaceGb;
     private int _estimateCampaignId;
     private string _estimateAssumptions = "";
@@ -520,18 +546,13 @@ else
     private int _preMeasurementId, _postMeasurementId, _comparisonCampaignId;
     private string _comparisonNotes = "", _comparisonError = "";
 
-    private static DateTime UtcNowToMinute()
-    {
-        var now = DateTime.UtcNow;
-        return new DateTime(now.Year, now.Month, now.Day, now.Hour, now.Minute, 0, DateTimeKind.Unspecified);
-    }
-
     protected override async Task OnInitializedAsync()
     {
         var state = await AuthProvider.GetAuthenticationStateAsync();
         _userName = state.User.Identity?.Name ?? "unknown";
         _userRoles = state.User.Claims.Where(c => c.Type == System.Security.Claims.ClaimTypes.Role).Select(c => c.Value).ToList();
         ResetRanAt();
+        ResetMeasuredAt();
         await Retry();
     }
 
@@ -652,11 +673,19 @@ else
             return;
         }
 
+        var untouched = _measuredAtLocal == _measuredAtDefaultLocal && _measuredAtZone != EventTimeZones.Utc;
+        var measuredAt = EventTimeZones.FromEntryForm(_measuredAtLocal, MeasuredAtZone, untouched, DateTime.UtcNow);
+        if (!measuredAt.Ok)
+        {
+            _measurementError = measuredAt.Error ?? "Enter when the measurement was taken.";
+            return;
+        }
+
         var (ok, error) = await Capacity.AddMeasurementAsync(new CapacityMeasurement
         {
             DatabaseInstanceId = Id,
             MeasurementType = _measurementType,
-            MeasuredAtUtc = DateTime.SpecifyKind(_measuredAt, DateTimeKind.Utc),
+            MeasuredAtUtc = measuredAt.Utc!.Value,
             Value = _measurementValue.Value,
             Unit = _measurementUnit.Trim(),
             MeasurementPeriodDescription = _measurementPeriod.Trim(),
@@ -672,7 +701,7 @@ else
         Toasts.Success("Capacity measurement recorded.");
         _measurementValue = null;
         _measurementPeriod = _measurementSource = "";
-        _measuredAt = UtcNowToMinute();
+        ResetMeasuredAt();
         await Load();
     }
 
@@ -735,8 +764,8 @@ else
         await Load();
     }
 
-    private static string MeasurementLabel(CapacityMeasurement? m) =>
-        m is null ? "Not measured yet" : $"{m.MeasurementType} {m.Value:N1} {m.Unit}, {m.MeasuredAtUtc:yyyy-MM-dd}";
+    private string MeasurementLabel(CapacityMeasurement? m) =>
+        m is null ? "Not measured yet" : $"{m.MeasurementType} {m.Value:N1} {m.Unit}, {Viewer.ToViewer(m.MeasuredAtUtc):yyyy-MM-dd}";
 
     private static string AgeLabel(DateTime measuredAtUtc)
     {

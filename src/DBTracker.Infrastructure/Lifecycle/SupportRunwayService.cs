@@ -25,7 +25,8 @@ public class SupportRunwayService(
     NotificationSubscriptionService subscriptionService,
     IEmailSender emailSender,
     UserManager<ApplicationUser> userManager,
-    IConfiguration configuration)
+    IConfiguration configuration,
+    DeliveryAttemptService deliveryAttempts)
 {
     public async Task<InstanceRunwayView?> GetForInstanceAsync(int instanceId)
     {
@@ -157,9 +158,16 @@ public class SupportRunwayService(
                     recipientEmails.Add(subscriberEmail);
                 }
             }
-            foreach (var email in recipientEmails)
+            if (recipientEmails.Count > 0)
             {
-                await emailSender.SendAsync(email, $"DBTracker support-runway notice: {instance.Name}", message, ct);
+                var results = new List<EmailSendResult>(recipientEmails.Count);
+                foreach (var email in recipientEmails)
+                {
+                    results.Add(await emailSender.SendAsync(email, $"DBTracker support-runway notice: {instance.Name}", message, ct));
+                }
+                // G34: stored like alert emails so /setup shows whether the notice reached anyone. Addresses are not stored.
+                await deliveryAttempts.RecordAsync(DeliveryKind.SupportRunwayNotice, instance.Name, results,
+                    AuditEventFactory.SystemActorPrefix + "SupportRunwayCheck", attemptedAtUtc: now, ct: ct);
             }
 
             if (identity is not null)

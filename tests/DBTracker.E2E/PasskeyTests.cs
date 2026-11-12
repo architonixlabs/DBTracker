@@ -143,7 +143,7 @@ public class PasskeyTests
         await FillByLabel(page, "Current password", TempPassword);
         await FillByLabel(page, "New password", OwnPassword);
         await page.ClickAsync("button[type=submit]:text('Change password')");
-        await Assertions.Expect(page.Locator(".dbt-toast")).ToContainTextAsync("Password changed");
+        await Assertions.Expect(page.Locator("[data-testid=password-changed]")).ToBeVisibleAsync();
     }
 
     private static async Task AddVirtualAuthenticatorAsync(IPage page)

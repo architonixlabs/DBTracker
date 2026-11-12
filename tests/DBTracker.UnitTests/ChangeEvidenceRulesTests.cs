@@ -87,6 +87,28 @@ public class ChangeEvidenceRulesTests
     }
 
     [Fact]
+    public void Corrections_Apply_ToLinkedEvidence()
+    {
+        var restore = new RestoreEvent { Id = 7, DatabaseInstanceId = 1, Outcome = RestoreOutcome.Success, TimestampUtc = Started.AddHours(1) };
+        restore.Corrections.Add(new RestoreEventCorrection { RestoreEventId = 7, NewOutcome = RestoreOutcome.Failed, CorrectedAtUtc = Started.AddHours(2) });
+        var failedThenFixed = new BackupRecord { Id = 8, DatabaseInstanceId = 1, Status = BackupStatus.Failed, TimestampUtc = Started.AddHours(1) };
+        failedThenFixed.Corrections.Add(new BackupRecordCorrection { BackupRecordId = 8, NewStatus = BackupStatus.Success, CorrectedAtUtc = Started.AddHours(2) });
+
+        Assert.Contains(ChangeEvidenceRules.ValidateLinkedEvidence(EvidenceCheckOutcome.Passed, 1, null, restore, Started), e => e.Contains("corrected"));
+        Assert.Empty(ChangeEvidenceRules.ValidateLinkedEvidence(EvidenceCheckOutcome.Passed, 1, failedThenFixed, null, Started));
+    }
+
+    [Fact]
+    public void ImportedHistory_IsNotPostChangeEvidence()
+    {
+        var restore = new RestoreEvent { DatabaseInstanceId = 1, Outcome = RestoreOutcome.Success, Source = BackupSource.Imported, TimestampUtc = Started.AddHours(1) };
+        var backup = new BackupRecord { DatabaseInstanceId = 1, Status = BackupStatus.Success, Source = BackupSource.Imported, TimestampUtc = Started.AddHours(1) };
+
+        Assert.NotEmpty(ChangeEvidenceRules.ValidateLinkedEvidence(EvidenceCheckOutcome.Passed, 1, null, restore, Started));
+        Assert.NotEmpty(ChangeEvidenceRules.ValidateLinkedEvidence(EvidenceCheckOutcome.Passed, 1, backup, null, Started));
+    }
+
+    [Fact]
     public void UnknownChangeStart_DoesNotRejectOnTime()
     {
         var backup = new BackupRecord { DatabaseInstanceId = 1, Status = BackupStatus.Success, TimestampUtc = Now.AddYears(-1) };
