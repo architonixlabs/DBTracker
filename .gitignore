@@ -498,3 +498,6 @@ installer/out/
 
 # Local scan output from tools/scan.sh
 .scan-reports/
+
+# SonarScanner for .NET working folder
+.sonarqube/
