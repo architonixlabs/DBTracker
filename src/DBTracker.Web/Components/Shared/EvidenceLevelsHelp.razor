@@ -1,0 +1,12 @@
+@* G30: the evidence-level explanations, shown once in a column-header toggletip instead of a title
+   tooltip on every row's badge. *@
+<dl class="toggletip-list">
+    <dt>@BackupEvidenceClassifier.Describe(EvidenceLevel.RestoreTested)</dt>
+    <dd>A restore has since succeeded from this instance, proving the chain recoverable.</dd>
+    <dt>@BackupEvidenceClassifier.Describe(EvidenceLevel.ReportedSuccess)</dt>
+    <dd>Logged by hand as successful. A report, not file proof.</dd>
+    <dt>@BackupEvidenceClassifier.Describe(EvidenceLevel.Discovered)</dt>
+    <dd>A file was found on the shared drive. That shows it exists, not that anyone confirmed it.</dd>
+    <dt>@BackupEvidenceClassifier.Describe(EvidenceLevel.Imported)</dt>
+    <dd>Loaded from a history import. Shown for context; it never counts as verified evidence.</dd>
+</dl>

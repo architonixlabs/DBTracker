@@ -80,6 +80,7 @@ public static class InstanceValidator
         MaxLen(nameof(instance.Region), instance.Region, FacetMaxLength, "Region");
         MaxLen(nameof(instance.Cluster), instance.Cluster, FacetMaxLength, "Cluster");
         MaxLen(nameof(instance.ReplicaSet), instance.ReplicaSet, FacetMaxLength, "Replica set");
+        MaxLen(nameof(instance.ConnectivityHostOverride), instance.ConnectivityHostOverride, 255, "Connectivity host");
 
         if (!string.IsNullOrEmpty(instance.ContactEmail) && !LooksLikeEmail(instance.ContactEmail))
         {
@@ -104,6 +105,11 @@ public static class InstanceValidator
         if (instance.RestoreTestIntervalDaysOverride is { } restoreInterval && restoreInterval <= 0)
         {
             errors.Add(new FieldError(nameof(instance.RestoreTestIntervalDaysOverride), "Restore-test interval override must be a positive number of days."));
+        }
+
+        if (instance.ConnectivityPortOverride is { } port && (port < 1 || port > 65535))
+        {
+            errors.Add(new FieldError(nameof(instance.ConnectivityPortOverride), "Connectivity port must be between 1 and 65535."));
         }
 
         if (!string.IsNullOrWhiteSpace(instance.RunbookUrl) && !HasAllowedScheme(instance.RunbookUrl))

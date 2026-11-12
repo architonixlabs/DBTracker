@@ -13,6 +13,10 @@ public class VersionObservation
     public VersionObservationSource Source { get; set; } = VersionObservationSource.ManualEntry;
     public string RawVersionText { get; set; } = string.Empty;
 
+    /// <summary>Edition and database compatibility level as observed, compared with the declared identity when recorded.</summary>
+    public string ObservedEdition { get; set; } = string.Empty;
+    public string ObservedCompatibilityLevel { get; set; } = string.Empty;
+
     public ObservationOutcome Outcome { get; set; } = ObservationOutcome.Success;
     public string FailureDetail { get; set; } = string.Empty;
 

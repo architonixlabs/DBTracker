@@ -14,6 +14,9 @@
 @inject DependencyService Dependencies
 @inject AuthenticationStateProvider AuthProvider
 @inject DBTracker.Web.Services.ToastService Toasts
+@inject DBTracker.Web.Services.ViewerTimeZone Viewer
+@inject IJSRuntime JS
+@implements IDisposable
 
 <PageTitle>@(_instance?.Name ?? "Instance") operational assurance · DBTracker</PageTitle>
 
@@ -41,13 +44,70 @@ else
         <div>
             <h1>@_instance.Name</h1>
             <div class="subtitle">
-                Integrity, HA, maintenance and capacity · @_instance.Engine · <a href="/instances/@Id">Back to instance detail</a><br />
+                Integrity, HA, maintenance and capacity · @_instance.Engine · <a href="/instances/@Id">Back to instance detail</a>
+                <AuthorizeView Roles="@Roles.CanEditPolicy"> · <a href="/assurance/import">Import results or measurements</a></AuthorizeView><br />
                 These are recorded results, not live HA monitoring, and DBTracker never runs repairs or tuning. They are kept separate from backup health.
             </div>
         </div>
     </div>
 
     <div class="row g-3">
+        <div class="col-12">
+            <div class="dbt-card" data-testid="required-checks-card">
+                <h2 class="h6 text-muted mb-2">Required checks</h2>
+                <p class="small text-muted">Checks this instance is expected to have on record. A required check with no result shows as Missing, so a check nobody recorded can't look fine.</p>
+                @if (_requirements.Count == 0)
+                {
+                    <div class="empty-state py-2" data-testid="no-required-checks"><i class="bi bi-list-check" aria-hidden="true"></i> No required checks set. Until some are, a missing check can't be flagged.</div>
+                }
+                else
+                {
+                    <div class="table-responsive mb-2" role="region" aria-label="Required checks" tabindex="0">
+                        <table class="table table-sm dbt-table mb-0" data-testid="required-check-table">
+                            <thead><tr><th scope="col">Check</th><th scope="col">Node/deployment</th><th scope="col">Every</th><th scope="col">Status</th><th scope="col">Detail</th><th scope="col"><span class="visually-hidden">Actions</span></th></tr></thead>
+                            <tbody>
+                                @foreach (var r in _requirements)
+                                {
+                                    <tr data-testid="required-check-row">
+                                        <td class="small">@r.Requirement.CheckType</td>
+                                        <td class="small">@(string.IsNullOrWhiteSpace(r.Requirement.NodeOrDeploymentLabel) ? "Any" : r.Requirement.NodeOrDeploymentLabel)</td>
+                                        <td class="small">@r.Requirement.ExpectedIntervalHours h</td>
+                                        <td class="small" data-testid="required-check-status"><span class="badge-health dot @MaintenanceCssClass(r.Status)">@r.Status</span></td>
+                                        <td class="small">@r.Explanation</td>
+                                        <td class="small">
+                                            <AuthorizeView Roles="@Roles.CanEditPolicy" Context="removeReqAuth">
+                                                <button type="button" class="btn btn-link btn-sm p-0" @onclick="() => RemoveRequirement(r.Requirement.Id)">Remove</button>
+                                            </AuthorizeView>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+                <AuthorizeView Roles="@Roles.CanEditPolicy" Context="reqAuth">
+                    <div class="row g-2 align-items-end">
+                        <div class="col-md-3">
+                            <label class="form-label small mb-1" for="req-check-type">Check</label>
+                            <select id="req-check-type" class="form-select form-select-sm" @bind="_reqCheckType" data-testid="req-check-type">
+                                @foreach (var t in Enum.GetValues<MaintenanceCheckType>())
+                                {
+                                    <option value="@t">@t</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-md-3"><label class="form-label small mb-1" for="req-node">Node or deployment (optional)</label><input id="req-node" class="form-control form-control-sm" @bind="_reqNode" @bind:event="oninput" /></div>
+                        <div class="col-md-3"><label class="form-label small mb-1" for="req-interval">Expected every (hours)</label><input id="req-interval" type="number" min="1" class="form-control form-control-sm" @bind="_reqIntervalHours" data-testid="req-interval" /></div>
+                        <div class="col-md-3"><button type="button" class="btn btn-outline-secondary btn-sm w-100" @onclick="AddRequirement" data-testid="add-required-check">Require this check</button></div>
+                    </div>
+                    @if (!string.IsNullOrWhiteSpace(_reqError))
+                    {
+                        <p class="small mt-1 mb-0" role="alert" style="color:var(--dbt-failed);">@_reqError</p>
+                    }
+                </AuthorizeView>
+            </div>
+        </div>
+
         <div class="col-12">
             <div class="dbt-card">
                 <h2 class="h6 text-muted mb-3">Integrity, replication/failover and maintenance-job evidence</h2>
@@ -63,12 +123,12 @@ else
                                     <tr data-testid="maintenance-evidence-row">
                                         <td class="small">@row.Record.CheckType</td>
                                         <td class="small">@(row.Record.RelatedDependency?.Name ?? row.Record.NodeOrDeploymentLabel)</td>
-                                        <td class="small">@(row.Record.RanAtUtc?.ToString("MMM d, yyyy h:mm tt") ?? "never")</td>
+                                        <td class="small"><LocalTime Utc="row.Record.RanAtUtc" Format="MMM d, yyyy h:mm tt" ShowUtc="false" Empty="never" /></td>
                                         <td class="small">@row.Record.Outcome</td>
                                         <td class="small" data-testid="maintenance-evidence-status">
                                             <span class="badge-health dot @MaintenanceCssClass(row.Status)">@row.Status</span>
                                         </td>
-                                        <td class="small">@row.Record.Source</td>
+                                        <td class="small">@row.Record.Source @(string.IsNullOrWhiteSpace(row.Record.SourceReference) ? "" : $"({row.Record.SourceReference})")</td>
                                     </tr>
                                 }
                             </tbody>
@@ -129,7 +189,19 @@ else
                             <input id="mx-source-ref" class="form-control form-control-sm" placeholder="Monitoring/ticket link (required for this source)" @bind="_sourceReference" @bind:event="oninput" />
                         </div>
                     }
-                    <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="RecordMaintenanceEvidence" data-testid="record-maintenance-evidence">Record result (now)</button>
+                    <div class="mb-2">
+                        <label class="form-label small mb-1" for="mx-ran-at">Ran at (@EventTimeZones.Label(RanAtZone, DateTime.UtcNow))</label>
+                        <div class="d-flex gap-1" style="max-width:420px;">
+                            <input id="mx-ran-at" type="datetime-local" class="form-control form-control-sm" @bind="_ranAtLocal" aria-describedby="mx-ran-at-help" data-testid="maintenance-ran-at" />
+                            <label class="visually-hidden" for="mx-ran-at-zone">Time zone of the run time</label>
+                            <select id="mx-ran-at-zone" class="form-select form-select-sm" style="max-width:150px;" @bind="_ranAtZone" data-testid="maintenance-ran-at-zone">
+                                <option value="viewer">Your time zone</option>
+                                <option value="UTC">UTC</option>
+                            </select>
+                        </div>
+                        <div class="form-text" id="mx-ran-at-help">Defaults to now. Set an earlier time when recording a check that already ran; future times are rejected.</div>
+                    </div>
+                    <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="RecordMaintenanceEvidence" data-testid="record-maintenance-evidence">Record result</button>
                     @if (!string.IsNullOrWhiteSpace(_maintenanceError))
                     {
                         <p class="small mt-1" role="alert" style="color:var(--dbt-failed);">@_maintenanceError</p>
@@ -141,19 +213,20 @@ else
         <div class="col-12">
             <div class="dbt-card">
                 <h2 class="h6 text-muted mb-3">Capacity and performance planning evidence</h2>
-                <p class="small text-muted">Timestamped measurements entered here or referenced from your monitoring tools. DBTracker doesn't profile queries itself.</p>
+                <p class="small text-muted">Timestamped measurements entered here or imported from your monitoring tools. DBTracker doesn't profile queries itself.</p>
 
                 @if (_measurements.Count > 0)
                 {
                     <div class="table-responsive mb-3" role="region" aria-label="Capacity measurements" tabindex="0">
                         <table class="table table-sm dbt-table mb-0" data-testid="capacity-measurement-table">
-                            <thead><tr><th scope="col">Type</th><th scope="col">Measured at</th><th scope="col">Value</th><th scope="col">Period</th><th scope="col">Source</th></tr></thead>
+                            <thead><tr><th scope="col">Type</th><th scope="col">Measured at (UTC)</th><th scope="col">Age</th><th scope="col">Value</th><th scope="col">Period</th><th scope="col">Source</th></tr></thead>
                             <tbody>
                                 @foreach (var m in _measurements)
                                 {
                                     <tr data-testid="capacity-measurement-row">
                                         <td class="small">@m.MeasurementType</td>
-                                        <td class="small">@m.MeasuredAtUtc.ToString("MMM d, yyyy")</td>
+                                        <td class="small">@m.MeasuredAtUtc.ToString("MMM d, yyyy HH:mm")</td>
+                                        <td class="small">@AgeLabel(m.MeasuredAtUtc)</td>
                                         <td class="small">@m.Value.ToString("N1") @m.Unit</td>
                                         <td class="small">@m.MeasurementPeriodDescription</td>
                                         <td class="small">@m.Source</td>
@@ -181,23 +254,51 @@ else
                         </div>
                         <div class="col-md-2"><label class="form-label small mb-1" for="cap-value">Value (required)</label><input id="cap-value" type="number" class="form-control form-control-sm" placeholder="Value" @bind="_measurementValue" /></div>
                         <div class="col-md-2"><label class="form-label small mb-1" for="cap-unit">Unit</label><input id="cap-unit" class="form-control form-control-sm" placeholder="Unit (GB, IOPS, ms…)" @bind="_measurementUnit" @bind:event="oninput" /></div>
-                        <div class="col-md-3"><label class="form-label small mb-1" for="cap-period">Measurement period</label><input id="cap-period" class="form-control form-control-sm" placeholder="Measurement period" @bind="_measurementPeriod" @bind:event="oninput" /></div>
-                        <div class="col-md-3"><label class="form-label small mb-1" for="cap-source">Source</label><input id="cap-source" class="form-control form-control-sm" placeholder="Source" @bind="_measurementSource" @bind:event="oninput" /></div>
+                        <div class="col-md-2"><label class="form-label small mb-1" for="cap-period">Measurement period</label><input id="cap-period" class="form-control form-control-sm" placeholder="Measurement period" @bind="_measurementPeriod" @bind:event="oninput" /></div>
+                        <div class="col-md-2"><label class="form-label small mb-1" for="cap-source">Source</label><input id="cap-source" class="form-control form-control-sm" placeholder="Source" @bind="_measurementSource" @bind:event="oninput" /></div>
+                        <div class="col-md-2"><label class="form-label small mb-1" for="cap-measured-at">Measured at (UTC)</label><input id="cap-measured-at" type="datetime-local" class="form-control form-control-sm" @bind="_measuredAt" /></div>
                     </div>
                     <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="AddMeasurement" data-testid="add-capacity-measurement">Record measurement</button>
+                    @if (!string.IsNullOrWhiteSpace(_measurementError))
+                    {
+                        <p class="small mt-1" role="alert" style="color:var(--dbt-failed);">@_measurementError</p>
+                    }
                 </AuthorizeView>
 
                 <hr />
                 <p class="small mb-1"><strong>Growth forecast:</strong> a range, not a precise exhaustion date.</p>
-                <div class="row g-2 mb-2">
-                    <div class="col-md-4">
-                        <label class="form-label small text-muted mb-1" for="cap-limit">Storage capacity limit (GB), optional</label>
+                <p class="small text-muted mb-2" data-testid="saved-capacity-limit">
+                    @if (_savedLimit is { } limit)
+                    {
+                        <span>Saved capacity limit: @limit.CapacityLimitGb.ToString("N0") GB@(string.IsNullOrWhiteSpace(limit.Source) ? "" : $" ({limit.Source})"), set by @limit.UpdatedBy on @limit.UpdatedAtUtc.ToString("yyyy-MM-dd").</span>
+                    }
+                    else
+                    {
+                        <span>No capacity limit saved, so the forecast can show a growth rate but not an exhaustion range.</span>
+                    }
+                </p>
+                <div class="row g-2 mb-2 align-items-end">
+                    <div class="col-md-3">
+                        <label class="form-label small text-muted mb-1" for="cap-limit">Storage capacity limit (GB)</label>
                         <input id="cap-limit" type="number" min="1" class="form-control form-control-sm" placeholder="e.g. 2000" @bind="_capacityLimitGb" data-testid="capacity-limit-input" />
                     </div>
-                    <div class="col-md-2 d-flex align-items-end">
-                        <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="Retry" data-testid="recompute-forecast">Recompute forecast</button>
+                    <AuthorizeView Roles="@Roles.CanEditPolicy" Context="limitAuth">
+                        <div class="col-md-4">
+                            <label class="form-label small text-muted mb-1" for="cap-limit-source">Where the limit comes from</label>
+                            <input id="cap-limit-source" class="form-control form-control-sm" placeholder="e.g. SAN volume quota" @bind="_capacityLimitSource" @bind:event="oninput" />
+                        </div>
+                        <div class="col-md-2">
+                            <button type="button" class="btn btn-outline-secondary btn-sm w-100" @onclick="SaveLimit" data-testid="save-capacity-limit">Save limit</button>
+                        </div>
+                    </AuthorizeView>
+                    <div class="col-md-3">
+                        <button type="button" class="btn btn-link btn-sm" @onclick="Retry" data-testid="recompute-forecast">Try this limit without saving</button>
                     </div>
                 </div>
+                @if (!string.IsNullOrWhiteSpace(_limitError))
+                {
+                    <p class="small" role="alert" style="color:var(--dbt-failed);">@_limitError</p>
+                }
                 @if (_forecast is null || !_forecast.HasSufficientData)
                 {
                     <div class="empty-state py-2" data-testid="forecast-missing-data"><i class="bi bi-graph-up" aria-hidden="true"></i> Not enough data for a projection yet.</div>
@@ -231,19 +332,109 @@ else
                     <p class="small mb-1"><strong>Migration space estimates</strong></p>
                     @foreach (var e in _estimates)
                     {
-                        <p class="small mb-1">@(e.EstimatedSpaceGb is { } gb ? $"{gb:N0} GB" : "Size not estimated"): @e.AssumptionsText</p>
+                        <p class="small mb-1" data-testid="capacity-estimate-row">@(e.EstimatedSpaceGb is { } gb ? $"{gb:N0} GB" : "Size not estimated")@(e.MigrationCampaign is { } c ? $" for {c.Name}" : ""): @e.AssumptionsText</p>
                     }
                 }
 
-                <AuthorizeView Roles="@Roles.CanEditPolicy">
+                <AuthorizeView Roles="@Roles.CanEditPolicy" Context="estimateAuth">
                     <div class="row g-2 mb-2 mt-2">
                         <div class="col-md-3"><label class="form-label small mb-1" for="est-space">Estimated space (GB)</label><input id="est-space" type="number" min="0" class="form-control form-control-sm" placeholder="Estimated space (GB)" @bind="_estimateSpaceGb" /></div>
-                        <div class="col-md-9"><label class="form-label small mb-1" for="est-assumptions">Assumptions (required)</label><input id="est-assumptions" class="form-control form-control-sm" placeholder="Assumptions (required)" @bind="_estimateAssumptions" @bind:event="oninput" /></div>
+                        <div class="col-md-3">
+                            <label class="form-label small mb-1" for="est-campaign">For campaign</label>
+                            <select id="est-campaign" class="form-select form-select-sm" @bind="_estimateCampaignId" data-testid="estimate-campaign-select">
+                                <option value="0">No campaign</option>
+                                @foreach (var c in _campaigns)
+                                {
+                                    <option value="@c.Id">@c.Name (@c.State)</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-md-6"><label class="form-label small mb-1" for="est-assumptions">Assumptions (required)</label><input id="est-assumptions" class="form-control form-control-sm" placeholder="Assumptions (required)" @bind="_estimateAssumptions" @bind:event="oninput" /></div>
                     </div>
                     <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="AddEstimate" disabled="@string.IsNullOrWhiteSpace(_estimateAssumptions)">Record migration space estimate</button>
                     @if (!string.IsNullOrWhiteSpace(_estimateError))
                     {
                         <p class="small mt-1" role="alert" style="color:var(--dbt-failed);">@_estimateError</p>
+                    }
+                </AuthorizeView>
+            </div>
+        </div>
+
+        <div class="col-12">
+            <div class="dbt-card" data-testid="workload-comparison-card">
+                <h2 class="h6 text-muted mb-2">Pre and post workload comparison</h2>
+                <p class="small text-muted">Compares two of the measurements above, for example the same workload before and after a migration. It shows the change and anything that makes the comparison unreliable; whether higher is better depends on the metric.</p>
+                @if (_comparisons.Count == 0)
+                {
+                    <div class="empty-state py-2"><i class="bi bi-arrow-left-right" aria-hidden="true"></i> No comparisons recorded yet.</div>
+                }
+                else
+                {
+                    <div class="table-responsive mb-2" role="region" aria-label="Workload comparisons" tabindex="0">
+                        <table class="table table-sm dbt-table mb-0" data-testid="workload-comparison-table">
+                            <thead><tr><th scope="col">Recorded</th><th scope="col">Campaign</th><th scope="col">Before</th><th scope="col">After</th><th scope="col">Change</th><th scope="col">Warnings</th><th scope="col">Notes</th></tr></thead>
+                            <tbody>
+                                @foreach (var row in _comparisons)
+                                {
+                                    <tr data-testid="workload-comparison-row">
+                                        <td class="small">@row.Comparison.RecordedAtUtc.ToString("yyyy-MM-dd")</td>
+                                        <td class="small">@(row.Comparison.MigrationCampaign?.Name ?? "None")</td>
+                                        <td class="small">@MeasurementLabel(row.Comparison.PreMeasurement)</td>
+                                        <td class="small">@MeasurementLabel(row.Comparison.PostMeasurement)</td>
+                                        <td class="small" data-testid="workload-comparison-summary">@row.Result.Summary</td>
+                                        <td class="small" style="color:var(--dbt-overdue);">@string.Join(" ", row.Result.Warnings)</td>
+                                        <td class="small">@row.Comparison.ComparisonNotes</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+                <AuthorizeView Roles="@Roles.CanEditPolicy" Context="comparisonAuth">
+                    @if (_measurements.Count == 0)
+                    {
+                        <p class="small text-muted mb-0">Record or import measurements first.</p>
+                    }
+                    else
+                    {
+                        <div class="row g-2 align-items-end">
+                            <div class="col-md-3">
+                                <label class="form-label small mb-1" for="cmp-pre">Before the change</label>
+                                <select id="cmp-pre" class="form-select form-select-sm" @bind="_preMeasurementId" data-testid="comparison-pre-select">
+                                    <option value="0">Not measured yet</option>
+                                    @foreach (var m in _measurements)
+                                    {
+                                        <option value="@m.Id">@MeasurementLabel(m)</option>
+                                    }
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label small mb-1" for="cmp-post">After the change</label>
+                                <select id="cmp-post" class="form-select form-select-sm" @bind="_postMeasurementId" data-testid="comparison-post-select">
+                                    <option value="0">Not measured yet</option>
+                                    @foreach (var m in _measurements)
+                                    {
+                                        <option value="@m.Id">@MeasurementLabel(m)</option>
+                                    }
+                                </select>
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label small mb-1" for="cmp-campaign">For campaign</label>
+                                <select id="cmp-campaign" class="form-select form-select-sm" @bind="_comparisonCampaignId" data-testid="comparison-campaign-select">
+                                    <option value="0">No campaign</option>
+                                    @foreach (var c in _campaigns)
+                                    {
+                                        <option value="@c.Id">@c.Name</option>
+                                    }
+                                </select>
+                            </div>
+                            <div class="col-md-2"><label class="form-label small mb-1" for="cmp-notes">Notes</label><input id="cmp-notes" class="form-control form-control-sm" @bind="_comparisonNotes" @bind:event="oninput" /></div>
+                            <div class="col-md-2"><button type="button" class="btn btn-outline-secondary btn-sm w-100" @onclick="AddComparison" disabled="@(_preMeasurementId == 0 && _postMeasurementId == 0)" data-testid="add-workload-comparison">Record comparison</button></div>
+                        </div>
+                        @if (!string.IsNullOrWhiteSpace(_comparisonError))
+                        {
+                            <p class="small mt-1 mb-0" role="alert" style="color:var(--dbt-failed);">@_comparisonError</p>
+                        }
                     }
                 </AuthorizeView>
             </div>
@@ -256,7 +447,14 @@ else
 
     private DatabaseInstance? _instance;
     private bool _loaded, _loadFailed;
-    private string? _userName;
+    private string _userName = "unknown";
+    private IReadOnlyCollection<string> _userRoles = [];
+
+    private IReadOnlyList<MaintenanceRequirementStatus> _requirements = [];
+    private MaintenanceCheckType _reqCheckType = MaintenanceCheckType.IntegrityCheck;
+    private string _reqNode = "";
+    private int _reqIntervalHours = 168;
+    private string _reqError = "";
 
     private List<MaintenanceEvidenceRow> _maintenanceRows = new();
     private MaintenanceCheckType _checkType = MaintenanceCheckType.IntegrityCheck;
@@ -265,22 +463,75 @@ else
     private MaintenanceOutcome _outcome = MaintenanceOutcome.Passed;
     private MaintenanceEvidenceSource _source = MaintenanceEvidenceSource.ManuallyEntered;
     private string _maintenanceError = "";
+    private DateTime _ranAtLocal, _ranAtDefaultLocal;
+    private string _ranAtZone = "viewer";
+
+    private TimeZoneInfo RanAtZone => _ranAtZone == EventTimeZones.Utc ? TimeZoneInfo.Utc : Viewer.Zone;
+
+    private void ResetRanAt()
+    {
+        var now = Viewer.ToViewer(DateTime.UtcNow);
+        _ranAtDefaultLocal = new DateTime(now.Year, now.Month, now.Day, now.Hour, now.Minute, 0);
+        _ranAtLocal = _ranAtDefaultLocal;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            Viewer.Changed += OnViewerZoneChanged;
+        }
+        if (!Viewer.Known)
+        {
+            await Viewer.EnsureLoadedAsync(JS);
+        }
+    }
+
+    /// <summary>Once the browser reports its zone, move an untouched "now" default into it.</summary>
+    private void OnViewerZoneChanged() => InvokeAsync(() =>
+    {
+        if (_ranAtLocal == _ranAtDefaultLocal)
+        {
+            ResetRanAt();
+        }
+        StateHasChanged();
+    });
+
+    public void Dispose() => Viewer.Changed -= OnViewerZoneChanged;
 
     private List<CapacityMeasurement> _measurements = new();
     private List<MigrationCapacityEstimate> _estimates = new();
+    private List<WorkloadComparisonRow> _comparisons = new();
+    private List<CapacityCampaignOption> _campaigns = new();
     private CapacityForecastResult? _forecast;
+    private InstanceCapacityLimit? _savedLimit;
     private double? _capacityLimitGb;
+    private bool _limitInitialised;
+    private string _capacityLimitSource = "", _limitError = "";
     private CapacityMeasurementType _measurementType = CapacityMeasurementType.Growth;
     private double? _measurementValue;
-    private string _measurementUnit = "GB", _measurementPeriod = "", _measurementSource = "";
+    private string _measurementUnit = "GB", _measurementPeriod = "", _measurementSource = "", _measurementError = "";
+    private DateTime _measuredAt = UtcNowToMinute();
     private double? _estimateSpaceGb;
+    private int _estimateCampaignId;
     private string _estimateAssumptions = "";
     private string _estimateError = "";
+
+    private int _preMeasurementId, _postMeasurementId, _comparisonCampaignId;
+    private string _comparisonNotes = "", _comparisonError = "";
+
+    private static DateTime UtcNowToMinute()
+    {
+        var now = DateTime.UtcNow;
+        return new DateTime(now.Year, now.Month, now.Day, now.Hour, now.Minute, 0, DateTimeKind.Unspecified);
+    }
 
     protected override async Task OnInitializedAsync()
     {
         var state = await AuthProvider.GetAuthenticationStateAsync();
         _userName = state.User.Identity?.Name ?? "unknown";
+        _userRoles = state.User.Claims.Where(c => c.Type == System.Security.Claims.ClaimTypes.Role).Select(c => c.Value).ToList();
+        ResetRanAt();
         await Retry();
     }
 
@@ -308,18 +559,65 @@ else
         }
 
         _maintenanceRows = await Maintenance.ListForInstanceAsync(Id);
+        _requirements = await Maintenance.EvaluateRequirementsAsync(Id);
 
-        var capacity = await Capacity.GetForInstanceAsync(Id, _capacityLimitGb);
+        // A limit typed but not saved is a what-if for this view only.
+        var capacity = await Capacity.GetForInstanceAsync(Id, _limitInitialised ? _capacityLimitGb : null);
         if (capacity is not null)
         {
             _measurements = capacity.Measurements.ToList();
             _estimates = capacity.Estimates.ToList();
+            _comparisons = capacity.Comparisons.ToList();
+            _campaigns = capacity.Campaigns.ToList();
             _forecast = capacity.Forecast;
+            _savedLimit = capacity.SavedLimit;
+            if (!_limitInitialised)
+            {
+                _capacityLimitGb = _savedLimit?.CapacityLimitGb;
+                _capacityLimitSource = _savedLimit?.Source ?? "";
+            }
+            _limitInitialised = true;
         }
+    }
+
+    private async Task AddRequirement()
+    {
+        var (ok, error) = await Maintenance.SetRequirementAsync(Id, _reqCheckType, _reqNode, _reqIntervalHours, "", _userName, _userRoles);
+        if (!ok)
+        {
+            _reqError = error;
+            return;
+        }
+        _reqError = "";
+        Toasts.Success($"{_reqCheckType} is now a required check.");
+        _reqNode = "";
+        await Load();
+    }
+
+    private async Task RemoveRequirement(int requirementId)
+    {
+        var (ok, error) = await Maintenance.RemoveRequirementAsync(requirementId, _userName, _userRoles);
+        if (ok)
+        {
+            Toasts.Success("Required check removed.");
+        }
+        else
+        {
+            Toasts.Error(error);
+        }
+        await Load();
     }
 
     private async Task RecordMaintenanceEvidence()
     {
+        var untouched = _ranAtLocal == _ranAtDefaultLocal && _ranAtZone != EventTimeZones.Utc;
+        var ranAt = EventTimeZones.FromEntryForm(_ranAtLocal, RanAtZone, untouched, DateTime.UtcNow);
+        if (!ranAt.Ok)
+        {
+            _maintenanceError = ranAt.Error ?? "Enter when the check ran.";
+            return;
+        }
+
         var (ok, error) = await Maintenance.RecordAsync(new MaintenanceEvidenceRecord
         {
             DatabaseInstanceId = Id,
@@ -327,11 +625,11 @@ else
             NodeOrDeploymentLabel = _nodeLabel,
             ToolName = _toolName,
             ExpectedIntervalHours = _expectedIntervalHours,
-            RanAtUtc = DateTime.UtcNow,
+            RanAtUtc = ranAt.Utc,
             Outcome = _outcome,
             Source = _source,
             SourceReference = _sourceReference
-        }, _userName ?? "unknown");
+        }, _userName, ranAt.ZoneId);
 
         if (!ok)
         {
@@ -342,6 +640,7 @@ else
         _maintenanceError = "";
         Toasts.Success($"{_checkType} result recorded: {_outcome}.");
         _nodeLabel = _toolName = _sourceReference = "";
+        ResetRanAt();
         await Load();
     }
 
@@ -349,23 +648,44 @@ else
     {
         if (_measurementValue is null)
         {
+            _measurementError = "Enter a value.";
             return;
         }
 
-        await Capacity.AddMeasurementAsync(new CapacityMeasurement
+        var (ok, error) = await Capacity.AddMeasurementAsync(new CapacityMeasurement
         {
             DatabaseInstanceId = Id,
             MeasurementType = _measurementType,
-            MeasuredAtUtc = DateTime.UtcNow,
+            MeasuredAtUtc = DateTime.SpecifyKind(_measuredAt, DateTimeKind.Utc),
             Value = _measurementValue.Value,
-            Unit = _measurementUnit,
-            MeasurementPeriodDescription = _measurementPeriod,
-            Source = _measurementSource
-        }, _userName ?? "unknown");
+            Unit = _measurementUnit.Trim(),
+            MeasurementPeriodDescription = _measurementPeriod.Trim(),
+            Source = _measurementSource.Trim()
+        }, _userName);
+        if (!ok)
+        {
+            _measurementError = error;
+            return;
+        }
 
+        _measurementError = "";
         Toasts.Success("Capacity measurement recorded.");
         _measurementValue = null;
         _measurementPeriod = _measurementSource = "";
+        _measuredAt = UtcNowToMinute();
+        await Load();
+    }
+
+    private async Task SaveLimit()
+    {
+        var (ok, error) = await Capacity.SetCapacityLimitAsync(Id, _capacityLimitGb, _capacityLimitSource, _userName, _userRoles);
+        if (!ok)
+        {
+            _limitError = error;
+            return;
+        }
+        _limitError = "";
+        Toasts.Success(_capacityLimitGb is null ? "Capacity limit cleared." : "Capacity limit saved.");
         await Load();
     }
 
@@ -374,9 +694,10 @@ else
         var (ok, error) = await Capacity.AddEstimateAsync(new MigrationCapacityEstimate
         {
             DatabaseInstanceId = Id,
+            MigrationCampaignId = _estimateCampaignId == 0 ? null : _estimateCampaignId,
             EstimatedSpaceGb = _estimateSpaceGb,
             AssumptionsText = _estimateAssumptions
-        }, _userName ?? "unknown");
+        }, _userName);
 
         if (!ok)
         {
@@ -389,6 +710,38 @@ else
         _estimateSpaceGb = null;
         _estimateAssumptions = "";
         await Load();
+    }
+
+    private async Task AddComparison()
+    {
+        var (ok, error) = await Capacity.AddComparisonAsync(new WorkloadComparison
+        {
+            DatabaseInstanceId = Id,
+            MigrationCampaignId = _comparisonCampaignId == 0 ? null : _comparisonCampaignId,
+            PreMeasurementId = _preMeasurementId == 0 ? null : _preMeasurementId,
+            PostMeasurementId = _postMeasurementId == 0 ? null : _postMeasurementId,
+            ComparisonNotes = _comparisonNotes
+        }, _userName, _userRoles);
+        if (!ok)
+        {
+            _comparisonError = error;
+            return;
+        }
+
+        _comparisonError = "";
+        Toasts.Success("Workload comparison recorded.");
+        _preMeasurementId = _postMeasurementId = 0;
+        _comparisonNotes = "";
+        await Load();
+    }
+
+    private static string MeasurementLabel(CapacityMeasurement? m) =>
+        m is null ? "Not measured yet" : $"{m.MeasurementType} {m.Value:N1} {m.Unit}, {m.MeasuredAtUtc:yyyy-MM-dd}";
+
+    private static string AgeLabel(DateTime measuredAtUtc)
+    {
+        var days = (int)Math.Floor((DateTime.UtcNow - measuredAtUtc).TotalDays);
+        return days <= 0 ? "Today" : days == 1 ? "1 day" : $"{days} days";
     }
 
     private static string MaintenanceCssClass(MaintenanceEvidenceStatus status) => status switch

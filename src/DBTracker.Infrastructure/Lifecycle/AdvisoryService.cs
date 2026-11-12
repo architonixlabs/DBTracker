@@ -32,14 +32,74 @@ public class AdvisoryService(IDbContextFactory<DBTrackerDbContext> factory, Audi
         return advisory;
     }
 
-    public async Task<List<AdvisoryInstanceAssessment>> ListAssessmentsForInstanceAsync(int instanceId)
+    /// <summary>The instance's assessments in priority order (severity, service criticality, exposure and applicability together).</summary>
+    public async Task<List<AdvisoryInstanceAssessment>> ListAssessmentsForInstanceAsync(int instanceId) =>
+        (await ListRankedAssessmentsForInstanceAsync(instanceId)).Select(r => r.Assessment).ToList();
+
+    public async Task<IReadOnlyList<RankedAdvisoryAssessment>> ListRankedAssessmentsForInstanceAsync(int instanceId)
     {
         using var db = await factory.CreateDbContextAsync();
-        return await db.AdvisoryInstanceAssessments.AsNoTracking()
+        var instance = await db.DatabaseInstances.AsNoTracking().FirstOrDefaultAsync(i => i.Id == instanceId);
+        if (instance is null)
+        {
+            return [];
+        }
+        var assessments = await db.AdvisoryInstanceAssessments.AsNoTracking()
             .Include(a => a.AdvisoryRecord)
             .Where(a => a.DatabaseInstanceId == instanceId)
-            .OrderBy(a => a.AdvisoryRecord!.Severity) // enum order is Critical,High,Medium,Low,Unknown — already most-severe-first
             .ToListAsync();
+        return AdvisoryPriorityRanker.Rank(assessments, instance);
+    }
+
+    /// <summary>Applies the Create and Update rows of an advisory import preview, with one audit event per advisory. A
+    /// create whose key now exists is skipped, so applying twice can't duplicate. Assessments are not touched.</summary>
+    public async Task<(int Created, int Updated, int Skipped)> ApplyImportAsync(IEnumerable<LifecycleImportRow<AdvisoryRecord>> rows, string actorName)
+    {
+        using var db = await factory.CreateDbContextAsync();
+        var now = DateTime.UtcNow;
+        var existing = await db.AdvisoryRecords.ToListAsync();
+        var keys = existing.Select(a => AdvisoryCsvImporter.Key(a.Engine, a.Family, a.VendorAdvisoryId)).ToHashSet();
+        var created = new List<AdvisoryRecord>();
+        var updated = new List<AdvisoryRecord>();
+        var skipped = 0;
+
+        foreach (var row in rows)
+        {
+            if (row.Item is null)
+            {
+                continue;
+            }
+            if (row.Plan == ImportRowPlan.Create)
+            {
+                if (!keys.Add(AdvisoryCsvImporter.Key(row.Item.Engine, row.Item.Family, row.Item.VendorAdvisoryId)))
+                {
+                    skipped++;
+                    continue;
+                }
+                var advisory = new AdvisoryRecord { ImportedAtUtc = now, ImportedBy = actorName };
+                AdvisoryCsvImporter.CopyImportedFields(row.Item, advisory);
+                db.AdvisoryRecords.Add(advisory);
+                created.Add(advisory);
+            }
+            else if (row.Plan == ImportRowPlan.Update && row.MatchedExistingId is { } id && existing.FirstOrDefault(a => a.Id == id) is { } stored)
+            {
+                AdvisoryCsvImporter.CopyImportedFields(row.Item, stored);
+                stored.ImportedAtUtc = now;
+                stored.ImportedBy = actorName;
+                updated.Add(stored);
+            }
+        }
+
+        await db.SaveChangesAsync();
+        foreach (var a in created)
+        {
+            await audit.RecordUserActionAsync("", actorName, "AdvisoryImported", "AdvisoryRecord", a.Id.ToString(), a.VendorAdvisoryId, reason: "Created by CSV import");
+        }
+        foreach (var a in updated)
+        {
+            await audit.RecordUserActionAsync("", actorName, "AdvisoryImported", "AdvisoryRecord", a.Id.ToString(), a.VendorAdvisoryId, reason: "Updated by CSV import");
+        }
+        return (created.Count, updated.Count, skipped);
     }
 
     /// <summary>Runs the pure classifier against every advisory for this instance's engine/family and creates/refreshes the non-reviewed assessments. Returns how many were (re)computed.</summary>
@@ -88,14 +148,23 @@ public class AdvisoryService(IDbContextFactory<DBTrackerDbContext> factory, Audi
     }
 
     /// <summary>A reviewer's judgment. The only path to Confirmed, and it stops automatic re-evaluation of this assessment.</summary>
-    public async Task<bool> ReviewAssessmentAsync(int assessmentId, AdvisoryClassification classification, string reviewerEvidence,
-        string owner, DateTime? remediationDeadlineUtc, string targetPatch, AdvisoryVerificationStatus verificationStatus, string reviewedBy)
+    /// <remarks>Confirmed needs evidence and an owner, plus a remediation deadline unless the fix is already verified, so
+    /// a confirmed exposure always has someone accountable and a date.</remarks>
+    public async Task<(bool Ok, string Error)> ReviewAssessmentAsync(int assessmentId, AdvisoryClassification classification, string reviewerEvidence,
+        string owner, DateTime? remediationDeadlineUtc, string targetPatch, AdvisoryVerificationStatus verificationStatus, string reviewedBy,
+        string verificationNotes = "")
     {
+        var error = AdvisoryReviewValidator.Validate(classification, reviewerEvidence, owner, remediationDeadlineUtc, verificationStatus);
+        if (error is not null)
+        {
+            return (false, error);
+        }
+
         using var db = await factory.CreateDbContextAsync();
         var assessment = await db.AdvisoryInstanceAssessments.Include(a => a.DatabaseInstance).FirstOrDefaultAsync(a => a.Id == assessmentId);
         if (assessment is null)
         {
-            return false;
+            return (false, "Assessment not found.");
         }
 
         assessment.Classification = classification;
@@ -104,6 +173,7 @@ public class AdvisoryService(IDbContextFactory<DBTrackerDbContext> factory, Audi
         assessment.RemediationDeadlineUtc = remediationDeadlineUtc;
         assessment.TargetPatch = targetPatch;
         assessment.VerificationStatus = verificationStatus;
+        assessment.VerificationNotes = verificationNotes;
         assessment.IsReviewed = true;
         assessment.ReviewedBy = reviewedBy;
         assessment.ReviewedAtUtc = DateTime.UtcNow;
@@ -111,7 +181,11 @@ public class AdvisoryService(IDbContextFactory<DBTrackerDbContext> factory, Audi
         await db.SaveChangesAsync();
 
         await audit.RecordUserActionAsync("", reviewedBy, "AdvisoryAssessmentReviewed", "DatabaseInstance",
-            assessment.DatabaseInstanceId.ToString(), assessment.DatabaseInstance?.Name ?? "", reason: $"Classification: {classification}");
-        return true;
+            assessment.DatabaseInstanceId.ToString(), assessment.DatabaseInstance?.Name ?? "",
+            reason: $"Classification: {classification}; verification {verificationStatus}" +
+                    (string.IsNullOrWhiteSpace(owner) ? "" : $"; owner {owner}") +
+                    (remediationDeadlineUtc is { } due ? $"; deadline {due:yyyy-MM-dd}" : "") +
+                    (string.IsNullOrWhiteSpace(targetPatch) ? "" : $"; target patch {targetPatch}"));
+        return (true, "");
     }
 }

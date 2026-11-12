@@ -495,3 +495,6 @@ App_Data/
 installer/out/
 # *.msi above also matches the WiX project folder name; keep its sources tracked.
 !installer/DBTracker.Msi/
+
+# Local scan output from tools/scan.sh
+.scan-reports/

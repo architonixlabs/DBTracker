@@ -31,11 +31,17 @@ public class Epic16ArchiveAndDiagnosticsTests
         await Assertions.Expect(_page.Locator("text=Confirm archive")).ToBeVisibleAsync();
         await Assertions.Expect(_page.Locator("text=scan")).ToBeVisibleAsync();
 
-        // Confirming is blocked without a reason.
+        // No archive button until the kind is chosen; "decommissioned" points to the retirement checklist instead.
         var confirmButton = _page.Locator("button:has-text('Archive this instance')");
-        await Assertions.Expect(confirmButton).ToBeDisabledAsync();
+        await Assertions.Expect(confirmButton).ToHaveCountAsync(0);
+        await _page.ClickAsync("[data-testid=archive-kind-retire]");
+        await Assertions.Expect(_page.Locator("a:has-text('Open the retirement checklist')")).ToBeVisibleAsync();
+        await Assertions.Expect(confirmButton).ToHaveCountAsync(0);
 
-        await _page.FillAsync("input[placeholder*='Decommissioned']", "E2E test archive — superseded by migration");
+        // A duplicate can be archived directly, but not without a reason.
+        await _page.ClickAsync("[data-testid=archive-kind-mistake]");
+        await Assertions.Expect(confirmButton).ToBeDisabledAsync();
+        await _page.FillAsync("#archive-reason", "E2E test archive — superseded by migration");
         await Assertions.Expect(confirmButton).ToBeEnabledAsync();
         await confirmButton.ClickAsync();
         await _page.WaitForURLAsync(url => url.Contains("/instances") && !url.Contains("DIFY"));
@@ -56,6 +62,10 @@ public class Epic16ArchiveAndDiagnosticsTests
 
         // Unarchiving puts it back, and the instance detail no longer shows the archived banner.
         await archivedRow.Locator("button:has-text('Unarchive')").ClickAsync();
+        // G12/U14: unarchive needs a reason, and the confirm stays disabled until one is given.
+        await Assertions.Expect(_page.Locator("[data-testid=unarchive-confirm]")).ToBeDisabledAsync();
+        await _page.FillAsync("[data-testid=unarchive-reason]", "Archived by mistake in an E2E test");
+        await _page.ClickAsync("[data-testid=unarchive-confirm]");
         await _page.WaitForTimeoutAsync(600);
         await Assertions.Expect(_page.Locator(".dbt-table tbody tr", new PageLocatorOptions { HasText = "DIFY-PLUGIN-PG" })).ToHaveCountAsync(0);
 
@@ -136,7 +146,7 @@ public class Epic16ArchiveAndDiagnosticsTests
     private async Task LoginAsync(string email, string password)
     {
         await GotoAsync("/Account/Login");
-        await _page.FillAsync("input[autocomplete=username]", email);
+        await _page.FillAsync("input[autocomplete~=username]", email);
         await _page.FillAsync("input[autocomplete=current-password]", password);
         await _page.ClickAsync("button[type=submit]");
         await _page.WaitForURLAsync(url => !url.Contains("/Account/Login"), new PageWaitForURLOptions { Timeout = 15000 });

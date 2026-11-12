@@ -3,6 +3,7 @@
 @using System.ComponentModel.DataAnnotations
 @inject SetupDiagnosticsService Diagnostics
 @inject ToastService Toasts
+@inject AuthenticationStateProvider AuthProvider
 
 <PageTitle>Setup &amp; diagnostics · DBTracker</PageTitle>
 
@@ -105,6 +106,44 @@ else
             </div>
         }
     </div>
+
+    <div class="dbt-card mt-4" id="delivery-history">
+        <h2 class="h6 text-muted mb-2">Delivery history</h2>
+        <p class="text-muted small mb-3">The last @_attempts.Count send attempts: reports, alerts, recovery notices and test emails by email, and alerts by webhook. For email, "Accepted" means the provider took the message, not that it reached the inbox; for a webhook, it means the endpoint answered with a success status. Addresses and the webhook URL aren't stored, only counts.</p>
+        @if (_attempts.Count == 0)
+        {
+            <div class="empty-state py-3" data-testid="delivery-history-empty"><i aria-hidden="true" class="bi bi-envelope"></i>No send attempts recorded yet. Send a test email above to check delivery.</div>
+        }
+        else
+        {
+            <div class="dbt-table" role="region" aria-label="Delivery history" tabindex="0">
+                <table class="table table-sm mb-0" data-testid="delivery-history">
+                    <thead><tr><th scope="col">When</th><th scope="col">What</th><th scope="col">Channel</th><th scope="col">Scope</th><th scope="col">Recipients</th><th scope="col">Outcome</th><th scope="col">Error</th><th scope="col">Triggered by</th></tr></thead>
+                    <tbody>
+                        @foreach (var a in _attempts)
+                        {
+                            <tr data-testid="delivery-attempt-row">
+                                <td class="small"><LocalTime Utc="a.AttemptedAtUtc" Format="MMM d, h:mm tt" ShowUtc="false" /></td>
+                                <td class="small">@DeliveryOutcomeSummarizer.Describe(a.Kind)</td>
+                                <td class="small">@a.Channel</td>
+                                <td class="small">@a.ScopeDescription</td>
+                                <td class="small">
+                                    @a.RecipientCount
+                                    @if (a.HeldForQuietHoursCount > 0)
+                                    {
+                                        <span class="text-muted">(@a.HeldForQuietHoursCount held by quiet hours)</span>
+                                    }
+                                </td>
+                                <td class="small"><span class="badge-health dot @OutcomeClass(a.Outcome)">@DeliveryOutcomeSummarizer.Describe(a.Outcome)</span>@(a.Outcome == DeliveryOutcome.Partial ? $" ({a.AcceptedCount} accepted, {a.FailedCount} failed)" : "")</td>
+                                <td class="small text-danger">@a.Error</td>
+                                <td class="small text-muted">@a.TriggeredBy</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </div>
 }
 
 @code {
@@ -114,12 +153,14 @@ else
     private string _testEmailAddress = "";
     private bool _sendingTest;
     private EmailSendResult? _testResult;
+    private List<DeliveryAttempt> _attempts = new();
 
     protected override async Task OnInitializedAsync() => await Load();
 
     private async Task Load()
     {
         _items = await Diagnostics.BuildChecklistAsync();
+        _attempts = await Diagnostics.ListDeliveryAttemptsAsync();
         _paths = null;
     }
 
@@ -133,7 +174,9 @@ else
     private async Task SendTestEmail()
     {
         _sendingTest = true;
-        _testResult = await Diagnostics.SendTestEmailAsync(_testEmailAddress);
+        var userName = (await AuthProvider.GetAuthenticationStateAsync()).User.Identity?.Name ?? "unknown";
+        _testResult = await Diagnostics.SendTestEmailAsync(_testEmailAddress, userName);
+        _attempts = await Diagnostics.ListDeliveryAttemptsAsync();
         _sendingTest = false;
 
         if (_testResult.Outcome == DBTracker.Core.Enums.EmailSendOutcome.Accepted)
@@ -147,6 +190,14 @@ else
                 : $"Send failed: {_testResult.Detail}");
         }
     }
+
+    private static string OutcomeClass(DeliveryOutcome outcome) => outcome switch
+    {
+        DeliveryOutcome.Accepted => "OnTrack",
+        DeliveryOutcome.Partial => "Overdue",
+        DeliveryOutcome.Failed => "Failed",
+        _ => "NeverBackedUp"
+    };
 
     private static string SeverityClass(DiagnosticSeverity severity) => severity switch
     {

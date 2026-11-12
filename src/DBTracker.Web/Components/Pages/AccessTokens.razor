@@ -84,9 +84,9 @@
                             <tr>
                                 <td>@t.Name</td>
                                 <td class="small" style="font-family:var(--dbt-mono);">@(t.DisplayPrefix)…</td>
-                                <td class="small">@t.CreatedAtUtc.ToLocalTime().ToString("MMM d, yyyy")</td>
-                                <td class="small">@(t.LastUsedAtUtc is { } used ? used.ToLocalTime().ToString("MMM d, yyyy h:mm tt") : "Never")</td>
-                                <td class="small">@t.ExpiresAtUtc.ToLocalTime().ToString("MMM d, yyyy")</td>
+                                <td class="small"><LocalTime Utc="t.CreatedAtUtc" Format="MMM d, yyyy" ShowUtc="false" /></td>
+                                <td class="small"><LocalTime Utc="t.LastUsedAtUtc" Format="MMM d, yyyy h:mm tt" ShowUtc="false" /></td>
+                                <td class="small"><LocalTime Utc="t.ExpiresAtUtc" Format="MMM d, yyyy" ShowUtc="false" /></td>
                                 <td>
                                     @switch (state)
                                     {
@@ -104,7 +104,7 @@
                                 <td class="small">
                                     @if (state == AccessTokenState.Active)
                                     {
-                                        <button type="button" class="btn btn-outline-danger btn-sm" @onclick="() => Revoke(t)" aria-label="@($"Revoke token {t.Name}")">Revoke</button>
+                                        <button type="button" class="btn btn-outline-danger btn-sm" @onclick="() => AskRevoke(t)" aria-label="@($"Revoke token {t.Name}")">Revoke</button>
                                     }
                                 </td>
                             </tr>
@@ -115,6 +115,23 @@
         }
     </div>
 </div>
+
+@* G29: revoking cuts off whatever uses the token at once, so it is confirmed in a native modal dialog. *@
+<ModalDialog Title="@RevokeTitle" @bind-Open="_showRevokeDialog" CssClass="is-danger"
+             FallbackFocusSelector="table[aria-label='Your access tokens']" data-testid="revoke-token-dialog">
+    @if (_revokeTarget is { } target)
+    {
+        <ul class="small mb-0">
+            <li>Anything using it, such as the DBTracker tray app, stops working straight away.</li>
+            <li>It starts with <code>@(target.DisplayPrefix)…</code> and was last used <LocalTime Utc="target.LastUsedAtUtc" Format="MMM d, yyyy h:mm tt" ShowUtc="false" Empty="never" />.</li>
+            <li>This can't be undone. Create a new token if you still need one.</li>
+        </ul>
+        <div class="dbt-dialog-actions">
+            <button type="button" class="btn btn-danger btn-sm" @onclick="ConfirmRevoke" data-testid="confirm-revoke-token">Revoke token</button>
+            <button type="button" class="btn btn-outline-secondary btn-sm" autofocus @onclick="() => _showRevokeDialog = false">Keep token</button>
+        </div>
+    }
+</ModalDialog>
 
 @code {
     private readonly CreateModel _form = new();
@@ -188,8 +205,24 @@
         _newTokenName = null;
     }
 
-    private async Task Revoke(PersonalAccessToken token)
+    private PersonalAccessToken? _revokeTarget;
+    private bool _showRevokeDialog;
+    private string RevokeTitle => $"Revoke token \"{_revokeTarget?.Name}\"?";
+
+    private void AskRevoke(PersonalAccessToken token)
     {
+        _revokeTarget = token;
+        _showRevokeDialog = true;
+    }
+
+    private async Task ConfirmRevoke()
+    {
+        if (_revokeTarget is not { } token)
+        {
+            return;
+        }
+
+        _showRevokeDialog = false;
         if (await Tokens.RevokeAsync(_userId, _userName, token.Id))
         {
             Toasts.Success($"Token \"{token.Name}\" revoked. Anything using it stops working now.");

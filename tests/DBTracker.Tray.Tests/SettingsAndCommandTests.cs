@@ -64,6 +64,14 @@ public class SettingsAndCommandTests
     }
 
     [Fact]
+    public void RestartSite_IsStopThenStart()
+    {
+        var args = AdminCommands.AppCmdArguments(AdminAction.RestartSite, TraySettings.From(null, null, "OpsSite", null));
+        Assert.Equal(new[] { "stop site /site.name:\"OpsSite\"", "start site /site.name:\"OpsSite\"" }, args);
+        Assert.Equal("Restart the site", AdminCommands.Describe(AdminAction.RestartSite));
+    }
+
+    [Fact]
     public void AdminArguments_RoundTrip()
     {
         foreach (AdminAction action in Enum.GetValues(typeof(AdminAction)))

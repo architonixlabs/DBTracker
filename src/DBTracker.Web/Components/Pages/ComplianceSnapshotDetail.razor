@@ -11,8 +11,9 @@
         @if (_snapshot is not null)
         {
             <div class="subtitle">
-                Generated @_snapshot.GeneratedAtUtc.ToLocalTime().ToString("MMM d, yyyy h:mm tt") by @_snapshot.GeneratedByUserName
-                · scope: @_snapshot.ScopeDescription · policy @_snapshot.PolicyVersion
+                Generated <LocalTime Utc="_snapshot.GeneratedAtUtc" /> by @_snapshot.GeneratedByUserName
+                · effective as of <LocalTime Utc="_snapshot.EffectiveAsOfUtc" />
+                · scope: @_snapshot.ScopeDescription
             </div>
         }
     </div>
@@ -38,16 +39,24 @@
 }
 else
 {
+    <dl class="row small mb-3" data-testid="snapshot-provenance">
+        <dt class="col-sm-3">Snapshot</dt><dd class="col-sm-9">#@_snapshot.Id, @_snapshot.RowCount row(s)</dd>
+        <dt class="col-sm-3">Policy version</dt><dd class="col-sm-9"><code>@_snapshot.PolicyVersion</code>. Two snapshots with the same label were judged under the same rules, policies and intervals.</dd>
+        <dt class="col-sm-3">Evidence</dt><dd class="col-sm-9">@_snapshot.EvidenceProvenance</dd>
+    </dl>
     <p class="text-muted small mb-3">
         These values are frozen as of generation time. They will not change even if the underlying
         instances are later edited, archived, or have backdated backup/restore entries added.
-        Evidence: @_snapshot.EvidenceProvenance
+        @if (_legacyRows)
+        {
+            <span>This snapshot was saved before evidence level, restore-test recency and policy were recorded per row, so those columns say "Not recorded".</span>
+        }
     </p>
 
-    <div class="dbt-table">
-        <table aria-label="Frozen snapshot rows" class="table">
+    <div class="dbt-table" role="region" aria-label="Frozen snapshot rows" tabindex="0">
+        <table class="table">
             <thead>
-                <tr><th>Instance</th><th>Owner</th><th>Role</th><th>Env</th><th>Last successful backup</th><th>Health</th><th>Restore tested</th></tr>
+                <tr><th scope="col">Instance</th><th scope="col">Owner</th><th scope="col">Role</th><th scope="col">Env</th><th scope="col">Last successful backup</th><th scope="col">Health</th><th scope="col">Evidence</th><th scope="col">Restore tested</th><th scope="col">Restore-test coverage</th><th scope="col">Policy</th></tr>
             </thead>
             <tbody>
                 @foreach (var r in _rows)
@@ -57,8 +66,9 @@ else
                         <td>@r.Company / @r.Department</td>
                         <td><span class="role-pill @r.Role">@r.Role</span></td>
                         <td>@r.Environment</td>
-                        <td>@(r.LastBackupUtc is null ? "Never" : r.LastBackupUtc.Value.ToLocalTime().ToString("MMM d, yyyy h:mm tt"))</td>
+                        <td><LocalTime Utc="r.LastBackupUtc" ShowUtc="false" /></td>
                         <td><HealthBadge Health="r.Health" /></td>
+                        <td class="small">@(r.Evidence is { } level ? BackupEvidenceClassifier.Describe(level) : r.InstanceId is null ? "Not recorded" : "None")</td>
                         <td>
                             @if (r.RestoreTested)
                             {
@@ -69,6 +79,8 @@ else
                                 <span class="badge-health dot Overdue">No</span>
                             }
                         </td>
+                        <td class="small">@RecencyText(r)</td>
+                        <td class="small">@PolicyText(r)</td>
                     </tr>
                 }
             </tbody>
@@ -82,30 +94,44 @@ else
     private ComplianceSnapshot? _snapshot;
     private IReadOnlyList<ComplianceSnapshotRow> _rows = [];
     private bool _loaded;
+    private bool _legacyRows;
 
     protected override async Task OnInitializedAsync()
     {
         _snapshot = await Db.ComplianceSnapshots.AsNoTracking().FirstOrDefaultAsync(s => s.Id == Id);
         _rows = _snapshot is null ? [] : ComplianceSnapshotBuilder.Deserialize(_snapshot.RowsJson);
+        _legacyRows = _rows.Any(r => r.RestoreRecency is null);
         _loaded = true;
     }
+
+    private static string RecencyText(ComplianceSnapshotRow r) => r.RestoreRecency switch
+    {
+        null => "Not recorded",
+        RestoreTestRecency.Current => $"Current (every {r.RestoreTestIntervalDays} d)",
+        RestoreTestRecency.Overdue => $"Expired (every {r.RestoreTestIntervalDays} d)",
+        _ => "Never tested"
+    };
+
+    private static string PolicyText(ComplianceSnapshotRow r) =>
+        r.ExpectedBackupIntervalHours is null ? "Not recorded"
+        : r.PolicyName is null ? $"No policy, every {r.ExpectedBackupIntervalHours} h"
+        : $"{r.PolicyName} v{r.PolicyVersion}, every {r.ExpectedBackupIntervalHours} h";
 
     private async Task ExportCsv()
     {
         var sb = new System.Text.StringBuilder();
-        sb.AppendLine("Instance,Company,Department,Role,Environment,LastSuccessfulBackupUtc,Health,RestoreTested");
+        sb.AppendLine("Instance,Company,Department,Role,Environment,LastSuccessfulBackupUtc,Health,EvidenceLevel,RestoreTested,LastVerifiedRestoreUtc,RestoreTestCoverage,RestoreTestIntervalDays,Policy,PolicyVersion,ExpectedBackupIntervalHours,SnapshotId,SnapshotGeneratedAtUtc,SnapshotPolicyVersion");
         foreach (var r in _rows)
         {
-            sb.AppendLine(string.Join(",", Csv(r.InstanceName), Csv(r.Company), Csv(r.Department), Csv(r.Role.ToString()),
-                Csv(r.Environment.ToString()), Csv(r.LastBackupUtc?.ToString("O") ?? ""), Csv(r.Health.ToString()), Csv(r.RestoreTested ? "Yes" : "No")));
+            sb.AppendLine(CsvRecordReader.Line([
+                r.InstanceName, r.Company, r.Department, r.Role.ToString(), r.Environment.ToString(),
+                r.LastBackupUtc?.ToString("O") ?? "", r.Health.ToString(), r.Evidence?.ToString() ?? "", r.RestoreTested ? "Yes" : "No",
+                r.LastVerifiedRestoreUtc?.ToString("O") ?? "", r.RestoreRecency?.ToString() ?? "", r.RestoreTestIntervalDays?.ToString() ?? "",
+                r.PolicyName ?? "", r.PolicyVersion?.ToString() ?? "", r.ExpectedBackupIntervalHours?.ToString() ?? "",
+                _snapshot!.Id.ToString(), _snapshot.GeneratedAtUtc.ToString("O"), _snapshot.PolicyVersion]));
         }
 
         var fileName = $"dbtracker-compliance-snapshot-{Id}-{_snapshot!.GeneratedAtUtc:yyyyMMdd-HHmm}.csv";
         await JS.InvokeVoidAsync("dbtracker.downloadCsv", fileName, sb.ToString());
     }
-
-    private static string Csv(string value) =>
-        value.Contains(',') || value.Contains('"')
-            ? $"\"{value.Replace("\"", "\"\"")}\""
-            : value;
 }

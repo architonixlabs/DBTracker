@@ -171,6 +171,19 @@ public class RetirementChecklistGateEvaluatorTests
     }
 
     [Fact]
+    public void ChangeValidatedButNoRollbackDeadline_IsUnknown_AndBlocks()
+    {
+        var evaluation = RetirementChecklistGateEvaluator.Evaluate(
+            FullyPassingChecklist(), AllResolvedDependencies, ChainCoverageStatus.Complete,
+            hasAccessibleVerifiedCopy: true, hasAnyCopyLocationsRecorded: true, certificateAccessVerified: null,
+            rollbackRetentionDeadlineUtc: null, nowUtc: Now, hasChangeValidationHistory: true);
+        var gate = Assert.Single(evaluation.Gates, g => g.GateKey == "RollbackWindowClosed");
+
+        Assert.Equal(RetirementGateStatus.Unknown, gate.Status);
+        Assert.False(evaluation.AllGatesSatisfied);
+    }
+
+    [Fact]
     public void RollbackDeadlineInTheFuture_Blocks()
     {
         var evaluation = RetirementChecklistGateEvaluator.Evaluate(

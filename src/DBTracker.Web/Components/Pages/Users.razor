@@ -49,7 +49,7 @@
                 </div>
                 <div class="form-check mb-3">
                     <input class="form-check-input" type="checkbox" id="send-invite" @bind="_newUser.SendInviteEmail" />
-                    <label class="form-check-label small" for="send-invite">Email the temporary password to them</label>
+                    <label class="form-check-label small" for="send-invite">Email them a link to set their own password (the temporary password is never emailed)</label>
                 </div>
                 @if (!string.IsNullOrEmpty(_error))
                 {
@@ -149,30 +149,19 @@
     {
         _error = null;
 
-        var user = new ApplicationUser
+        var created = await Lifecycle.CreateUserAsync(_newUser.DisplayName, _newUser.Email, _newUser.Password, _newUser.Role, _actorId ?? "", _actorName ?? "unknown");
+        if (!created.Succeeded)
         {
-            UserName = _newUser.Email,
-            Email = _newUser.Email,
-            DisplayName = _newUser.DisplayName,
-            EmailConfirmed = true,
-            MustChangePassword = true
-        };
-
-        var result = await UserManager.CreateAsync(user, _newUser.Password);
-        if (!result.Succeeded)
-        {
-            _error = string.Join(" ", result.Errors.Select(e => e.Description));
+            _error = created.Error;
             return;
         }
 
-        await UserManager.AddToRoleAsync(user, _newUser.Role);
-
         if (_newUser.SendInviteEmail)
         {
-            var emailResult = await Lifecycle.SendInviteAsync(user, _newUser.Password, Nav.BaseUri, _actorId ?? "", _actorName ?? "unknown");
+            var emailResult = await Lifecycle.SendInviteAsync(created.User!, Nav.BaseUri, _actorId ?? "", _actorName ?? "unknown");
             Toasts.Success(emailResult.Outcome == DBTracker.Core.Enums.EmailSendOutcome.Accepted
-                ? $"{_newUser.DisplayName} added as {_newUser.Role}. Invite email sent."
-                : $"{_newUser.DisplayName} added as {_newUser.Role}, but the invite email was not sent ({emailResult.Outcome}). Share the temporary password directly.");
+                ? $"{_newUser.DisplayName} added as {_newUser.Role}. Invite email sent with a link to set their own password."
+                : $"{_newUser.DisplayName} added as {_newUser.Role}, but the invite email was not sent ({emailResult.Outcome}). Share the temporary password in person.");
         }
         else
         {

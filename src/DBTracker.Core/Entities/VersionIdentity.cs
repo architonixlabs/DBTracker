@@ -46,6 +46,12 @@ public class VersionIdentity
     public int? LastRunwayNoticeThresholdDays { get; set; }
     public DateTime? LastRunwayNoticeAtUtc { get; set; }
 
+    /// <summary>The milestone date the last deadline notice was about. A different date (a revision, a contract ending, the next phase) restarts the thresholds.</summary>
+    public DateTime? LastRunwayNoticeMilestoneUtc { get; set; }
+
+    /// <summary>Deadline, Unknown or NeedsReview (see RunwayNoticeKinds). Empty when no notice has been sent.</summary>
+    public string LastRunwayNoticeKind { get; set; } = string.Empty;
+
     public DateTime UpdatedAtUtc { get; set; } = DateTime.UtcNow;
     public string UpdatedBy { get; set; } = string.Empty;
 

@@ -1,0 +1,246 @@
+@page "/instances/import-history"
+@attribute [Authorize(Roles = Roles.CanEditPolicy)]
+@inject DBTracker.Infrastructure.Import.EvidenceHistoryImportService HistoryImporter
+@inject ToastService Toasts
+@inject IJSRuntime JS
+@inject AuthenticationStateProvider AuthProvider
+
+<PageTitle>Import backup history · DBTracker</PageTitle>
+
+<div class="app-topbar">
+    <div>
+        <h1>Import backup and restore history</h1>
+        <div class="subtitle">Load past backup and restore results at onboarding. Imported entries are labelled Imported, record who imported them and when, and never count as verified evidence.</div>
+    </div>
+    <div class="d-flex gap-2 flex-wrap">
+        <a class="btn btn-outline-secondary" href="/instances/import"><i class="bi bi-arrow-left" aria-hidden="true"></i> Instance import</a>
+        <button type="button" class="btn btn-outline-secondary" data-testid="history-template" @onclick="DownloadTemplate">
+            <i class="bi bi-download" aria-hidden="true"></i> Download history template
+        </button>
+    </div>
+</div>
+
+<div class="dbt-card" style="max-width: 900px;">
+    <h2 class="h6 text-muted mb-3">File</h2>
+    <p class="text-muted small mb-3" id="history-file-help">
+        One row per backup or restore. <strong>Kind</strong>, <strong>InstanceName</strong>, <strong>EventTime</strong>, <strong>Type</strong>
+        and <strong>Status</strong> are required, and every time needs an explicit zone: an offset in EventTime, or the TimeZone column.
+        Instances must already exist; import them first. A row that matches an entry already stored for the same instance, kind,
+        time (to the second) and type is skipped, so the same file can be imported again safely. Lines starting with <code>#</code>
+        are ignored. Maximum file size is 2 MB. Applying saves every new row or none.
+    </p>
+    <details class="mb-3">
+        <summary class="small">Column guide: what each column accepts</summary>
+        <table class="table table-sm dbt-table mt-2 mb-0" aria-label="History import columns and the values they accept">
+            <thead><tr><th scope="col">Column</th><th scope="col">Required</th><th scope="col">Accepts</th></tr></thead>
+            <tbody>
+                @foreach (var column in EvidenceHistoryCsvImporter.ColumnGuide)
+                {
+                    <tr>
+                        <td class="small"><code>@column.Name</code></td>
+                        <td class="small">@(column.Required ? "Yes" : "")</td>
+                        <td class="small">@column.Help</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </details>
+    <label class="form-label small" for="history-file">History CSV file</label>
+    <InputFile id="history-file" data-testid="history-file" OnChange="OnFileSelected" class="form-control" accept=".csv" aria-describedby="history-file-help" disabled="@(_parsing || _importing)" />
+
+    @if (_parsing)
+    {
+        <p class="text-muted small mt-2 mb-0" role="status">Reading @_fileName…</p>
+    }
+    else if (_fileError is not null)
+    {
+        <p class="small mt-2 mb-0" role="alert" style="color:var(--dbt-failed);">@_fileError</p>
+    }
+    else if (_fileName is not null)
+    {
+        <p class="text-muted small mt-2 mb-0">@_fileName</p>
+    }
+</div>
+
+@if (_preview is not null)
+{
+    <div class="dbt-card mt-4">
+        <h2 class="h6 text-muted mb-3">Preview</h2>
+
+        <p class="mb-3" role="status" data-testid="history-preview-summary">
+            <span style="color:var(--dbt-ontrack)">@_preview.BackupCreateCount backup and @_preview.RestoreCreateCount restore entries to add</span>,
+            <span class="text-muted">@_preview.SkipCount already recorded (skip)</span>
+            @if (_preview.AmbiguousCount > 0)
+            {
+                <span>, <span style="color:var(--dbt-failed)">@_preview.AmbiguousCount ambiguous (not imported)</span></span>
+            }
+            @if (_preview.Errors.Count > 0)
+            {
+                <span>, <span style="color:var(--dbt-failed)">@_preview.Errors.Count row(s) with errors (skipped)</span></span>
+            }
+        </p>
+
+        @if (_preview.Errors.Count > 0 || _preview.AmbiguousCount > 0)
+        {
+            <div class="d-flex justify-content-between align-items-center mb-2 gap-2 flex-wrap">
+                <span class="text-muted small">Fix these rows and upload them again. Other rows are not affected.</span>
+                <button type="button" class="btn btn-outline-secondary btn-sm" data-testid="history-download-errors" @onclick="DownloadErrors"><i class="bi bi-download" aria-hidden="true"></i> Download rows to fix (CSV)</button>
+            </div>
+        }
+
+        @if (_preview.Errors.Count > 0)
+        {
+            <div class="dbt-table mb-4" role="region" aria-label="History rows with errors" tabindex="0">
+                <table class="table">
+                    <thead><tr><th scope="col">Row</th><th scope="col">Error</th></tr></thead>
+                    <tbody>
+                        @foreach (var e in _preview.Errors.Take(100))
+                        {
+                            <tr><td>@e.RowNumber</td><td class="text-danger">@e.Message</td></tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+
+        @if (_preview.Rows.Count > 0)
+        {
+            <div class="dbt-table mb-4" role="region" aria-label="History import plan per row" tabindex="0">
+                <table class="table">
+                    <thead><tr><th scope="col">Row</th><th scope="col">Plan</th><th scope="col">Kind</th><th scope="col">Instance</th><th scope="col">When</th><th scope="col">Stated zone</th><th scope="col">Type</th><th scope="col">Status</th><th scope="col">Detail</th></tr></thead>
+                    <tbody>
+                        @foreach (var row in _preview.Rows.Take(100))
+                        {
+                            <tr>
+                                <td class="small">@row.RowNumber</td>
+                                <td><span class="badge-health dot @PlanClass(row.Plan)">@PlanLabel(row.Plan)</span></td>
+                                <td class="small">@row.Kind</td>
+                                <td class="small">@row.InstanceName</td>
+                                <td class="small"><LocalTime Utc="row.OccurredUtc" /></td>
+                                <td class="small text-muted">@row.ZoneId</td>
+                                <td class="small">@row.TypeOrReason</td>
+                                <td class="small">@row.StatusOrOutcome</td>
+                                <td class="small text-muted">@row.Detail</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+            @if (_preview.Rows.Count > 100)
+            {
+                <p class="text-muted small">Showing the first 100 of @_preview.Rows.Count rows. All of them are applied.</p>
+            }
+        }
+
+        @if (_importError is not null)
+        {
+            <p class="small" role="alert" style="color:var(--dbt-failed);">@_importError</p>
+        }
+        <button type="button" class="btn btn-primary" data-testid="history-apply" @onclick="Import" disabled="@(_importing || _preview.CreateCount == 0)">
+            <i class="bi bi-upload" aria-hidden="true"></i> @(_importing ? "Importing…" : $"Import {_preview.CreateCount} entr{(_preview.CreateCount == 1 ? "y" : "ies")} as Imported")
+        </button>
+    </div>
+}
+
+@code {
+    private const long MaxFileBytes = 2 * 1024 * 1024;
+
+    private string? _fileName;
+    private string? _content;
+    private HistoryImportPreview? _preview;
+    private bool _importing, _parsing;
+    private string? _fileError, _importError;
+
+    private async Task OnFileSelected(InputFileChangeEventArgs e)
+    {
+        _preview = null;
+        _fileError = null;
+        _importError = null;
+        _fileName = e.File.Name;
+
+        if (e.File.Size > MaxFileBytes)
+        {
+            _fileError = $"{e.File.Name} is larger than 2 MB. Split it into smaller files and import each one.";
+            return;
+        }
+
+        _parsing = true;
+        try
+        {
+            using var stream = e.File.OpenReadStream(maxAllowedSize: MaxFileBytes);
+            using var reader = new StreamReader(stream);
+            _content = await reader.ReadToEndAsync();
+            var (_, userName) = await CurrentUserAsync();
+            _preview = await HistoryImporter.PreviewAsync(_content, e.File.Name, userName);
+        }
+        catch (Exception)
+        {
+            _fileError = $"Couldn't read {e.File.Name}. Check that it is a UTF-8 CSV file and try again.";
+        }
+        finally
+        {
+            _parsing = false;
+        }
+    }
+
+    private async Task Import()
+    {
+        if (_preview is null || _importing)
+        {
+            return;
+        }
+
+        _importing = true;
+        _importError = null;
+        var (userId, userName) = await CurrentUserAsync();
+        var outcome = await HistoryImporter.ApplyAsync(_preview, _fileName ?? "", userId, userName);
+        _importing = false;
+
+        if (!outcome.Ok)
+        {
+            _importError = outcome.Message;
+            return;
+        }
+
+        var skipped = outcome.SkippedAtApply > 0 ? $" {outcome.SkippedAtApply} were already recorded by then and were skipped." : "";
+        Toasts.Success($"Imported {outcome.BackupsCreated} backup and {outcome.RestoresCreated} restore entries.{skipped}");
+        _preview = null;
+        _content = null;
+        _fileName = null;
+    }
+
+    private async Task<(string UserId, string UserName)> CurrentUserAsync()
+    {
+        var state = await AuthProvider.GetAuthenticationStateAsync();
+        return (state.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? "", state.User.Identity?.Name ?? "unknown");
+    }
+
+    private async Task DownloadTemplate() =>
+        await JS.InvokeVoidAsync("dbtracker.downloadCsv", "dbtracker-history-template.csv", EvidenceHistoryCsvImporter.TemplateCsv());
+
+    private async Task DownloadErrors()
+    {
+        if (_preview is null || _content is null)
+        {
+            return;
+        }
+
+        var problems = _preview.Errors.Select(e => (e.RowNumber, e.Message))
+            .Concat(_preview.Rows.Where(r => r.Plan == ImportRowPlan.Ambiguous).Select(r => (r.RowNumber, $"Not imported: {r.Detail}")));
+        await JS.InvokeVoidAsync("dbtracker.downloadCsv", "dbtracker-history-rows-to-fix.csv", ImportCorrections.BuildCsv(_content, problems));
+    }
+
+    private static string PlanLabel(ImportRowPlan plan) => plan switch
+    {
+        ImportRowPlan.Create => "Add",
+        ImportRowPlan.Skip => "Already recorded",
+        _ => "Ambiguous"
+    };
+
+    private static string PlanClass(ImportRowPlan plan) => plan switch
+    {
+        ImportRowPlan.Create => "OnTrack",
+        ImportRowPlan.Skip => "NeverBackedUp",
+        _ => "Failed"
+    };
+}

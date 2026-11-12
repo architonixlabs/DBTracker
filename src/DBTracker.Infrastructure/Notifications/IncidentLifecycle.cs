@@ -21,8 +21,8 @@ public static class IncidentLifecycle
         return incident;
     }
 
-    /// <summary>Closes any open incident for this instance (health recovered). Returns true if one was actually open.</summary>
-    public static async Task<bool> CloseOpenAsync(DBTrackerDbContext db, int instanceId, DateTime nowUtc)
+    /// <summary>Closes any open incident for this instance (health recovered). Returns the incidents it closed, empty when none was open.</summary>
+    public static async Task<List<Incident>> CloseOpenAsync(DBTrackerDbContext db, int instanceId, DateTime nowUtc)
     {
         var open = await db.Incidents.Where(i => i.DatabaseInstanceId == instanceId && i.ClosedAtUtc == null).ToListAsync();
         foreach (var incident in open)
@@ -30,6 +30,6 @@ public static class IncidentLifecycle
             incident.ClosedAtUtc = nowUtc;
         }
 
-        return open.Count > 0;
+        return open;
     }
 }

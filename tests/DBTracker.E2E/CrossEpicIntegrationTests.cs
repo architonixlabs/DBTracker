@@ -25,7 +25,7 @@ public class CrossEpicIntegrationTests
         }
         _page = await GlobalSetup.Server.Browser.NewPageAsync();
         await GotoAsync("/Account/Login");
-        await _page.FillAsync("input[autocomplete=username]", email);
+        await _page.FillAsync("input[autocomplete~=username]", email);
         await _page.FillAsync("input[autocomplete=current-password]", "ArxDemo#2026!");
         await _page.ClickAsync("button[type=submit]");
         await _page.WaitForURLAsync(url => !url.Contains("/Account/Login"), new PageWaitForURLOptions { Timeout = 15000 });
@@ -88,7 +88,8 @@ public class CrossEpicIntegrationTests
         await WaitForCircuitAsync();
         await _page.ClickAsync("button:has-text('Archive')");
         await _page.WaitForTimeoutAsync(400);
-        await _page.FillAsync("input[placeholder*='Decommissioned']", "E2E cross-epic archive-visibility check");
+        await _page.ClickAsync("[data-testid=archive-kind-mistake]");
+        await _page.FillAsync("#archive-reason", "E2E cross-epic archive-visibility check");
         await _page.ClickAsync("button:has-text('Archive this instance')");
         await _page.WaitForURLAsync(url => url.Contains("/instances") && !url.Contains(instanceId.ToString()));
         await WaitForCircuitAsync();
@@ -112,6 +113,8 @@ public class CrossEpicIntegrationTests
         var rowAsDba = _page.Locator("tr", new PageLocatorOptions { HasText = instanceName });
         await Assertions.Expect(rowAsDba.Locator("button:has-text('Unarchive')")).ToBeVisibleAsync();
         await rowAsDba.Locator("button:has-text('Unarchive')").ClickAsync();
+        await _page.FillAsync("[data-testid=unarchive-reason]", "Archived by mistake in an E2E test");
+        await _page.ClickAsync("[data-testid=unarchive-confirm]");
         await _page.WaitForTimeoutAsync(600);
         await Assertions.Expect(_page.Locator("tr", new PageLocatorOptions { HasText = instanceName })).ToHaveCountAsync(0);
     }
@@ -256,7 +259,8 @@ public class CrossEpicIntegrationTests
             await WaitForCircuitAsync();
             await _page.ClickAsync("button:has-text('Archive')");
             await _page.WaitForTimeoutAsync(400);
-            await _page.FillAsync("input[placeholder*='Decommissioned']", "E2E — archived after snapshot was saved");
+            await _page.ClickAsync("[data-testid=archive-kind-mistake]");
+            await _page.FillAsync("#archive-reason", "E2E — archived after snapshot was saved");
             await _page.ClickAsync("button:has-text('Archive this instance')");
             await _page.WaitForTimeoutAsync(600);
 

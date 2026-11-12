@@ -73,6 +73,35 @@ else
                     <label class="form-label small text-muted mb-1" for="objective-notes">Notes</label>
                     <textarea id="objective-notes" class="form-control form-control-sm" rows="2" @bind="_objectiveNotes" @bind:event="oninput" disabled="@(!_canEdit)"></textarea>
                 </div>
+                <fieldset class="mb-2">
+                    <legend class="form-label small text-muted mb-1">Copy expectations, checked against verified copies below</legend>
+                    <div class="row g-2">
+                        <div class="col-4">
+                            <label class="form-label small mb-1" for="expect-offsite">Offsite copy</label>
+                            <select id="expect-offsite" class="form-select form-select-sm" @bind="_expectOffsite" disabled="@(!_canEdit)" data-testid="expect-offsite">
+                                <option value="">Not set</option>
+                                <option value="true">Required</option>
+                                <option value="false">Not required</option>
+                            </select>
+                        </div>
+                        <div class="col-4">
+                            <label class="form-label small mb-1" for="expect-immutable">Immutable copy</label>
+                            <select id="expect-immutable" class="form-select form-select-sm" @bind="_expectImmutable" disabled="@(!_canEdit)" data-testid="expect-immutable">
+                                <option value="">Not set</option>
+                                <option value="true">Required</option>
+                                <option value="false">Not required</option>
+                            </select>
+                        </div>
+                        <div class="col-4">
+                            <label class="form-label small mb-1" for="expect-encrypted">Encrypted copies</label>
+                            <select id="expect-encrypted" class="form-select form-select-sm" @bind="_expectEncrypted" disabled="@(!_canEdit)" data-testid="expect-encrypted">
+                                <option value="">Not set</option>
+                                <option value="true">Required</option>
+                                <option value="false">Not required</option>
+                            </select>
+                        </div>
+                    </div>
+                </fieldset>
                 <AuthorizeView Roles="@Roles.CanEditPolicy">
                     <button type="button" class="btn btn-primary btn-sm" @onclick="SaveObjective" data-testid="save-recovery-objective">Save objectives</button>
                 </AuthorizeView>
@@ -178,11 +207,22 @@ else
                     <span class="small text-muted ms-2">@_retention.Coverage.Reasoning</span>
                 </div>
 
+                <h3 class="h6 small text-muted mb-1">Copy expectations and legal holds</h3>
+                <ul class="list-unstyled small mb-3" data-testid="copy-expectations">
+                    @foreach (var x in _retention.Expectations)
+                    {
+                        <li class="mb-1" data-testid="copy-expectation-row">
+                            <span class="badge-health dot @ExpectationCssClass(x.Status)" data-testid="copy-expectation-status">@ExpectationLabel(x.Status)</span>
+                            <strong>@x.Expectation:</strong> @x.Explanation
+                        </li>
+                    }
+                </ul>
+
                 @if (_copies.Count > 0)
                 {
                     <div class="table-responsive mb-3" role="region" aria-label="Backup copy locations" tabindex="0">
                         <table class="table table-sm dbt-table mb-0" data-testid="copy-location-table">
-                            <thead><tr><th scope="col">Label</th><th scope="col">Path/reference</th><th scope="col">Offsite</th><th scope="col">Immutable-flagged</th><th scope="col">Verification</th><th scope="col"><span class="visually-hidden">Actions</span></th></tr></thead>
+                            <thead><tr><th scope="col">Label</th><th scope="col">Path/reference</th><th scope="col">Offsite</th><th scope="col">Immutable-flagged</th><th scope="col">Encryption</th><th scope="col">Legal hold</th><th scope="col">Verification</th><th scope="col"><span class="visually-hidden">Actions</span></th></tr></thead>
                             <tbody>
                                 @foreach (var copy in _copies)
                                 {
@@ -191,6 +231,8 @@ else
                                         <td class="small" data-testid="copy-path">@copy.StoragePathOrReference</td>
                                         <td class="small">@(copy.IsOffsite ? "Yes" : "No")</td>
                                         <td class="small">@(copy.IsImmutableFlagged ? "Yes" : "No")</td>
+                                        <td class="small" data-testid="copy-encryption">@EncryptionLabel(copy)</td>
+                                        <td class="small" data-testid="copy-legal-hold">@(string.IsNullOrWhiteSpace(copy.LegalHoldReference) ? "None" : copy.LegalHoldReference)</td>
                                         <td class="small" data-testid="copy-verification-status">
                                             <span class="badge-health dot @VerificationCssClass(copy.VerificationStatus)">@copy.VerificationStatus</span>
                                         </td>
@@ -199,6 +241,8 @@ else
                                                 <button type="button" class="btn btn-link btn-sm p-0" @onclick="() => MarkVerification(copy.Id, CopyVerificationStatus.Accessible)">Mark accessible</button>
                                                 <button type="button" class="btn btn-link btn-sm p-0" @onclick="() => MarkVerification(copy.Id, CopyVerificationStatus.CannotVerify)">Mark cannot verify</button>
                                                 <button type="button" class="btn btn-link btn-sm p-0" @onclick="() => MarkVerification(copy.Id, CopyVerificationStatus.Missing)">Mark missing</button>
+                                                <button type="button" class="btn btn-link btn-sm p-0" @onclick="() => MarkEncryption(copy.Id, true)" data-testid="mark-encrypted-button">Encryption confirmed</button>
+                                                <button type="button" class="btn btn-link btn-sm p-0" @onclick="() => MarkEncryption(copy.Id, false)" data-testid="mark-not-encrypted-button">Found not encrypted</button>
                                             </AuthorizeView>
                                         </td>
                                     </tr>
@@ -206,6 +250,32 @@ else
                             </tbody>
                         </table>
                     </div>
+
+                    <AuthorizeView Roles="@Roles.CanEditPolicy" Context="holdAuth">
+                        <div class="row g-2 mb-3 align-items-end">
+                            <div class="col-md-4">
+                                <label class="form-label small mb-1" for="legal-hold-copy">Legal hold on copy</label>
+                                <select id="legal-hold-copy" class="form-select form-select-sm" @bind="_holdCopyId" data-testid="legal-hold-copy-select">
+                                    <option value="0">Choose a copy…</option>
+                                    @foreach (var copy in _copies)
+                                    {
+                                        <option value="@copy.Id">@copy.Label</option>
+                                    }
+                                </select>
+                            </div>
+                            <div class="col-md-5">
+                                <label class="form-label small mb-1" for="legal-hold-reference">Hold reference (empty clears it)</label>
+                                <input id="legal-hold-reference" class="form-control form-control-sm" placeholder="Legal hold reference or ticket" @bind="_holdReference" @bind:event="oninput" data-testid="legal-hold-reference-input" />
+                            </div>
+                            <div class="col-md-3">
+                                <button type="button" class="btn btn-outline-secondary btn-sm w-100" @onclick="SaveLegalHold" disabled="@(_holdCopyId == 0)" data-testid="save-legal-hold-button">Save legal hold</button>
+                            </div>
+                        </div>
+                        @if (_holdError is not null)
+                        {
+                            <p class="small" role="alert" style="color:var(--dbt-failed);">@_holdError</p>
+                        }
+                    </AuthorizeView>
                 }
                 else
                 {
@@ -224,6 +294,13 @@ else
                             <input type="checkbox" class="form-check-input" id="newCopyImmutable" @bind="_newCopyImmutable" />
                             <label class="form-check-label small" for="newCopyImmutable">Immutable-flagged</label>
                         </div>
+                    </div>
+                    <div class="row g-2 mb-2 align-items-end">
+                        <div class="col-md-3 form-check mt-2">
+                            <input type="checkbox" class="form-check-input" id="newCopyEncryptionExpected" @bind="_newCopyEncryptionExpected" />
+                            <label class="form-check-label small" for="newCopyEncryptionExpected">Encryption expected</label>
+                        </div>
+                        <div class="col-md-5"><label class="form-label small mb-1" for="copy-legal-hold">Legal hold reference (optional)</label><input id="copy-legal-hold" class="form-control form-control-sm" placeholder="Hold reference or ticket" @bind="_newCopyLegalHold" @bind:event="oninput" /></div>
                     </div>
                     <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="AddCopy" disabled="@string.IsNullOrWhiteSpace(_newCopyLabel)" data-testid="add-copy-location">Record copy location</button>
                 </AuthorizeView>
@@ -252,14 +329,20 @@ else
 
     private List<BackupCopyLocation> _copies = new();
     private RetentionEvidenceView? _retention;
-    private string _newCopyLabel = "", _newCopyPath = "";
-    private bool _newCopyOffsite, _newCopyImmutable;
+    private string _newCopyLabel = "", _newCopyPath = "", _newCopyLegalHold = "";
+    private bool _newCopyOffsite, _newCopyImmutable, _newCopyEncryptionExpected;
+    private string _expectOffsite = "", _expectImmutable = "", _expectEncrypted = "";
+    private int _holdCopyId;
+    private string _holdReference = "";
+    private string? _holdError;
+    private IReadOnlyCollection<string> _userRoles = [];
 
     protected override async Task OnInitializedAsync()
     {
         var state = await AuthProvider.GetAuthenticationStateAsync();
         _userName = state.User.Identity?.Name ?? "unknown";
         _canEdit = state.User.IsInRole(Roles.Admin) || state.User.IsInRole(Roles.Dba);
+        _userRoles = state.User.Claims.Where(c => c.Type == System.Security.Claims.ClaimTypes.Role).Select(c => c.Value).ToList();
         await Retry();
     }
 
@@ -294,6 +377,9 @@ else
             _encryptionNote = evidence.Objective?.EncryptionKeyReferenceNote ?? "";
             _offsiteNote = evidence.Objective?.OffsiteCopyReferenceNote ?? "";
             _objectiveNotes = evidence.Objective?.Notes ?? "";
+            _expectOffsite = ToOption(evidence.Objective?.RequiresOffsiteCopy);
+            _expectImmutable = ToOption(evidence.Objective?.RequiresImmutableCopy);
+            _expectEncrypted = ToOption(evidence.Objective?.RequiresEncryptedCopies);
             _chainRequirements = evidence.ChainRequirements.ToList();
             _coverage = evidence.Coverage;
             _recentRestores = evidence.RecentRestores.ToList();
@@ -305,7 +391,8 @@ else
 
     private async Task SaveObjective()
     {
-        await Recovery.SetObjectiveAsync(Id, _rpoMinutes, _rtoMinutes, _encryptionNote, _offsiteNote, _objectiveNotes, _userName ?? "unknown");
+        await Recovery.SetObjectiveAsync(Id, _rpoMinutes, _rtoMinutes, _encryptionNote, _offsiteNote, _objectiveNotes,
+            new CopyExpectations(FromOption(_expectOffsite), FromOption(_expectImmutable), FromOption(_expectEncrypted)), _userName ?? "unknown");
         Toasts.Success("Recovery objectives saved.");
         await Load();
     }
@@ -333,11 +420,13 @@ else
             Label = _newCopyLabel,
             StoragePathOrReference = _newCopyPath,
             IsOffsite = _newCopyOffsite,
-            IsImmutableFlagged = _newCopyImmutable
+            IsImmutableFlagged = _newCopyImmutable,
+            EncryptionExpected = _newCopyEncryptionExpected,
+            LegalHoldReference = _newCopyLegalHold.Trim().Length > 300 ? _newCopyLegalHold.Trim()[..300] : _newCopyLegalHold.Trim()
         }, _userName ?? "unknown");
         Toasts.Success($"Copy location \"{_newCopyLabel}\" recorded.");
-        _newCopyLabel = _newCopyPath = "";
-        _newCopyOffsite = _newCopyImmutable = false;
+        _newCopyLabel = _newCopyPath = _newCopyLegalHold = "";
+        _newCopyOffsite = _newCopyImmutable = _newCopyEncryptionExpected = false;
         await Load();
     }
 
@@ -347,6 +436,52 @@ else
         Toasts.Success($"Verification recorded: {status}.");
         await Load();
     }
+
+    private async Task MarkEncryption(int copyId, bool encrypted)
+    {
+        await Copies.SetEncryptionFindingAsync(copyId, encrypted, _userName ?? "unknown");
+        Toasts.Success(encrypted ? "Encryption confirmed on this copy." : "Recorded that this copy is not encrypted.");
+        await Load();
+    }
+
+    private async Task SaveLegalHold()
+    {
+        var (ok, reason) = await Copies.SetLegalHoldAsync(_holdCopyId, _holdReference, _userName ?? "unknown", _userRoles);
+        if (!ok)
+        {
+            _holdError = reason;
+            return;
+        }
+        _holdError = null;
+        Toasts.Success(string.IsNullOrWhiteSpace(_holdReference) ? "Legal hold cleared." : "Legal hold reference saved.");
+        _holdCopyId = 0;
+        _holdReference = "";
+        await Load();
+    }
+
+    private static string ToOption(bool? value) => value switch { true => "true", false => "false", null => "" };
+    private static bool? FromOption(string value) => value switch { "true" => true, "false" => false, _ => null };
+
+    private static string EncryptionLabel(BackupCopyLocation copy) => copy.EncryptionConfirmed switch
+    {
+        true => "Confirmed",
+        false => copy.EncryptionExpected ? "Not encrypted (expected)" : "Not encrypted",
+        null => copy.EncryptionExpected ? "Expected, not checked" : "Not checked"
+    };
+
+    private static string ExpectationLabel(CopyExpectationStatus status) => status switch
+    {
+        CopyExpectationStatus.NotRequired => "Not required",
+        _ => status.ToString()
+    };
+
+    private static string ExpectationCssClass(CopyExpectationStatus status) => status switch
+    {
+        CopyExpectationStatus.Met => "OnTrack",
+        CopyExpectationStatus.Gap => "Failed",
+        CopyExpectationStatus.NotRequired => "NeverBackedUp",
+        _ => "Overdue"
+    };
 
     private static string CoverageCssClass(ChainCoverageStatus status) => status switch
     {

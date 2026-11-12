@@ -14,23 +14,40 @@ public class NotificationSubscriptionService(IDbContextFactory<DBTrackerDbContex
         return await db.NotificationSubscriptions
             .AsNoTracking()
             .Include(s => s.DatabaseInstance)
+            .Include(s => s.Team)
             .Where(s => s.UserId == userId)
             .OrderBy(s => s.Scope).ThenBy(s => s.Company)
             .ToListAsync();
     }
 
-    public async Task AddAsync(string userId, SubscriptionScope scope, int? instanceId, string company, NotificationChannel channel)
+    /// <summary>Returns an error message instead of saving when the scope's target is missing or doesn't exist.</summary>
+    public async Task<string?> AddAsync(string userId, SubscriptionScope scope, int? instanceId, string company, NotificationChannel channel, int? teamId = null)
     {
         using var db = await factory.CreateDbContextAsync();
+        if (scope == SubscriptionScope.Team && (teamId is null || !await db.Teams.AnyAsync(t => t.Id == teamId)))
+        {
+            return "Choose a team to follow.";
+        }
+        if (scope == SubscriptionScope.Instance && (instanceId is null || !await db.DatabaseInstances.AnyAsync(i => i.Id == instanceId)))
+        {
+            return "Choose an instance to follow.";
+        }
+        if (scope == SubscriptionScope.Company && string.IsNullOrWhiteSpace(company))
+        {
+            return "Choose a company to follow.";
+        }
+
         db.NotificationSubscriptions.Add(new NotificationSubscription
         {
             UserId = userId,
             Scope = scope,
             DatabaseInstanceId = scope == SubscriptionScope.Instance ? instanceId : null,
-            Company = scope == SubscriptionScope.Company ? company : string.Empty,
+            Company = scope == SubscriptionScope.Company ? company.Trim() : string.Empty,
+            TeamId = scope == SubscriptionScope.Team ? teamId : null,
             Channel = channel
         });
         await db.SaveChangesAsync();
+        return null;
     }
 
     public async Task DeleteAsync(int id, string userId)

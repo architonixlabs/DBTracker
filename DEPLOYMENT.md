@@ -15,7 +15,10 @@ There are two installer files:
 - **`DBTracker-Setup.exe` (recommended).** Checks the prerequisites, lists what is missing, and after
   you confirm installs them: the IIS features DBTracker needs (including WebSocket Protocol), the .NET
   10 Hosting Bundle, and optionally SQL Server Express. Downloads come from Microsoft and are checked
-  against a pinned SHA-512 before they run. It then runs `DBTracker.msi` and opens the setup wizard.
+  against a pinned SHA-512 before they run. The Hosting Bundle's hash comes from Microsoft's release
+  metadata. SQL Server Express is Microsoft's small web installer, whose hash is recorded at build time
+  after its Microsoft signature is checked; that installer then downloads the SQL Server media itself.
+  It then runs `DBTracker.msi` and opens the setup wizard.
 - **`DBTracker.msi`.** Installs DBTracker itself: copies the app to `C:\inetpub\DBTracker`, creates the
   `DBTracker` app pool (No Managed Code, ApplicationPoolIdentity) and site, gives the app pool identity
   Modify rights on `App_Data`, and can create the SQL Server login for it. It does not install
@@ -131,6 +134,14 @@ the app pool: a DBTracker database may still have a user mapped to it. To remove
 with DBTracker for good, run `DROP LOGIN [IIS APPPOOL\DBTracker];` on that SQL Server. Prerequisites
 that Setup.exe installed (IIS features, the Hosting Bundle, SQL Server Express) also stay installed.
 
+**Tray access tokens survive uninstall.** Each Windows user who connected the tray keeps their encrypted
+token file in `%LOCALAPPDATA%\DBTracker\Tray` and their preferences under
+`HKCU\Software\Architonix Labs\DBTracker Tray`, because an installer cannot reliably reach other users'
+profiles. Only that Windows user can decrypt the file, and the token expires (90 days by default), but
+it stays valid on the server until then. Before or after uninstalling, revoke each tray token at
+`/account/tokens` (an Admin deactivating the account also revokes them), then delete the folder if
+you want no trace left. If the server is gone for good, deleting the folder is enough.
+
 **Known gap.** If the .NET Hosting Bundle was installed before IIS, the ASP.NET Core Module files exist
 but IIS does not know about them, and neither installer can detect that. The site then fails with HTTP
 500.19. Run the Hosting Bundle installer again, choose Repair, and run `iisreset`.
@@ -144,7 +155,9 @@ On a Windows build machine with the .NET 10 SDK, from the repository root:
 ```
 
 It publishes the app, builds `installer\out\DBTracker.msi`, refreshes the pinned prerequisite
-downloads and hashes from Microsoft's release metadata, and builds `installer\out\DBTracker-Setup.exe`.
+downloads and hashes (the Hosting Bundle from Microsoft's release metadata, the SQL Server Express web
+installer from the signed file it downloads), builds `installer\out\DBTracker-Setup.exe`, and writes
+`installer\out\SHA256SUMS.txt` for the release page.
 `-SkipBundle` builds only the MSI. The installer builds with WiX Toolset 5.0.2 (MS-RL, restored from
 NuGet, nothing to install) and is deliberately not on WiX 6 or later, which ship under the Open Source
 Maintenance Fee EULA. Windows Installer's ICE validation needs an elevated prompt, so a normal build
@@ -195,6 +208,14 @@ In IIS Manager:
    port bands, so choose one there, for example `https` on port `<PORT>`. Use HTTPS with a real
    certificate for anything beyond a test box: the app handles sign-in cookies and, once configured,
    database and mail credentials.
+
+   The MSI creates an HTTP binding only. To add HTTPS after installing, add an `https` binding with
+   your certificate to the `DBTracker` site in IIS Manager.
+   - **Keep the HTTP binding.** Browsers that reach it are redirected to HTTPS.
+   - **The tray keeps working.** It polls `http://localhost:<port>`, and the app answers its
+     `/healthz` and `/api/tray` requests over HTTP only when they come from the same machine, so its
+     token never crosses the network.
+   - **Don't open the HTTP port** in the firewall if you want HTTPS-only access from other machines.
 
 With ApplicationPoolIdentity the pool runs as the virtual account `IIS APPPOOL\DBTracker`. The next
 steps grant that account what it needs.
@@ -291,6 +312,35 @@ still unconfigured, such as scanning, alerts or the report distribution list.
 
 If you loaded sample data, deactivate the demo accounts from the **Users** page, or reinstall without
 sample data, before real users rely on the site.
+
+**Passkeys.** Users can add passkeys on **Passkeys** (`/account/passkeys`, in the account links under
+their name) and then sign in with a fingerprint, face, screen lock or security key. Passwords keep
+working, and a deactivated account can't sign in with a passkey either.
+- **HTTPS is required.** Browsers only offer passkeys on `https://` pages, or on `http://localhost`
+  for local testing. Over plain HTTP from another machine the passkey options are hidden and users
+  sign in with their password.
+- **`Passkeys:ServerDomain`** is the WebAuthn relying party ID: the domain each passkey is tied to.
+  Leave it empty (the default) to use the host name in the browser's address bar. Set it, in
+  `appsettings.json` or as the environment variable `Passkeys__ServerDomain`, when users reach the site
+  under more than one host name, for example `dbtracker.contoso.com`. It must be the site's host name
+  or a parent domain of it, such as `contoso.com`, never a URL, port or IP address.
+- **Choose the domain before users add passkeys.** A passkey only works for the domain it was created
+  under. If the host name or `Passkeys:ServerDomain` changes later, every existing passkey stops
+  working and users must sign in with their password and add a new one.
+- **Behind a reverse proxy,** the app must see the public `https` scheme and host (IIS in-process
+  hosting does). If the proxy hides them, passkey checks fail because the browser's origin doesn't match.
+- Passkeys are stored in the `AspNetUserPasskeys` table, which is backed up with the database. They
+  hold public keys only and aren't included in any export.
+
+**Central log analytics.** Architonix apps send their web logs to the shared GoAccess server, which
+reads `/srv/weblogs/<app>/` on 192.168.1.8. Because DBTracker runs under IIS on Windows,
+`tools\Ship-IisLogs.ps1` copies the site's IIS W3C logs to `ram@192.168.1.8:/srv/weblogs/dbtracker/`
+with `scp`, sending only files that are new or changed since its last run.
+- **Schedule:** run it from Task Scheduler, every 15 minutes for example, as an administrator account,
+  since reading IIS configuration needs administrator rights.
+- **SSH key:** the account needs an SSH key that the server accepts. Nothing prompts for a password.
+- **Check first:** `-WhatIf` shows what it would send.
+- **GoAccess format:** use the W3C log format for this folder.
 
 ## 8. Backup-share permissions
 

@@ -25,7 +25,8 @@ public class DeviceLinkLoginTests
         await desktop.GotoAsync(TestServerFixture.BaseUrl + "/Account/Login", new PageGotoOptions { WaitUntil = WaitUntilState.Load });
         await desktop.ClickAsync("#qr-toggle");
         await desktop.WaitForSelectorAsync("#qr-image[src]");
-        await desktop.WaitForFunctionAsync("() => document.getElementById('qr-image').src.includes('/device-link/qr/')");
+        // A locator wait, not WaitForFunction: the page's CSP rightly refuses Playwright's string evaluation.
+        await desktop.WaitForSelectorAsync("#qr-image[src*='/device-link/qr/']");
 
         var qrSrc = await desktop.GetAttributeAsync("#qr-image", "src");
         Assert.That(qrSrc, Is.Not.Null.And.Not.Empty);
@@ -33,7 +34,7 @@ public class DeviceLinkLoginTests
 
         // Phone: already signed in (simulating a trusted device), opens the scanned link and approves.
         await phone.GotoAsync(TestServerFixture.BaseUrl + "/Account/Login", new PageGotoOptions { WaitUntil = WaitUntilState.Load });
-        await phone.FillAsync("input[autocomplete=username]", "priya.nair@architonixlabs.com");
+        await phone.FillAsync("input[autocomplete~=username]", "priya.nair@architonixlabs.com");
         await phone.FillAsync("input[autocomplete=current-password]", "ArxDemo#2026!");
         await phone.ClickAsync("button[type=submit]");
         await phone.WaitForURLAsync(url => !url.Contains("/Account/Login"), new PageWaitForURLOptions { Timeout = 15000 });
@@ -67,11 +68,12 @@ public class DeviceLinkLoginTests
 
         await desktop.GotoAsync(TestServerFixture.BaseUrl + "/Account/Login", new PageGotoOptions { WaitUntil = WaitUntilState.Load });
         await desktop.ClickAsync("#qr-toggle");
-        await desktop.WaitForFunctionAsync("() => document.getElementById('qr-image').src.includes('/device-link/qr/')");
+        // A locator wait, not WaitForFunction: the page's CSP rightly refuses Playwright's string evaluation.
+        await desktop.WaitForSelectorAsync("#qr-image[src*='/device-link/qr/']");
         var token = ExtractToken((await desktop.GetAttributeAsync("#qr-image", "src"))!);
 
         await phone.GotoAsync(TestServerFixture.BaseUrl + "/Account/Login", new PageGotoOptions { WaitUntil = WaitUntilState.Load });
-        await phone.FillAsync("input[autocomplete=username]", "marcus.chen@architonixlabs.com");
+        await phone.FillAsync("input[autocomplete~=username]", "marcus.chen@architonixlabs.com");
         await phone.FillAsync("input[autocomplete=current-password]", "ArxDemo#2026!");
         await phone.ClickAsync("button[type=submit]");
         await phone.WaitForURLAsync(url => !url.Contains("/Account/Login"), new PageWaitForURLOptions { Timeout = 15000 });

@@ -20,6 +20,7 @@
         <div class="subtitle">
             An explicit, time-boxed risk acceptance against a specific target or gate, not a status override. An exception never
             changes any vendor fact and never clears the underlying risk; it is distinct from actual paid vendor support coverage.
+            When one expires or is revoked, its accountable owner is told.
         </div>
     </div>
 </div>
@@ -37,8 +38,26 @@ else
             <div class="dbt-card">
                 <h2 class="h6 text-muted mb-3">Record an exception</h2>
                 <div class="row g-2 mb-2">
-                    <div class="col-6"><label class="form-label small mb-1" for="exceptions-target-type">Target type</label><input class="form-control form-control-sm" placeholder="Target type (e.g. MigrationCampaign)" id="exceptions-target-type" @bind="_targetType" @bind:event="oninput" /></div>
-                    <div class="col-6"><label class="form-label small mb-1" for="exceptions-target-id">Target id</label><input type="number" class="form-control form-control-sm" placeholder="Target id" id="exceptions-target-id" @bind="_targetId" /></div>
+                    <div class="col-6">
+                        <label class="form-label small mb-1" for="exceptions-target-type">Applies to</label>
+                        <select id="exceptions-target-type" class="form-select form-select-sm" @bind="_targetType" @bind:after="LoadTargetOptions" data-testid="exception-target-type">
+                            <option value="">Choose…</option>
+                            @foreach (var t in ReadinessExceptionTargets.All)
+                            {
+                                <option value="@t">@ReadinessExceptionTargets.Describe(t)</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label small mb-1" for="exceptions-target">Which one</label>
+                        <select id="exceptions-target" class="form-select form-select-sm" @bind="_targetId" disabled="@string.IsNullOrEmpty(_targetType)" data-testid="exception-target">
+                            <option value="0">@(string.IsNullOrEmpty(_targetType) ? "Choose a type first" : _targetOptions.Count == 0 ? "None recorded" : "Choose…")</option>
+                            @foreach (var o in _targetOptions)
+                            {
+                                <option value="@o.Id">@o.Label</option>
+                            }
+                        </select>
+                    </div>
                 </div>
                 <div class="mb-2"><label class="form-label small mb-1" for="exceptions-waived-check-policy-reference">Waived check/policy reference</label><input class="form-control form-control-sm" placeholder="Waived check/policy reference" id="exceptions-waived-check-policy-reference" @bind="_waivedCheckReference" @bind:event="oninput" /></div>
                 <div class="mb-2"><label class="form-label small mb-1" for="exceptions-reason">Reason</label><textarea class="form-control form-control-sm" rows="2" placeholder="Reason" id="exceptions-reason" @bind="_reason"></textarea></div>
@@ -54,6 +73,11 @@ else
                         </select>
                     </div>
                     <div class="col-6"><label class="form-label small mb-1" for="exceptions-accountable-owner-name">Accountable owner (name)</label><input class="form-control form-control-sm" placeholder="Accountable owner (name)" id="exceptions-accountable-owner-name" @bind="_ownerName" @bind:event="oninput" /></div>
+                </div>
+                <div class="mb-2">
+                    <label class="form-label small mb-1" for="exceptions-accountable-owner-email">Accountable owner email</label>
+                    <input type="email" class="form-control form-control-sm" id="exceptions-accountable-owner-email" @bind="_ownerEmail" @bind:event="oninput" aria-describedby="exceptions-owner-email-help" data-testid="exception-owner-email" />
+                    <div class="form-text" id="exceptions-owner-email-help">Expiry and revocation notices go here and to the owner team's contacts.</div>
                 </div>
                 <div class="row g-2 mb-2">
                     <div class="col-6"><label class="form-label small mb-1" for="exceptions-permitted-approver-role">Permitted approver role</label><input class="form-control form-control-sm" placeholder="Permitted approver role (e.g. Admin, ITManager)" id="exceptions-permitted-approver-role" @bind="_permittedApproverRole" @bind:event="oninput" /></div>
@@ -74,6 +98,10 @@ else
                 </div>
                 <div class="mb-2"><label class="form-label small mb-1" for="exceptions-evidence-url-reference">Evidence URL/reference</label><input class="form-control form-control-sm" placeholder="Evidence URL/reference" id="exceptions-evidence-url-reference" @bind="_evidenceUrl" @bind:event="oninput" /></div>
                 <button class="btn btn-primary btn-sm" @onclick="CreateException" disabled="@(string.IsNullOrWhiteSpace(_targetType) || _targetId == 0 || string.IsNullOrWhiteSpace(_reason) || _expiresAt == default)" data-testid="create-exception-button">Record exception</button>
+                @if (_createError is not null)
+                {
+                    <p class="small mt-2 mb-0" role="alert" style="color:var(--dbt-failed);">@_createError</p>
+                }
             </div>
             </Authorized>
             <NotAuthorized>
@@ -86,6 +114,53 @@ else
         </div>
 
         <div class="col-lg-7">
+            @* G29: revoke and renew are confirmed in a native modal dialog with the same fields as before. *@
+            <ModalDialog Title="@ActionTitle" Open="_action is not null" OpenChanged="OnActionDialogChanged"
+                         CssClass="@(_action?.Kind == "revoke" ? "is-danger" : null)" FallbackFocusSelector="[data-testid=exception-table]">
+                @if (_action is { } action)
+                {
+                    <div data-testid="exception-action-panel">
+                        @if (action.Kind == "revoke")
+                        {
+                            <p class="small text-muted">The waived check is blocked again straight away, and the accountable owner is told.</p>
+                            <label class="form-label small mb-1" for="exceptions-revoke-reason">Why revoke it</label>
+                            <input id="exceptions-revoke-reason" class="form-control form-control-sm" @bind="_actionReason" @bind:event="oninput" data-testid="revoke-reason-input" />
+                        }
+                        else
+                        {
+                            <p class="small text-muted">Creates a new exception, pending approval, linked to this one. The original and its history are kept.</p>
+                            <div class="row g-2 mb-2">
+                                <div class="col-sm-6">
+                                    <label class="form-label small mb-1" for="exceptions-renew-expires">New expiry</label>
+                                    <input id="exceptions-renew-expires" type="date" class="form-control form-control-sm" @bind="_renewExpiresAt" data-testid="renew-expires-input" />
+                                </div>
+                                <div class="col-sm-6">
+                                    <label class="form-label small mb-1" for="exceptions-renew-review">Review date</label>
+                                    <input id="exceptions-renew-review" type="date" class="form-control form-control-sm" @bind="_renewReviewDate" />
+                                </div>
+                            </div>
+                            <label class="form-label small mb-1" for="exceptions-renew-reason">Why it is still needed</label>
+                            <textarea id="exceptions-renew-reason" class="form-control form-control-sm" rows="2" @bind="_actionReason"></textarea>
+                        }
+                        @if (_actionError is not null)
+                        {
+                            <p class="small mt-2 mb-0" role="alert" style="color:var(--dbt-failed);" data-testid="exception-action-error">@_actionError</p>
+                        }
+                        <div class="dbt-dialog-actions">
+                            @if (action.Kind == "revoke")
+                            {
+                                <button type="button" class="btn btn-danger btn-sm" @onclick="ConfirmRevoke" disabled="@string.IsNullOrWhiteSpace(_actionReason)" data-testid="confirm-revoke-button">Revoke</button>
+                            }
+                            else
+                            {
+                                <button type="button" class="btn btn-primary btn-sm" @onclick="ConfirmRenew" disabled="@(_renewExpiresAt == default)" data-testid="confirm-renew-button">Request renewal</button>
+                            }
+                            <button type="button" class="btn btn-outline-secondary btn-sm" autofocus @onclick="CancelAction">Cancel</button>
+                        </div>
+                    </div>
+                }
+            </ModalDialog>
+
             @if (_exceptions.Count == 0)
             {
                 <div class="empty-state"><i aria-hidden="true" class="bi bi-shield-exclamation"></i> No exceptions recorded.</div>
@@ -98,8 +173,9 @@ else
                         @foreach (var e in _exceptions)
                         {
                             var effective = ReadinessExceptionEvaluator.EffectiveStatus(e, DateTime.UtcNow);
+                            var isLatest = ReadinessExceptionEvaluator.IsLatestInChain(e, _exceptions);
                             <tr data-testid="exception-row">
-                                <td class="small">@e.TargetType #@e.TargetId</td>
+                                <td class="small">@ReadinessExceptionTargets.Describe(e.TargetType): @TargetLabel(e)</td>
                                 <td class="small">@e.WaivedCheckReference</td>
                                 <td class="small"><span class="badge-health dot @StatusCss(effective)" data-testid="exception-status">@effective</span></td>
                                 <td class="small">@e.ExpiresAtUtc.ToString("yyyy-MM-dd")</td>
@@ -112,17 +188,47 @@ else
                                     else if (effective == ReadinessExceptionEffectiveStatus.Active)
                                     {
                                         <AuthorizeView Roles="@Roles.CanEditPolicy" Context="revokeAuth">
-                                            <Authorized><button class="btn btn-link btn-sm p-0" @onclick="() => Revoke(e.Id)" data-testid="revoke-exception-button">Revoke</button></Authorized>
+                                            <Authorized><button class="btn btn-link btn-sm p-0" @onclick='() => StartAction(e.Id, "revoke")' data-testid="revoke-exception-button">Revoke</button></Authorized>
                                         </AuthorizeView>
                                     }
-                                    else if (effective is ReadinessExceptionEffectiveStatus.Expired or ReadinessExceptionEffectiveStatus.Rejected or ReadinessExceptionEffectiveStatus.Revoked)
+                                    else if (isLatest && effective is ReadinessExceptionEffectiveStatus.Expired or ReadinessExceptionEffectiveStatus.Rejected or ReadinessExceptionEffectiveStatus.Revoked)
                                     {
                                         <AuthorizeView Roles="@Roles.CanEditPolicy" Context="renewAuth">
-                                            <Authorized><button class="btn btn-link btn-sm p-0" @onclick="() => Renew(e)" data-testid="renew-exception-button">Renew</button></Authorized>
+                                            <Authorized><button class="btn btn-link btn-sm p-0" @onclick='() => StartAction(e.Id, "renew")' data-testid="renew-exception-button">Renew</button></Authorized>
                                         </AuthorizeView>
                                     }
+                                    <button class="btn btn-link btn-sm p-0 ms-1" @onclick="() => ToggleHistory(e.Id)" aria-expanded="@(_historyFor == e.Id ? "true" : "false")" data-testid="exception-history-button">History</button>
                                 </td>
                             </tr>
+                            @if (_historyFor == e.Id)
+                            {
+                                <tr>
+                                    <td colspan="5" class="small" data-testid="exception-history">
+                                        <ol class="mb-0 ps-3">
+                                            @foreach (var h in _history)
+                                            {
+                                                <li data-testid="exception-history-item">
+                                                    #@h.Id, prepared by @h.PreparedByUserName on @h.CreatedAtUtc.ToString("yyyy-MM-dd"), expires @h.ExpiresAtUtc.ToString("yyyy-MM-dd"):
+                                                    <strong>@ReadinessExceptionEvaluator.EffectiveStatus(h, DateTime.UtcNow)</strong>
+                                                    @if (h.DecidedAtUtc is { } decided)
+                                                    {
+                                                        <span>, decided by @h.ApprovedByUserName on @decided.ToString("yyyy-MM-dd")</span>
+                                                    }
+                                                    @if (h.RevokedAtUtc is { } revoked)
+                                                    {
+                                                        <span>, revoked by @h.RevokedBy on @revoked.ToString("yyyy-MM-dd") (@h.RevokedReason)</span>
+                                                    }
+                                                    @if (h.ExpiryNotifiedAtUtc is { } notified)
+                                                    {
+                                                        <span>, owner told it expired on @notified.ToString("yyyy-MM-dd")</span>
+                                                    }
+                                                    <div class="text-muted">@h.Reason</div>
+                                                </li>
+                                            }
+                                        </ol>
+                                    </td>
+                                </tr>
+                            }
                         }
                     </tbody>
                 </table>
@@ -133,17 +239,29 @@ else
 
 @code {
     private List<ReadinessException> _exceptions = new();
+    private Dictionary<(string, int), string> _targetLabels = new();
+    private List<ExceptionTargetOption> _targetOptions = new();
     private List<Team> _teams = new();
     private bool _loaded;
-    private string? _userId, _userName;
+    private string _userId = "unknown", _userName = "unknown";
     private IReadOnlyCollection<string> _userRoles = [];
 
-    private string _targetType = "", _waivedCheckReference = "", _reason = "", _compensatingControls = "", _ownerName = "", _permittedApproverRole = "", _evidenceUrl = "";
+    private string _targetType = "", _waivedCheckReference = "", _reason = "", _compensatingControls = "", _ownerName = "", _ownerEmail = "", _permittedApproverRole = "", _evidenceUrl = "";
     private int _targetId;
     private int _ownerTeamId;
     private bool _requiresSeparateApprover = true;
     private DateTime _expiresAt;
     private DateTime? _reviewDate;
+    private string? _createError;
+
+    private (int Id, string Kind)? _action;
+    private string _actionReason = "";
+    private DateTime _renewExpiresAt;
+    private DateTime? _renewReviewDate;
+    private string? _actionError;
+
+    private int? _historyFor;
+    private List<ReadinessException> _history = new();
 
     protected override async Task OnInitializedAsync()
     {
@@ -158,7 +276,21 @@ else
     private async Task Load()
     {
         _exceptions = await ExceptionSvc.ListAsync();
+        _targetLabels = await ExceptionSvc.DescribeTargetsAsync(_exceptions);
         _teams = (await Teams.ListAsync()).Select(s => s.Team).ToList();
+        if (_historyFor is { } id)
+        {
+            _history = await ExceptionSvc.GetHistoryChainAsync(id);
+        }
+    }
+
+    private string TargetLabel(ReadinessException e) =>
+        _targetLabels.TryGetValue((e.TargetType, e.TargetId), out var label) ? label : $"#{e.TargetId}";
+
+    private async Task LoadTargetOptions()
+    {
+        _targetId = 0;
+        _targetOptions = string.IsNullOrEmpty(_targetType) ? new() : await ExceptionSvc.ListTargetOptionsAsync(_targetType);
     }
 
     private async Task CreateException()
@@ -167,27 +299,35 @@ else
         {
             TargetType = _targetType,
             TargetId = _targetId,
-            WaivedCheckReference = _waivedCheckReference,
-            Reason = _reason,
-            CompensatingControls = _compensatingControls,
+            WaivedCheckReference = _waivedCheckReference.Trim(),
+            Reason = _reason.Trim(),
+            CompensatingControls = _compensatingControls.Trim(),
             AccountableOwnerTeamId = _ownerTeamId == 0 ? null : _ownerTeamId,
-            AccountableOwnerName = _ownerName,
-            PermittedApproverRole = _permittedApproverRole,
+            AccountableOwnerName = _ownerName.Trim(),
+            AccountableOwnerEmail = _ownerEmail.Trim(),
+            PermittedApproverRole = _permittedApproverRole.Trim(),
             RequiresSeparateApprover = _requiresSeparateApprover,
-            EvidenceUrl = _evidenceUrl,
+            EvidenceUrl = _evidenceUrl.Trim(),
             ExpiresAtUtc = DateTime.SpecifyKind(_expiresAt, DateTimeKind.Utc),
             ReviewDate = _reviewDate
         };
-        await ExceptionSvc.CreateAsync(exception, _userId ?? "unknown", _userName ?? "unknown");
+        var (ok, reason, _) = await ExceptionSvc.CreateAsync(exception, _userId, _userName, _userRoles);
+        if (!ok)
+        {
+            _createError = reason;
+            return;
+        }
+
+        _createError = null;
         Toasts.Success("Exception recorded and pending approval.");
-        _targetType = _waivedCheckReference = _reason = _compensatingControls = _ownerName = _permittedApproverRole = _evidenceUrl = "";
+        _waivedCheckReference = _reason = _compensatingControls = _ownerName = _ownerEmail = _permittedApproverRole = _evidenceUrl = "";
         _targetId = 0;
         await Load();
     }
 
     private async Task Decide(int id, bool approve)
     {
-        var (ok, reason) = await ExceptionSvc.DecideAsync(id, approve, _userId ?? "unknown", _userName ?? "unknown", _userRoles, "");
+        var (ok, reason) = await ExceptionSvc.DecideAsync(id, approve, _userId, _userName, _userRoles, "");
         if (ok)
         {
             Toasts.Success(approve ? "Exception approved." : "Exception rejected.");
@@ -199,32 +339,79 @@ else
         await Load();
     }
 
-    private async Task Revoke(int id)
+    private void StartAction(int id, string kind)
     {
-        await ExceptionSvc.RevokeAsync(id, _userName ?? "unknown", "Revoked from the exceptions hub.");
-        Toasts.Success("Exception revoked. The waived action is reopened.");
+        _action = (id, kind);
+        _actionReason = "";
+        _actionError = null;
+        _renewExpiresAt = default;
+        _renewReviewDate = null;
+    }
+
+    private string ActionTitle => _action is { } a
+        ? (a.Kind == "revoke" ? $"Revoke exception #{a.Id}" : $"Renew exception #{a.Id}")
+        : "";
+
+    private void OnActionDialogChanged(bool open)
+    {
+        if (!open)
+        {
+            CancelAction();
+        }
+    }
+
+    private void CancelAction()
+    {
+        _action = null;
+        _actionError = null;
+    }
+
+    private async Task ConfirmRevoke()
+    {
+        if (_action is not { } action)
+        {
+            return;
+        }
+        var (ok, result) = await ExceptionSvc.RevokeAsync(action.Id, _userName, _actionReason, _userRoles);
+        if (!ok)
+        {
+            _actionError = result;
+            return;
+        }
+
+        _action = null;
+        Toasts.Success($"Exception revoked. The waived action is reopened, and the notice went to {result}.");
         await Load();
     }
 
-    private async Task Renew(ReadinessException original)
+    private async Task ConfirmRenew()
     {
-        var renewal = new ReadinessException
+        if (_action is not { } action)
         {
-            TargetType = original.TargetType,
-            TargetId = original.TargetId,
-            WaivedCheckReference = original.WaivedCheckReference,
-            Reason = original.Reason,
-            CompensatingControls = original.CompensatingControls,
-            AccountableOwnerTeamId = original.AccountableOwnerTeamId,
-            AccountableOwnerName = original.AccountableOwnerName,
-            PermittedApproverRole = original.PermittedApproverRole,
-            RequiresSeparateApprover = original.RequiresSeparateApprover,
-            EvidenceUrl = original.EvidenceUrl,
-            ExpiresAtUtc = DateTime.UtcNow.AddDays(30)
-        };
-        await ExceptionSvc.RenewAsync(original.Id, renewal, _userId ?? "unknown", _userName ?? "unknown");
+            return;
+        }
+        var (ok, reason, _) = await ExceptionSvc.RenewAsync(action.Id, DateTime.SpecifyKind(_renewExpiresAt, DateTimeKind.Utc), _renewReviewDate, _actionReason,
+            _userId, _userName, _userRoles);
+        if (!ok)
+        {
+            _actionError = reason;
+            return;
+        }
+
+        _action = null;
         Toasts.Success("Renewal recorded and pending approval. The original history is kept.");
         await Load();
+    }
+
+    private async Task ToggleHistory(int id)
+    {
+        if (_historyFor == id)
+        {
+            _historyFor = null;
+            return;
+        }
+        _historyFor = id;
+        _history = await ExceptionSvc.GetHistoryChainAsync(id);
     }
 
     private static string StatusCss(ReadinessExceptionEffectiveStatus status) => status switch

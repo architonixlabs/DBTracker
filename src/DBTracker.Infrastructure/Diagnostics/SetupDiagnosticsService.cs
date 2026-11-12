@@ -14,7 +14,8 @@ public class SetupDiagnosticsService(
     IDbContextFactory<DBTrackerDbContext> factory,
     IConfiguration configuration,
     WorkerHeartbeatStore heartbeats,
-    IEmailSender emailSender)
+    IEmailSender emailSender,
+    DeliveryAttemptService deliveryAttempts)
 {
     public async Task<List<DiagnosticItem>> BuildChecklistAsync()
     {
@@ -31,7 +32,8 @@ public class SetupDiagnosticsService(
         if (string.IsNullOrWhiteSpace(provider) || provider == "None")
         {
             items.Add(new DiagnosticItem("Email", "Provider", DiagnosticSeverity.Warning,
-                "Email:Provider is unset (None), so alerts and reports are logged, not sent.", "/setup", "Configure Email:Provider in appsettings"));
+                "Email:Provider is unset (None), so alerts and reports are logged, not sent. To fix: set Email:Provider to ArxMail or Smtp, with its settings, in dbtracker.config.json (App_Data) or appsettings.json, then restart the site.",
+                "#delivery-history", "See delivery attempts"));
         }
         else if (provider == "Smtp")
         {
@@ -60,7 +62,9 @@ public class SetupDiagnosticsService(
         var distList = configuration["Reports:DistributionList"];
         if (reportDays > 0 && string.IsNullOrWhiteSpace(distList))
         {
-            items.Add(new DiagnosticItem("Reporting", "Distribution list", DiagnosticSeverity.Problem, "Scheduled reports are enabled but Reports:DistributionList is empty, so nothing will be sent.", "/setup", "Configure Reports:DistributionList"));
+            items.Add(new DiagnosticItem("Reporting", "Distribution list", DiagnosticSeverity.Problem,
+                "Scheduled reports are enabled but Reports:DistributionList is empty, so nothing will be sent. To fix: set Reports:DistributionList to comma-separated addresses in dbtracker.config.json (App_Data) or appsettings.json, then restart the site.",
+                "/reports?type=ManagementSummary", "Preview the report"));
         }
         else
         {
@@ -120,9 +124,17 @@ public class SetupDiagnosticsService(
         return results;
     }
 
-    /// <summary>Sends a real test email and reports the true Disabled/Accepted/Failed outcome.</summary>
-    public Task<EmailSendResult> SendTestEmailAsync(string toAddress, CancellationToken ct = default) =>
-        emailSender.SendAsync(toAddress, "DBTracker test email", "This is a test email sent from the DBTracker setup/diagnostics page to confirm email delivery is working.", ct);
+    /// <summary>Sends a real test email, reports the true Disabled/Accepted/Failed outcome and stores the attempt in the delivery history.</summary>
+    public async Task<EmailSendResult> SendTestEmailAsync(string toAddress, string triggeredBy, CancellationToken ct = default)
+    {
+        var result = await emailSender.SendAsync(toAddress, "DBTracker test email", "This is a test email sent from the DBTracker setup/diagnostics page to confirm email delivery is working.", ct);
+        await deliveryAttempts.RecordAsync(Core.Enums.DeliveryKind.TestEmail, "Test email from Setup and diagnostics", [result], triggeredBy, ct: ct);
+        return result;
+    }
+
+    /// <summary>Recent send attempts, newest first, for the delivery history on /setup. Addresses are never stored, only counts.</summary>
+    public Task<List<Core.Entities.DeliveryAttempt>> ListDeliveryAttemptsAsync(int take = DeliveryAttemptService.DefaultHistorySize, CancellationToken ct = default) =>
+        deliveryAttempts.ListRecentAsync(take, ct);
 
     private static string Mask(string? secret) =>
         string.IsNullOrEmpty(secret) ? "(not set)" : secret.Length <= 4 ? "****" : $"****{secret[^4..]}";

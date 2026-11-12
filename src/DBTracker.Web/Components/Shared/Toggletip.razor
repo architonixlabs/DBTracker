@@ -1,0 +1,20 @@
+﻿@* G30: an explanation that touch, keyboard and screen-reader users can open on purpose, in place of a
+   title tooltip that only a mouse hover reveals. Click, tap or Enter opens it (popovertarget, action
+   "show" so a hover-opened tip is not closed by the click that follows); hover and focus also open it
+   where interestfor is supported. Esc and clicking elsewhere close it. dbtracker.js keeps
+   aria-expanded in sync, switches to popover="auto" where "hint" is unsupported, and positions it next
+   to the button where CSS anchor positioning is missing. Without popover support the text shows inline. *@
+<button type="button" class="toggletip-btn" style="anchor-name: --@_id" popovertarget="@_id" popovertargetaction="show" interestfor="@_id"
+        aria-label="@Label" aria-expanded="false" data-testid="@TestId"><i class="bi bi-info-circle" aria-hidden="true"></i></button><div id="@_id" popover="hint" role="tooltip" class="toggletip dbt-anchored" style="position-anchor: --@_id" data-toggletip>@ChildContent</div>
+
+@code {
+    private static int _counter;
+    private readonly string _id = "dbt-tip-" + Interlocked.Increment(ref _counter);
+
+    /// <summary>Names what the button reveals, for example "About evidence levels". The icon alone is not a name.</summary>
+    [Parameter, EditorRequired] public string Label { get; set; } = "";
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter] public string? TestId { get; set; }
+}

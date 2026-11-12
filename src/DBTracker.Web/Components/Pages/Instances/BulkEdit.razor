@@ -75,8 +75,20 @@ else
     @if (_preview is not null)
     {
         <div class="dbt-card" style="max-width:900px;">
-            <h2 class="h6 text-muted mb-3">Before / after preview: @_preview.Count of @_instanceIds.Count instance(s) would change</h2>
-            @if (_preview.Count == 0)
+            <h2 class="h6 text-muted mb-3">Before / after preview: @_preview.Rows.Count of @_instanceIds.Count instance(s) would change</h2>
+            @if (_applyProblems.Count > 0)
+            {
+                <div class="mb-3" role="alert" data-testid="bulk-edit-problems">
+                    <p class="small mb-1" style="color:var(--dbt-failed)"><strong>Nothing was saved.</strong></p>
+                    <ul class="small mb-0">
+                        @foreach (var problem in _applyProblems)
+                        {
+                            <li>@problem</li>
+                        }
+                    </ul>
+                </div>
+            }
+            @if (_preview.Rows.Count == 0)
             {
                 <div class="empty-state py-3"><i class="bi bi-inbox" aria-hidden="true"></i> No instance would change with these values.</div>
             }
@@ -85,7 +97,7 @@ else
                 <table class="table table-sm dbt-table mb-3" aria-label="Before and after values for each instance that would change">
                     <thead><tr><th scope="col">Instance</th><th scope="col">Field</th><th scope="col">Before</th><th scope="col">After</th></tr></thead>
                     <tbody>
-                        @foreach (var row in _preview)
+                        @foreach (var row in _preview.Rows)
                         {
                             @foreach (var change in row.Changes)
                             {
@@ -99,7 +111,8 @@ else
                         }
                     </tbody>
                 </table>
-                <button type="button" class="btn btn-primary" @onclick="Apply" disabled="@_applying">@(_applying ? "Applying…" : $"Apply to {_preview.Count} instance(s)")</button>
+                <button type="button" class="btn btn-primary" @onclick="Apply" disabled="@_applying">@(_applying ? "Applying…" : $"Apply to {_preview.Rows.Count} instance(s)")</button>
+                <p class="small text-muted mt-2 mb-0">Applies exactly the values previewed above. Change a value and preview again to apply something different.</p>
             }
         </div>
     }
@@ -112,7 +125,9 @@ else
     private bool _setOwner, _setTags, _setRetention;
     private string _company = "", _department = "", _contactName = "", _contactEmail = "", _tags = "";
     private int? _retentionDays;
-    private IReadOnlyList<BulkEditRowPreview>? _preview;
+    private BulkEditPreview? _preview;
+    private BulkEditRequest? _previewedRequest;
+    private List<string> _applyProblems = new();
     private bool _applying, _previewing;
     private string? _errorMessage;
     private string? _userId, _userName;
@@ -143,7 +158,10 @@ else
         _previewing = true;
         try
         {
-            _preview = await BulkEditService.PreviewAsync(_instanceIds, BuildRequest());
+            var request = BuildRequest();
+            _preview = await BulkEditService.PreviewAsync(_instanceIds, request);
+            _previewedRequest = request;
+            _applyProblems = new();
             _errorMessage = null;
         }
         catch (Exception)
@@ -158,11 +176,16 @@ else
 
     private async Task Apply()
     {
+        if (_preview is null || _previewedRequest is null)
+        {
+            return;
+        }
+
         _applying = true;
         BulkEditApplyResult result;
         try
         {
-            result = await BulkEditService.ApplyAsync(_instanceIds, BuildRequest(), _userId ?? "", _userName ?? "unknown");
+            result = await BulkEditService.ApplyAsync(_preview, _previewedRequest, _userId ?? "", _userName ?? "unknown");
         }
         catch (Exception)
         {
@@ -172,9 +195,31 @@ else
         }
         _applying = false;
 
-        Toasts.Success(result.SkippedArchivedCount > 0
-            ? $"Applied to {result.AppliedCount} instance(s); skipped {result.SkippedArchivedCount} archived instance(s)."
-            : $"Applied to {result.AppliedCount} instance(s).");
+        if (!result.Saved)
+        {
+            _applyProblems = result.ValidationErrors.ToList();
+            return;
+        }
+
+        var skipped = new List<string>();
+        if (result.SkippedArchivedCount > 0)
+        {
+            skipped.Add($"{result.SkippedArchivedCount} archived since the preview");
+        }
+        if (result.SkippedChangedSincePreview.Count > 0)
+        {
+            skipped.Add($"{result.SkippedChangedSincePreview.Count} edited by someone else since the preview ({string.Join(", ", result.SkippedChangedSincePreview)}); preview again to include them");
+        }
+
+        var message = $"Applied to {result.AppliedCount} instance(s) in batch {result.BatchId}.";
+        if (skipped.Count > 0)
+        {
+            Toasts.Error(message + " Skipped " + string.Join("; ", skipped) + ".");
+        }
+        else
+        {
+            Toasts.Success(message);
+        }
         Nav.NavigateTo("/instances");
     }
 }

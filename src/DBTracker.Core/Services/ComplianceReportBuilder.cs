@@ -4,7 +4,8 @@ using DBTracker.Core.Enums;
 
 namespace DBTracker.Core.Services;
 
-public record ComplianceReportRow(DatabaseInstance Instance, BackupHealth Health, DateTime? LastBackupUtc, bool RestoreTested);
+/// <param name="LastSuccessEvidence">Evidence level of the latest successful backup (U04), so a report reader can tell a discovered file from a logged or restore-tested backup. Null when there is none.</param>
+public record ComplianceReportRow(DatabaseInstance Instance, BackupHealth Health, DateTime? LastBackupUtc, bool RestoreTested, EvidenceLevel? LastSuccessEvidence = null);
 
 /// <summary>Plain-text body of the management report: backup health and restore-test coverage, from the same data as the Compliance view.</summary>
 public static class ComplianceReportBuilder
@@ -44,7 +45,10 @@ public static class ComplianceReportBuilder
             sb.AppendLine("Instances needing attention:");
             foreach (var row in atRisk)
             {
-                var lastBackup = row.LastBackupUtc is null ? "never" : row.LastBackupUtc.Value.ToString("yyyy-MM-dd HH:mm") + " UTC";
+                var lastBackup = row.LastBackupUtc is null
+                    ? "never"
+                    : row.LastBackupUtc.Value.ToString("yyyy-MM-dd HH:mm") + " UTC" +
+                      (row.LastSuccessEvidence is { } evidence ? $" ({BackupEvidenceClassifier.Describe(evidence)})" : "");
                 sb.AppendLine($"  [{row.Health,-14}] {row.Instance.Name} ({row.Instance.Company}/{row.Instance.Department}), last backup: {lastBackup}");
             }
         }

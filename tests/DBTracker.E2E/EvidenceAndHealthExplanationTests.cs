@@ -147,6 +147,7 @@ public class EvidenceAndHealthExplanationTests
     {
         await GotoAsync("/");
         await _page.WaitForSelectorAsync(".stat-strip");
+        await WaitForCircuitAsync();
 
         await Assertions.Expect(_page.Locator("text=Updated")).ToBeVisibleAsync();
 
@@ -161,7 +162,7 @@ public class EvidenceAndHealthExplanationTests
     private async Task LoginAsync(string email)
     {
         await GotoAsync("/Account/Login");
-        await _page.FillAsync("input[autocomplete=username]", email);
+        await _page.FillAsync("input[autocomplete~=username]", email);
         await _page.FillAsync("input[autocomplete=current-password]", "ArxDemo#2026!");
 
         await _page.ClickAsync("button[type=submit]");

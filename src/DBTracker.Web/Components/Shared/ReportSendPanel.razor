@@ -1,5 +1,7 @@
 @inject ComplianceReportService ReportService
 @inject ToastService Toasts
+@inject AuthenticationStateProvider AuthProvider
+@inject ViewerTimeZone Viewer
 
 <button type="button" class="btn @ButtonClass" @onclick="ToggleExpanded" disabled="@_sending" aria-expanded="@(_expanded ? "true" : "false")">
     <i class="bi bi-envelope" aria-hidden="true"></i> @(_sending ? "Sending…" : ButtonText)
@@ -31,12 +33,12 @@
         {
             <dl class="row small mb-2">
                 <dt class="col-5">Generation time</dt>
-                <dd class="col-7">@_preview.GenerationTimeUtc.ToLocalTime().ToString("MMM d, yyyy h:mm tt")</dd>
+                <dd class="col-7"><LocalTime Utc="_preview.GenerationTimeUtc" /></dd>
                 <dt class="col-5">Recipients</dt>
                 <dd class="col-7">
                     @if (_preview.Recipients.Count == 0)
                     {
-                        <span class="text-danger">None configured (Reports:DistributionList)</span>
+                        <span class="text-danger">@(_viewerIsAdmin ? "None configured (Reports:DistributionList)" : "None configured. Ask an administrator to set the report distribution list.")</span>
                     }
                     else
                     {
@@ -101,32 +103,27 @@
     private async Task ConfirmSend()
     {
         _sending = true;
-        var result = await ReportService.SendAsync(CurrentScope);
+        var user = (await AuthProvider.GetAuthenticationStateAsync()).User;
+        var userName = user.Identity?.Name ?? "unknown";
+        var result = await ReportService.SendAsync(CurrentScope, userName);
         _sending = false;
         _expanded = false;
         _preview = null;
 
-        if (result.Outcomes.Count == 0)
+        var message = ReportSendFeedback.Describe(result.Outcomes.Count, result.Disabled, result.AcceptedCount, result.FailedCount,
+            user.IsInRole(Roles.Admin), Viewer.Format(result.GenerationTimeUtc));
+        if (message.Succeeded)
         {
-            Toasts.Error("No distribution list configured (Reports:DistributionList).");
-        }
-        else if (result.Disabled)
-        {
-            Toasts.Error("Not sent: no email provider configured (Email:Provider).");
-        }
-        else if (result.FailedCount == 0)
-        {
-            Toasts.Success(result.AcceptedCount == 1
-                ? "Report accepted for 1 recipient."
-                : $"Report accepted for {result.AcceptedCount} recipient(s).");
-        }
-        else if (result.AcceptedCount == 0)
-        {
-            Toasts.Error($"Report failed to send to all {result.FailedCount} recipient(s). Check the server log for details.");
+            Toasts.Success(message.Text);
         }
         else
         {
-            Toasts.Error($"Partial send: {result.AcceptedCount} accepted, {result.FailedCount} failed. Check the server log for details.");
+            Toasts.Error(message.Text);
         }
     }
+
+    private bool _viewerIsAdmin;
+
+    protected override async Task OnInitializedAsync() =>
+        _viewerIsAdmin = (await AuthProvider.GetAuthenticationStateAsync()).User.IsInRole(Roles.Admin);
 }

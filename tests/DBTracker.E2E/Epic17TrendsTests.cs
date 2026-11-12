@@ -45,7 +45,7 @@ public class Epic17TrendsTests
         await _page.WaitForTimeoutAsync(800);
 
         // Period A: no snapshot existed yet at its end date — flagged explicitly, not interpolated.
-        var missingEvidenceAlert = _page.Locator(".alert-danger", new PageLocatorOptions { HasText = "Period A has no Compliance snapshot" });
+        var missingEvidenceAlert = _page.Locator(".alert-danger", new PageLocatorOptions { HasText = "Period A:" });
         await Assertions.Expect(missingEvidenceAlert).ToBeVisibleAsync();
 
         var comparisonTable = _page.Locator("[role=region][aria-label*='Trend comparison']");
@@ -80,7 +80,7 @@ public class Epic17TrendsTests
     private async Task LoginAsync(string email, string password)
     {
         await GotoAsync("/Account/Login");
-        await _page.FillAsync("input[autocomplete=username]", email);
+        await _page.FillAsync("input[autocomplete~=username]", email);
         await _page.FillAsync("input[autocomplete=current-password]", password);
         await _page.ClickAsync("button[type=submit]");
         await _page.WaitForURLAsync(url => !url.Contains("/Account/Login"), new PageWaitForURLOptions { Timeout = 15000 });

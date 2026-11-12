@@ -95,8 +95,8 @@ public class SavedViewsAndPagingTests
         await _page.WaitForTimeoutAsync(400);
         Assert.That(_page.Url, Does.Contain("dir=desc"));
 
-        var firstNameDesc = await _page.Locator(".dbt-table tbody tr").First.InnerTextAsync();
-        Assert.That(firstNameDesc, Is.Not.EqualTo(firstNameAsc));
+        // The URL updates before the re-render lands, so wait for the first row to change rather than reading it once.
+        await Assertions.Expect(_page.Locator(".dbt-table tbody tr").First).Not.ToHaveTextAsync(firstNameAsc);
     }
 
     [Test]
@@ -106,14 +106,15 @@ public class SavedViewsAndPagingTests
         await _page.WaitForSelectorAsync(".dbt-table table");
         await WaitForCircuitAsync();
 
-        await Assertions.Expect(_page.Locator("text=Page 1 of")).ToBeVisibleAsync();
+        // Clamps to the last page, whichever that is once other tests have added instances: "Page N of N".
+        await Assertions.Expect(_page.Locator(@"text=/Page (\d+) of \1\b/")).ToBeVisibleAsync();
         await Assertions.Expect(_page.Locator(".dbt-table tbody tr").First).ToBeVisibleAsync();
     }
 
     private async Task LoginAsync(string email)
     {
         await GotoAsync("/Account/Login");
-        await _page.FillAsync("input[autocomplete=username]", email);
+        await _page.FillAsync("input[autocomplete~=username]", email);
         await _page.FillAsync("input[autocomplete=current-password]", "ArxDemo#2026!");
 
         await _page.ClickAsync("button[type=submit]");

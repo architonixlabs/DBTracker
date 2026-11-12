@@ -21,6 +21,8 @@ public class ReadinessException
     public int? AccountableOwnerTeamId { get; set; }
     public Team? AccountableOwnerTeam { get; set; }
     public string AccountableOwnerName { get; set; } = string.Empty;
+    /// <summary>Where expiry and revocation notices are emailed, alongside the owner team's contacts.</summary>
+    public string AccountableOwnerEmail { get; set; } = string.Empty;
 
     public string PreparedByUserId { get; set; } = string.Empty;
     public string PreparedByUserName { get; set; } = string.Empty;

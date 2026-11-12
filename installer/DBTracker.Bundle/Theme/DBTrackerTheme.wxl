@@ -29,7 +29,7 @@
   <String Id="OptionsPortLabel" Value="Site port:" />
   <String Id="OptionsPortHint" Value="Pick a port no other site uses. Your team's app services use the 8000 to 9999 range." />
   <String Id="OptionsSqlExpressCheckbox" Value="Also &amp;install SQL Server Express on this computer" />
-  <String Id="OptionsSqlExpressHint" Value="Downloads SQL Server Express from Microsoft and installs a local SQLEXPRESS instance (takes several minutes). Leave this off to use an existing SQL Server; you'll enter its name in the setup wizard." />
+  <String Id="OptionsSqlExpressHint" Value="Downloads SQL Server Express from Microsoft and installs a local SQLEXPRESS instance (takes several minutes). Ticking this accepts the Microsoft SQL Server Express license terms (aka.ms/useterms). Leave this off to use an existing SQL Server; you'll enter its name in the setup wizard." />
   <String Id="OptionsSqlLoginLabel" Value="SQL Server is already installed here, so SQL Server Express isn't offered. To let the DBTracker app pool sign in with Windows authentication, enter the server to give it a login on:" />
   <String Id="OptionsSqlLoginHint" Value="For example . for the default instance or .\NAME for a named one. Leave blank to set it up yourself." />
   <String Id="OptionsBrowseButton" Value="&amp;Browse" />
@@ -39,7 +39,7 @@
   <String Id="ProgressLabel" Value="Processing:" />
   <String Id="OverallProgressPackageText" Value="Initializing..." />
   <String Id="ProgressCancelButton" Value="&amp;Cancel" />
-  <String Id="ProgressDownloadNote" Value="Downloads come from Microsoft and are checked against pinned SHA-512 hashes before they run." />
+  <String Id="ProgressDownloadNote" Value="Downloads come from Microsoft and are checked against pinned SHA-512 hashes before they run. The SQL Server Express installer then downloads its own media from Microsoft." />
   <String Id="ModifyHeader" Value="Modify Setup" />
   <String Id="ModifyNote" Value="Uninstall removes the DBTracker site, app pool and program files. Your settings and keys in App_Data, IIS, the .NET Hosting Bundle and SQL Server stay installed." />
   <String Id="ModifyRepairButton" Value="&amp;Repair" />

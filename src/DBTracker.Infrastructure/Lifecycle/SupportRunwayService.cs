@@ -38,7 +38,8 @@ public class SupportRunwayService(
 
         var identity = await db.VersionIdentities.AsNoTracking().FirstOrDefaultAsync(v => v.DatabaseInstanceId == instanceId);
         var matched = await MatchCatalogEntryAsync(db, instance.Engine, identity);
-        var runway = SupportRunwayCalculator.Compute(matched, DateTime.UtcNow);
+        var contracts = await ContractsForAsync(db, instanceId);
+        var runway = SupportRunwayCalculator.Evaluate(identity, matched, contracts, DateTime.UtcNow);
         var latestDecision = await db.SupportRunwayDecisions.AsNoTracking()
             .Where(d => d.DatabaseInstanceId == instanceId)
             .OrderByDescending(d => d.DecidedAtUtc)
@@ -54,11 +55,17 @@ public class SupportRunwayService(
             return null;
         }
 
-        return await db.ReleaseCatalogEntries.AsNoTracking()
+        var candidates = await db.ReleaseCatalogEntries.AsNoTracking()
             .Where(c => c.Engine == engine && c.Family == identity.Family && c.Major == identity.Major)
-            .OrderByDescending(c => c.Minor ?? int.MinValue)
-            .FirstOrDefaultAsync();
+            .ToListAsync();
+        return ReleaseCatalogMatcher.Match(candidates, engine, identity);
     }
+
+    private static async Task<List<SupportContract>> ContractsForAsync(DBTrackerDbContext db, int instanceId) =>
+        await db.SupportContractAssignments.AsNoTracking()
+            .Where(a => a.DatabaseInstanceId == instanceId)
+            .Select(a => a.SupportContract!)
+            .ToListAsync();
 
     public async Task RecordDecisionAsync(int instanceId, int? releaseCatalogEntryId, SupportActionType actionType, string actionReference, string notes, string decidedBy)
     {
@@ -90,28 +97,51 @@ public class SupportRunwayService(
         var instances = await db.DatabaseInstances.Where(i => !i.IsArchived).ToListAsync(ct);
         var notifiedCount = 0;
 
+        // Instances with no version identity have no row to hold dedupe state. Rather than invent an identity nobody observed,
+        // the one Unknown notice each gets is recorded in the audit trail, and that record is the dedupe state.
+        var noIdentityNoticeSent = (await db.AuditEvents.AsNoTracking()
+                .Where(a => a.Action == SupportRunwayNoticeEvaluator.NoIdentityNoticeAuditAction && a.TargetType == "DatabaseInstance")
+                .Select(a => a.TargetId)
+                .ToListAsync(ct))
+            .ToHashSet();
+
         foreach (var instance in instances)
         {
             var identity = await db.VersionIdentities.FirstOrDefaultAsync(v => v.DatabaseInstanceId == instance.Id, ct);
             var matched = await MatchCatalogEntryAsync(db, instance.Engine, identity);
-            var runway = SupportRunwayCalculator.Compute(matched, now);
+            var runway = SupportRunwayCalculator.Evaluate(identity, matched, await ContractsForAsync(db, instance.Id), now);
 
-            if (identity is null || runway.IsUnknown)
+            var last = SupportRunwayNoticeEvaluator.LastStateFor(identity, noIdentityNoticeSent.Contains(instance.Id.ToString()));
+            var decision = SupportRunwayNoticeEvaluator.Decide(runway, thresholds, last);
+            if (identity is not null && decision.StateChanged)
+            {
+                identity.LastRunwayNoticeThresholdDays = decision.NewState.ThresholdDays;
+                identity.LastRunwayNoticeMilestoneUtc = decision.NewState.MilestoneUtc;
+                identity.LastRunwayNoticeKind = decision.NewState.Kind ?? "";
+            }
+            if (!decision.Notify)
             {
                 continue;
             }
 
-            var crossed = SupportRunwayNoticeEvaluator.ThresholdCrossed(runway.DaysToNextMilestone, thresholds);
-            if (crossed is null || !SupportRunwayNoticeEvaluator.ShouldNotify(runway.DaysToNextMilestone, thresholds, identity.LastRunwayNoticeThresholdDays))
+            string message;
+            if (runway.IsUnknown)
             {
-                continue;
+                message = runway.NeedsReview
+                    ? $"{instance.Name}: support runway needs review. {runway.UnknownReason}"
+                    : $"{instance.Name}: support runway is unknown. {runway.UnknownReason}";
             }
-
-            var daysDescription = runway.DaysToNextMilestone is { } d && d <= 0
-                ? $"{Math.Abs(d)} day(s) overdue"
-                : $"{runway.DaysToNextMilestone} day(s) remaining";
-
-            var message = $"{instance.Name}: {runway.NextMilestoneLabel}, {daysDescription} ({runway.Phase}).";
+            else
+            {
+                var daysDescription = runway.DaysToNextMilestone is { } d && d <= 0
+                    ? $"{Math.Abs(d)} day(s) overdue"
+                    : $"{runway.DaysToNextMilestone} day(s) remaining";
+                message = $"{instance.Name}: {runway.NextMilestoneLabel} {runway.NextMilestoneUtc:yyyy-MM-dd}, {daysDescription} ({runway.Phase}).";
+                if (!string.IsNullOrEmpty(runway.CoverageNote))
+                {
+                    message += " " + runway.CoverageNote;
+                }
+            }
             await notifications.CreateAsync(instance, message, runway.Phase == SupportPhase.EndOfLife ? NotificationSeverity.Critical : NotificationSeverity.Warning);
 
             var recipientEmails = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -132,8 +162,16 @@ public class SupportRunwayService(
                 await emailSender.SendAsync(email, $"DBTracker support-runway notice: {instance.Name}", message, ct);
             }
 
-            identity.LastRunwayNoticeThresholdDays = crossed;
-            identity.LastRunwayNoticeAtUtc = now;
+            if (identity is not null)
+            {
+                identity.LastRunwayNoticeAtUtc = now;
+            }
+            else
+            {
+                await audit.RecordSystemActionAsync("SupportRunwayCheck", SupportRunwayNoticeEvaluator.NoIdentityNoticeAuditAction, "DatabaseInstance",
+                    instance.Id.ToString(), instance.Name, message, ct);
+                noIdentityNoticeSent.Add(instance.Id.ToString());
+            }
             notifiedCount++;
         }
 

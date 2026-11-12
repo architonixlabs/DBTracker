@@ -12,6 +12,9 @@
 @inject InstanceArchiveService ArchiveService
 @inject AuditRecorder Audit
 @inject ContactCorrectionService Corrections
+@inject ViewerTimeZone Viewer
+@inject IJSRuntime JS
+@implements IDisposable
 
 <PageTitle>@(_overview?.Instance.Name ?? "Instance") · DBTracker</PageTitle>
 
@@ -49,7 +52,7 @@ else
     {
         <div class="alert alert-warning" role="status">
             <i class="bi bi-archive" aria-hidden="true"></i> This instance is <strong>archived</strong>
-            (@instance.ArchivedAtUtc?.ToLocalTime().ToString("MMM d, yyyy h:mm tt") by @instance.ArchivedBy). Reason: @instance.ArchiveReason.
+            (<LocalTime Utc="instance.ArchivedAtUtc" ShowUtc="false" Empty="time not recorded" /> by @instance.ArchivedBy). Reason: @instance.ArchiveReason.
             It's excluded from background scans, alerts and reports. <a href="/instances/archived">Browse archived instances</a> to unarchive it.
         </div>
     }
@@ -60,38 +63,53 @@ else
                 @instance.Name <HealthBadge Health="_overview.Health" />
                 @if (instance.MaintenanceUntilUtc is { } maintUtc && maintUtc > DateTime.UtcNow)
                 {
-                    <span class="badge-health dot Overdue" title="Overdue/Failed alerts are suppressed until this window ends">
-                        <i class="bi bi-cone-striped" aria-hidden="true"></i> Maintenance until @maintUtc.ToLocalTime().ToString("MMM d, h:mm tt")
+                    <span class="badge-health dot Overdue">
+                        <i class="bi bi-cone-striped" aria-hidden="true"></i> Maintenance until <LocalTime Utc="maintUtc" Format="MMM d, h:mm tt" ShowUtc="false" />
                     </span>
                 }
             </h1>
             <div class="subtitle">@instance.Engine @instance.Version · @instance.Environment · <span class="role-pill @instance.Role">@instance.Role</span></div>
+            @if (instance.MaintenanceUntilUtc is { } maintEnd && maintEnd > DateTime.UtcNow)
+            {
+                <div class="subtitle" data-testid="maintenance-note">Overdue and failed alerts are paused until this maintenance window ends.</div>
+            }
         </div>
         <div class="d-flex gap-2 flex-wrap">
             <nav class="d-flex gap-2 flex-wrap" aria-label="Instance sections">
-                <a class="btn btn-outline-secondary" href="/instances/@Id/lifecycle" title="Installed version, support runway, patch baseline and advisories">
+                <a class="btn btn-outline-secondary" href="/instances/@Id/lifecycle">
                     <i class="bi bi-signpost-split" aria-hidden="true"></i> Lifecycle
                 </a>
-                <a class="btn btn-outline-secondary" href="/instances/@Id/migration" title="Dependencies, migration path assessment and upgrade-readiness checklist">
+                <a class="btn btn-outline-secondary" href="/instances/@Id/migration">
                     <i class="bi bi-diagram-2" aria-hidden="true"></i> Migration
                 </a>
-                <a class="btn btn-outline-secondary" href="/instances/@Id/recovery" title="Recovery objectives, backup-chain coverage and backup copies">
+                <a class="btn btn-outline-secondary" href="/instances/@Id/recovery">
                     <i class="bi bi-shield-check" aria-hidden="true"></i> Recovery
                 </a>
-                <a class="btn btn-outline-secondary" href="/instances/@Id/assurance" title="Integrity, HA, maintenance-job and capacity evidence">
+                <a class="btn btn-outline-secondary" href="/instances/@Id/assurance">
                     <i class="bi bi-clipboard2-pulse" aria-hidden="true"></i> Assurance
                 </a>
-                <a class="btn btn-outline-secondary" href="/instances/@Id/certificates" title="Certificate and recovery-key reminders">
+                <a class="btn btn-outline-secondary" href="/instances/@Id/certificates">
                     <i class="bi bi-key" aria-hidden="true"></i> Certificates
                 </a>
-                <a class="btn btn-outline-secondary" href="/instances/@Id/entitlement" title="Support contracts and edition cost estimates">
+                <a class="btn btn-outline-secondary" href="/instances/@Id/entitlement">
                     <i class="bi bi-file-earmark-text" aria-hidden="true"></i> Entitlement
                 </a>
-                <a class="btn btn-outline-secondary" href="/instances/@Id/retirement" title="Decommission checklist that gates archiving">
+                <a class="btn btn-outline-secondary" href="/instances/@Id/retirement">
                     <i class="bi bi-door-closed" aria-hidden="true"></i> Retirement
                 </a>
+                <Toggletip Label="What each instance section covers" TestId="instance-sections-help">
+                    <dl class="toggletip-list">
+                        <dt>Lifecycle</dt><dd>Installed version, support runway, patch baseline and advisories.</dd>
+                        <dt>Migration</dt><dd>Dependencies, migration path assessment and the upgrade-readiness checklist.</dd>
+                        <dt>Recovery</dt><dd>Recovery objectives, backup-chain coverage and backup copies.</dd>
+                        <dt>Assurance</dt><dd>Integrity, HA, maintenance-job and capacity evidence.</dd>
+                        <dt>Certificates</dt><dd>Certificate and recovery-key reminders.</dd>
+                        <dt>Entitlement</dt><dd>Support contracts and edition cost estimates.</dd>
+                        <dt>Retirement</dt><dd>The decommission checklist that gates archiving.</dd>
+                    </dl>
+                </Toggletip>
             </nav>
-            <button type="button" class="btn btn-outline-secondary" @onclick="TestConnection" disabled="@(_testingConnection || !CanCheckConnectivity(instance))" title="@(CanCheckConnectivity(instance) ? "" : "No host/IP or override configured")">
+            <button type="button" class="btn btn-outline-secondary" @onclick="TestConnection" disabled="@(_testingConnection || !CanCheckConnectivity(instance))" aria-describedby="@(CanCheckConnectivity(instance) ? null : "connectivity-unavailable")">
                 <i class="bi bi-ethernet" aria-hidden="true"></i> @(_testingConnection ? "Testing…" : "Test connection")
             </button>
             <AuthorizeView Roles="@Roles.CanEditPolicy">
@@ -103,7 +121,8 @@ else
                         </button>
                     }
                     <a class="btn btn-outline-secondary" href="/instances/@Id/edit"><i class="bi bi-pencil" aria-hidden="true"></i> Edit</a>
-                    @if (!instance.IsArchived && !_showArchiveConfirm)
+                    @* Stays rendered while the dialog is open, so closing it returns focus here. *@
+                    @if (!instance.IsArchived)
                     {
                         <button type="button" class="btn btn-outline-danger" @onclick="OpenArchiveConfirm"><i class="bi bi-archive" aria-hidden="true"></i> Archive</button>
                     }
@@ -121,7 +140,7 @@ else
                     : $"Not reachable: {_connectivityEndpointDescription} ({_connectivityResult.Error})")
             </div>
             <div class="text-muted">
-                Checked @_connectivityResult.CheckedAtUtc.ToLocalTime().ToString("MMM d, h:mm:ss tt") · timeout @_connectivityResult.Timeout.TotalSeconds s ·
+                Checked <LocalTime Utc="_connectivityResult.CheckedAtUtc" Format="MMM d, h:mm:ss tt" ShowUtc="false" /> · timeout @_connectivityResult.Timeout.TotalSeconds s ·
                 a successful TCP connection is not proof of database login, backup success or recoverability.
             </div>
         </div>
@@ -130,27 +149,63 @@ else
     {
         <p class="small text-muted mb-4" style="margin-top:-20px;">Connectivity check unavailable: @_connectivityDisabledReason</p>
     }
-
-    @if (_showArchiveConfirm && _archivePreview is not null)
+    else if (!CanCheckConnectivity(instance))
     {
-        <div class="dbt-card mb-4" style="border-color:var(--dbt-failed);">
-            <h2 class="h6 text-muted mb-3">Confirm archive</h2>
+        @* Says why Test connection is disabled; a title on a disabled button reaches neither touch nor keyboard users. *@
+        <p class="small text-muted mb-4" style="margin-top:-20px;" id="connectivity-unavailable">Test connection is off: no host, IP or connectivity override is configured.</p>
+    }
+
+    <ModalDialog Title="Confirm archive" @bind-Open="_showArchiveConfirm" CssClass="is-danger" data-testid="archive-dialog">
+        @if (_archivePreview is not null)
+        {
+            <p class="small text-muted mb-2">What archiving <strong class="text-body">@instance.Name</strong> changes:</p>
             <ul class="small mb-3">
                 @foreach (var line in _archivePreview)
                 {
                     <li>@line.Text</li>
                 }
             </ul>
-            <div class="mb-2">
-                <label class="form-label small" for="archive-reason">Reason (required)</label>
-                <input id="archive-reason" class="form-control form-control-sm" @bind="_archiveReason" @bind:event="oninput" placeholder="Decommissioned, replaced by…, duplicate entry, …" />
+            <fieldset class="mb-3">
+                <legend class="form-label small mb-1">Why is it being archived?</legend>
+                <div class="form-check">
+                    <input class="form-check-input" type="radio" name="archive-kind" id="archive-kind-mistake" data-testid="archive-kind-mistake"
+                           checked="@(_archiveKind == ArchiveKind.Mistake)" @onchange="() => _archiveKind = ArchiveKind.Mistake" />
+                    <label class="form-check-label small" for="archive-kind-mistake">Duplicate, or entered by mistake</label>
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input" type="radio" name="archive-kind" id="archive-kind-retire" data-testid="archive-kind-retire"
+                           checked="@(_archiveKind == ArchiveKind.Retirement)" @onchange="() => _archiveKind = ArchiveKind.Retirement" />
+                    <label class="form-check-label small" for="archive-kind-retire">The database is being decommissioned or replaced</label>
+                </div>
+            </fieldset>
+            @if (_archiveKind == ArchiveKind.Retirement)
+            {
+                <p class="small mb-0" role="status">
+                    A decommissioned database is archived through its retirement checklist, so consumers, jobs, final backups and
+                    sign-offs are checked first. <a href="/instances/@Id/retirement">Open the retirement checklist</a>.
+                </p>
+            }
+            else if (_archiveKind == ArchiveKind.Mistake)
+            {
+                <div class="mb-0">
+                    <label class="form-label small" for="archive-reason">Reason (required)</label>
+                    <input id="archive-reason" class="form-control form-control-sm" @bind="_archiveReason" @bind:event="oninput" placeholder="Duplicate of …, test entry, …" />
+                </div>
+                @if (_archiveError is not null)
+                {
+                    <p class="small mt-2 mb-0" role="alert" style="color:var(--dbt-failed)">@_archiveError</p>
+                }
+            }
+            @* Cancel stays at the far end, so the Archive button appearing beside it never moves it under the pointer. *@
+            <div class="dbt-dialog-actions">
+                @if (_archiveKind == ArchiveKind.Mistake)
+                {
+                    <button type="button" class="btn btn-danger btn-sm" @onclick="ConfirmArchive" disabled="@string.IsNullOrWhiteSpace(_archiveReason)">Archive this instance</button>
+                }
+                <button type="button" class="btn btn-outline-secondary btn-sm" autofocus @onclick="() => _showArchiveConfirm = false">Cancel</button>
             </div>
-            <div class="d-flex gap-2">
-                <button type="button" class="btn btn-danger btn-sm" @onclick="ConfirmArchive" disabled="@string.IsNullOrWhiteSpace(_archiveReason)">Archive this instance</button>
-                <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="() => _showArchiveConfirm = false">Cancel</button>
-            </div>
-        </div>
-    }
+        }
+    </ModalDialog>
 
     <div class="row g-0 mb-4">
         <div class="col-12">
@@ -158,12 +213,12 @@ else
                 <h2 class="h6 text-muted mb-3">Health explanation</h2>
                 <dl class="row mb-0 small">
                     <dt class="col-sm-3">Last successful backup</dt>
-                    <dd class="col-sm-9">@(_explanation!.LastSuccessUtc is { } ls ? ls.ToLocalTime().ToString("MMM d, yyyy h:mm tt") : "Never")</dd>
+                    <dd class="col-sm-9"><LocalTime Utc="_explanation!.LastSuccessUtc" /></dd>
 
                     <dt class="col-sm-3">Latest attempt</dt>
                     <dd class="col-sm-9">
                         @(_explanation.LastAttemptUtc is { } la
-                            ? $"{la.ToLocalTime():MMM d, yyyy h:mm tt}: {_explanation.LastAttemptStatus}"
+                            ? $"{Viewer.Format(la)}: {_explanation.LastAttemptStatus}"
                             : "No backup evidence recorded yet")
                     </dd>
 
@@ -171,7 +226,7 @@ else
                     <dd class="col-sm-9">every @_explanation.GoverningIntervalHours h</dd>
 
                     <dt class="col-sm-3">Next due</dt>
-                    <dd class="col-sm-9">@(_explanation.NextDueUtc is { } due ? due.ToLocalTime().ToString("MMM d, yyyy h:mm tt") : "No successful backup yet")</dd>
+                    <dd class="col-sm-9"><LocalTime Utc="_explanation.NextDueUtc" Empty="No successful backup yet" /></dd>
 
                     @if (_explanation.OverdueBy is { } overdueBy)
                     {
@@ -212,7 +267,10 @@ else
             <div class="dbt-card h-100">
                 <div class="d-flex justify-content-between align-items-start mb-3">
                     <h2 class="h6 text-muted mb-0">Ownership &amp; contact</h2>
-                    <span class="badge-health dot @OwnershipClass(_ownershipStatus)" title="For personal views only. It never grants or restricts access beyond the viewer's role.">@_ownershipStatus</span>
+                    <span class="d-inline-flex align-items-center gap-1">
+                        <span class="badge-health dot @OwnershipClass(_ownershipStatus)">@_ownershipStatus</span>
+                        <Toggletip Label="About ownership status" TestId="ownership-status-help">Ownership status is for personal views only. It never grants or restricts access beyond the viewer's role.</Toggletip>
+                    </span>
                 </div>
                 <dl class="row mb-0 small">
                     <dt class="col-5">Application</dt><dd class="col-7">@instance.Application</dd>
@@ -228,7 +286,7 @@ else
                     }
                     @if (instance.OwnershipConfirmedAtUtc is { } confirmedAt)
                     {
-                        <dt class="col-5">Confirmed</dt><dd class="col-7">@confirmedAt.ToLocalTime().ToString("MMM d, yyyy") by @instance.OwnershipConfirmedBy</dd>
+                        <dt class="col-5">Confirmed</dt><dd class="col-7"><LocalTime Utc="confirmedAt" Format="MMM d, yyyy" ShowUtc="false" /> by @instance.OwnershipConfirmedBy</dd>
                     }
                     @if (!string.IsNullOrWhiteSpace(instance.Region) || !string.IsNullOrWhiteSpace(instance.Cluster) || !string.IsNullOrWhiteSpace(instance.ReplicaSet))
                     {
@@ -287,7 +345,7 @@ else
                             @foreach (var req in _pendingCorrections)
                             {
                                 <div class="small mb-2">
-                                    <div>Requested by @req.RequestedByName on @req.RequestedAtUtc.ToLocalTime().ToString("MMM d, h:mm tt")</div>
+                                    <div>Requested by @req.RequestedByName on <LocalTime Utc="req.RequestedAtUtc" Format="MMM d, h:mm tt" ShowUtc="false" /></div>
                                     <div class="text-muted">"@req.Note"</div>
                                     @if (!string.IsNullOrWhiteSpace(req.ProposedContactName)) { <div>Proposed name: @req.ProposedContactName</div> }
                                     @if (!string.IsNullOrWhiteSpace(req.ProposedContactEmail)) { <div>Proposed email: @req.ProposedContactEmail</div> }
@@ -314,13 +372,13 @@ else
                         <dt class="col-5">Retention policy</dt><dd class="col-7">@instance.RetentionPolicyDays days</dd>
                     }
                     <dt class="col-5">Last successful backup</dt>
-                    <dd class="col-7">@(_overview.LastBackupUtc is null ? "Never" : _overview.LastBackupUtc.Value.ToLocalTime().ToString("MMM d, yyyy h:mm tt"))</dd>
+                    <dd class="col-7"><LocalTime Utc="_overview.LastBackupUtc" ShowUtc="false" /></dd>
                     <dt class="col-5">Restore-test coverage</dt>
                     <dd class="col-7">
                         <span class="badge-health dot @RecencyClass(_restoreTestRecency!.Status)">@RecencyLabel(_restoreTestRecency.Status)</span>
                         @if (_restoreTestRecency.NextDueUtc is { } nextDue)
                         {
-                            <span class="text-muted small ms-1">next due @nextDue.ToLocalTime().ToString("MMM d, yyyy")</span>
+                            <span class="text-muted small ms-1">next due <LocalTime Utc="nextDue" Format="MMM d, yyyy" ShowUtc="false" /></span>
                         }
                         <span class="text-muted small ms-1">(every @_effectiveRestoreTestIntervalDays d@(instance.RestoreTestIntervalDaysOverride is null ? ", default" : ", override"))</span>
                     </dd>
@@ -336,7 +394,7 @@ else
                             }
                             else
                             {
-                                <span>@instance.LastScanUtc.Value.ToLocalTime().ToString("MMM d, h:mm tt")</span>
+                                <span><LocalTime Utc="instance.LastScanUtc" Format="MMM d, h:mm tt" ShowUtc="false" /></span>
                                 <span class="badge-health dot @ScannerFreshnessClass(_scannerHealth!.Freshness) ms-1">@_scannerHealth.Freshness</span>
                                 @if (instance.LastScanStatus == ScanStatus.Error)
                                 {
@@ -358,7 +416,7 @@ else
                 <h2 class="h6 text-muted mb-3">Maintenance window</h2>
                 @if (instance.MaintenanceUntilUtc is { } activeUntil && activeUntil > DateTime.UtcNow)
                 {
-                    <p class="mb-2"><span class="badge-health dot Overdue">Under maintenance</span> until @activeUntil.ToLocalTime().ToString("MMM d, yyyy h:mm tt"). Overdue/Failed email and webhook alerts are suppressed.</p>
+                    <p class="mb-2"><span class="badge-health dot Overdue">Under maintenance</span> until <LocalTime Utc="activeUntil" Format="MMM d, yyyy h:mm tt" ShowUtc="false" />. Overdue/Failed email and webhook alerts are suppressed.</p>
                     @if (!string.IsNullOrWhiteSpace(instance.MaintenanceReason))
                     {
                         <p class="text-muted small mb-2">@instance.MaintenanceReason</p>
@@ -398,15 +456,15 @@ else
                 <div class="dbt-card">
                     <h2 class="h6 text-muted mb-3">Open incident</h2>
                     <p class="small text-muted mb-2">
-                        Opened @_openIncident.OpenedAtUtc.ToLocalTime().ToString("MMM d, h:mm tt") on @_openIncident.TriggerHealth.
+                        Opened <LocalTime Utc="_openIncident.OpenedAtUtc" Format="MMM d, h:mm tt" ShowUtc="false" /> on @_openIncident.TriggerHealth.
                         @if (_openIncident.EscalationLevel > 0)
                         {
-                            <span style="color:var(--dbt-failed)"> Escalated @_openIncident.EscalationLevel time(s), last @_openIncident.LastEscalatedAtUtc?.ToLocalTime().ToString("MMM d, h:mm tt").</span>
+                            <span style="color:var(--dbt-failed)"> Escalated @_openIncident.EscalationLevel time(s), last <LocalTime Utc="_openIncident.LastEscalatedAtUtc" Format="MMM d, h:mm tt" ShowUtc="false" />.</span>
                         }
                     </p>
                     @if (_openIncident.AcknowledgedAtUtc is { } ackAt)
                     {
-                        <p class="mb-2"><span class="badge-health dot OnTrack">Acknowledged</span> by @_openIncident.AcknowledgedBy on @ackAt.ToLocalTime().ToString("MMM d, h:mm tt"). Escalation stopped. <span class="text-muted">Acknowledgement is a response record only; it never changes the health badge above.</span></p>
+                        <p class="mb-2"><span class="badge-health dot OnTrack">Acknowledged</span> by @_openIncident.AcknowledgedBy on <LocalTime Utc="ackAt" Format="MMM d, h:mm tt" ShowUtc="false" />. Escalation stopped. <span class="text-muted">Acknowledgement is a response record only; it never changes the health badge above.</span></p>
                         @if (!string.IsNullOrWhiteSpace(_openIncident.Note))
                         {
                             <p class="small mb-1"><strong>Note:</strong> @_openIncident.Note</p>
@@ -453,9 +511,16 @@ else
                         <h2 class="h6 text-muted mb-3">Log a backup result</h2>
                         <EditForm Model="_newRecord" OnValidSubmit="LogBackup">
                             <div class="mb-2">
-                                <label class="form-label small" for="backup-occurred">Occurred at (local time)</label>
-                                <input id="backup-occurred" type="datetime-local" class="form-control form-control-sm" @bind="_newRecordOccurredLocal" aria-describedby="backup-occurred-help" />
-                                <div class="form-text" id="backup-occurred-help">Defaults to now. Set an earlier time when logging a backup after the fact; future times are rejected.</div>
+                                <label class="form-label small" for="backup-occurred">Occurred at (@EntryZoneLabel(_backupEntryZone))</label>
+                                <div class="d-flex gap-1">
+                                    <input id="backup-occurred" type="datetime-local" class="form-control form-control-sm" @bind="_newRecordOccurredLocal" aria-describedby="backup-occurred-help" />
+                                    <label class="visually-hidden" for="backup-occurred-zone">Time zone of the occurrence time</label>
+                                    <select id="backup-occurred-zone" data-testid="backup-occurred-zone" class="form-select form-select-sm" style="max-width:150px;" @bind="_backupEntryZone">
+                                        <option value="viewer">Your time zone</option>
+                                        <option value="UTC">UTC</option>
+                                    </select>
+                                </div>
+                                <div class="form-text" id="backup-occurred-help">Defaults to now. Set an earlier time when logging a backup after the fact; future times are rejected. The zone is stored with the entry.</div>
                             </div>
                             <div class="mb-2">
                                 <label class="form-label small" for="backup-type">Type</label>
@@ -465,6 +530,17 @@ else
                                         <option value="@t">@t</option>
                                     }
                                 </InputSelect>
+                            </div>
+                            <div class="mb-2">
+                                <label class="form-label small" for="backup-chain-role">Backup-chain role</label>
+                                <InputSelect id="backup-chain-role" class="form-select form-select-sm" @bind-Value="_newRecord.ChainRole" aria-describedby="backup-chain-role-help" data-testid="backup-chain-role">
+                                    <option value="">Same as type</option>
+                                    @foreach (var m in Enum.GetValues<ChainMemberType>())
+                                    {
+                                        <option value="@m">@m</option>
+                                    }
+                                </InputSelect>
+                                <div class="form-text" id="backup-chain-role-help">Set this for a WAL archive, binlog or archival copy, which the type list can't express. It counts toward the recovery page's chain coverage.</div>
                             </div>
                             <div class="mb-2">
                                 <label class="form-label small" for="backup-status">Status</label>
@@ -505,7 +581,7 @@ else
                                     <option value="0">Select an entry…</option>
                                     @foreach (var r in instance.BackupRecords.OrderByDescending(r => r.TimestampUtc))
                                     {
-                                        <option value="@r.Id">@r.TimestampUtc.ToLocalTime().ToString("MMM d, h:mm tt"): @r.Status</option>
+                                        <option value="@r.Id">@Viewer.Format(r.TimestampUtc, "MMM d, h:mm tt"): @r.Status</option>
                                     }
                                 </select>
                             </div>
@@ -566,7 +642,7 @@ else
                     <div class="table-responsive" role="region" aria-label="Backup history" tabindex="0">
                     <table class="table table-sm mb-0 dbt-table">
                         <thead>
-                            <tr><th scope="col">When</th><th scope="col">Entered</th><th scope="col">By</th><th scope="col">Type</th><th scope="col">Status</th><th scope="col">Size</th><th scope="col">Duration</th><th scope="col">Evidence</th><th scope="col">File</th><th scope="col">Notes</th></tr>
+                            <tr><th scope="col">When</th><th scope="col">Entered</th><th scope="col">By</th><th scope="col">Type</th><th scope="col">Status</th><th scope="col">Size</th><th scope="col">Duration</th><th scope="col">Evidence <Toggletip Label="About evidence levels" TestId="backup-evidence-help"><EvidenceLevelsHelp /></Toggletip></th><th scope="col">File</th><th scope="col">Notes</th></tr>
                         </thead>
                         <tbody>
                             @foreach (var r in BackupHistoryPage())
@@ -576,9 +652,9 @@ else
                                 var effectiveNotes = EvidenceCorrectionResolver.EffectiveNotes(r, _backupCorrections);
                                 var wasCorrected = _backupCorrections.Any(c => c.BackupRecordId == r.Id);
                                 <tr>
-                                    <td class="small">@r.TimestampUtc.ToLocalTime().ToString("MMM d, h:mm tt")</td>
-                                    <td class="small text-muted">@r.CreatedAtUtc.ToLocalTime().ToString("MMM d, h:mm tt")</td>
-                                    <td class="small text-muted">@(string.IsNullOrWhiteSpace(r.RecordedByUserName) ? "Not recorded" : r.RecordedByUserName)</td>
+                                    <td class="small"><LocalTime Utc="r.TimestampUtc" Format="MMM d, h:mm tt" ShowUtc="false" />@EnteredZoneNote(r.OccurredTimeZone)</td>
+                                    <td class="small text-muted"><LocalTime Utc="r.CreatedAtUtc" Format="MMM d, h:mm tt" ShowUtc="false" /></td>
+                                    <td class="small text-muted">@RecordedByText(r.RecordedByUserName, r.Source)</td>
                                     <td class="small">@r.Type</td>
                                     <td>
                                         <span class="badge-health dot @StatusClass(effectiveStatus)">@effectiveStatus</span>
@@ -592,7 +668,7 @@ else
                                     <td class="small">
                                         @if (evidence is { } level)
                                         {
-                                            <span class="badge-health dot @EvidenceClass(level)" title="@EvidenceTooltip(level)">@BackupEvidenceClassifier.Describe(level)</span>
+                                            <span class="badge-health dot @EvidenceClass(level)">@BackupEvidenceClassifier.Describe(level)</span>
                                         }
                                         else
                                         {
@@ -633,9 +709,16 @@ else
                         <h2 class="h6 text-muted mb-3">Log a restore</h2>
                         <EditForm Model="_newRestore" OnValidSubmit="LogRestore">
                             <div class="mb-2">
-                                <label class="form-label small" for="restore-occurred">Occurred at (local time)</label>
-                                <input id="restore-occurred" type="datetime-local" class="form-control form-control-sm" @bind="_newRestoreOccurredLocal" aria-describedby="restore-occurred-help" />
-                                <div class="form-text" id="restore-occurred-help">Defaults to now. Set an earlier time when logging a restore after an incident; future times are rejected.</div>
+                                <label class="form-label small" for="restore-occurred">Occurred at (@EntryZoneLabel(_restoreEntryZone))</label>
+                                <div class="d-flex gap-1">
+                                    <input id="restore-occurred" type="datetime-local" class="form-control form-control-sm" @bind="_newRestoreOccurredLocal" aria-describedby="restore-occurred-help" />
+                                    <label class="visually-hidden" for="restore-occurred-zone">Time zone of the occurrence time</label>
+                                    <select id="restore-occurred-zone" data-testid="restore-occurred-zone" class="form-select form-select-sm" style="max-width:150px;" @bind="_restoreEntryZone">
+                                        <option value="viewer">Your time zone</option>
+                                        <option value="UTC">UTC</option>
+                                    </select>
+                                </div>
+                                <div class="form-text" id="restore-occurred-help">Defaults to now. Set an earlier time when logging a restore after an incident; future times are rejected. The zone is stored with the entry.</div>
                             </div>
                             <div class="mb-2">
                                 <label class="form-label small" for="restore-performed-by">Performed by</label>
@@ -667,7 +750,7 @@ else
                                     <option value="0">Unknown / not linked</option>
                                     @foreach (var r in instance.BackupRecords.OrderByDescending(r => r.TimestampUtc))
                                     {
-                                        <option value="@r.Id">@r.TimestampUtc.ToLocalTime().ToString("MMM d, h:mm tt"): @r.Status</option>
+                                        <option value="@r.Id">@Viewer.Format(r.TimestampUtc, "MMM d, h:mm tt"): @r.Status</option>
                                     }
                                 </InputSelect>
                                 <div class="form-text" id="restore-linked-help">Leave as Unknown if you're not sure. DBTracker never assumes every backup was tested.</div>
@@ -681,6 +764,11 @@ else
                                     <label class="form-label small" for="restore-target-rto">Target recovery time (min)</label>
                                     <InputNumber id="restore-target-rto" class="form-control form-control-sm" @bind-Value="_newRestore.TargetRecoveryTimeMinutes" />
                                 </div>
+                            </div>
+                            <div class="mb-2">
+                                <label class="form-label small" for="restore-evidence-ref">Evidence reference (optional)</label>
+                                <InputText id="restore-evidence-ref" data-testid="restore-evidence-ref" class="form-control form-control-sm" @bind-Value="_newRestore.EvidenceReference" aria-describedby="restore-evidence-ref-help" />
+                                <div class="form-text" id="restore-evidence-ref-help">Ticket, change record or report link that proves this restore. Up to 500 characters.</div>
                             </div>
                             <div class="mb-3">
                                 <label class="form-label small" for="restore-notes">Notes</label>
@@ -702,7 +790,7 @@ else
                                     <option value="0">Select an entry…</option>
                                     @foreach (var r in instance.RestoreEvents.OrderByDescending(r => r.TimestampUtc))
                                     {
-                                        <option value="@r.Id">@r.TimestampUtc.ToLocalTime().ToString("MMM d, h:mm tt"): @r.Outcome</option>
+                                        <option value="@r.Id">@Viewer.Format(r.TimestampUtc, "MMM d, h:mm tt"): @r.Outcome</option>
                                     }
                                 </select>
                             </div>
@@ -760,7 +848,7 @@ else
                     <div class="table-responsive" role="region" aria-label="Restore history" tabindex="0">
                     <table class="table table-sm mb-0 dbt-table">
                         <thead>
-                            <tr><th scope="col">When</th><th scope="col">By</th><th scope="col">Entered by</th><th scope="col">Reason</th><th scope="col">Outcome</th><th scope="col">Linked evidence</th><th scope="col">Notes</th></tr>
+                            <tr><th scope="col">When</th><th scope="col">By</th><th scope="col">Entered by</th><th scope="col">Reason</th><th scope="col">Outcome</th><th scope="col">Linked evidence</th><th scope="col">Evidence reference</th><th scope="col">Notes</th></tr>
                         </thead>
                         <tbody>
                             @foreach (var r in RestoreHistoryPage())
@@ -770,18 +858,23 @@ else
                                 var wasCorrected = _restoreCorrections.Any(c => c.RestoreEventId == r.Id);
                                 var linked = instance.BackupRecords.FirstOrDefault(b => b.Id == r.LinkedBackupRecordId);
                                 <tr>
-                                    <td class="small">@r.TimestampUtc.ToLocalTime().ToString("MMM d, h:mm tt")</td>
+                                    <td class="small"><LocalTime Utc="r.TimestampUtc" Format="MMM d, h:mm tt" ShowUtc="false" />@EnteredZoneNote(r.OccurredTimeZone)</td>
                                     <td class="small">@r.PerformedBy</td>
-                                    <td class="small text-muted">@(string.IsNullOrWhiteSpace(r.RecordedByUserName) ? "Not recorded" : r.RecordedByUserName)</td>
+                                    <td class="small text-muted">@RecordedByText(r.RecordedByUserName, r.Source)</td>
                                     <td class="small">@r.Reason</td>
                                     <td>
                                         <span class="badge-health dot @(effectiveOutcome == RestoreOutcome.Success ? "OnTrack" : "Failed")">@effectiveOutcome</span>
+                                        @if (r.Source == BackupSource.Imported)
+                                        {
+                                            <span class="text-muted small" title="Loaded from a history import. Shown for context; it never counts as restore-test evidence.">(imported, not counted)</span>
+                                        }
                                         @if (wasCorrected)
                                         {
                                             <span class="text-muted small" title="This entry has one or more append-only corrections.">(corrected)</span>
                                         }
                                     </td>
-                                    <td class="small text-muted">@(linked is null ? "Unknown" : linked.TimestampUtc.ToLocalTime().ToString("MMM d, h:mm tt"))</td>
+                                    <td class="small text-muted">@if (linked is null) { <span>Unknown</span> } else { <LocalTime Utc="linked.TimestampUtc" Format="MMM d, h:mm tt" ShowUtc="false" /> }</td>
+                                    <td class="small text-muted">@(string.IsNullOrWhiteSpace(r.EvidenceReference) ? "None" : r.EvidenceReference)</td>
                                     <td class="small text-muted">@effectiveNotes</td>
                                 </tr>
                             }
@@ -836,7 +929,7 @@ else
                             @foreach (var c in ChangeLogPage())
                             {
                                 <tr>
-                                    <td class="small">@c.ChangedAtUtc.ToLocalTime().ToString("MMM d, h:mm tt")</td>
+                                    <td class="small"><LocalTime Utc="c.ChangedAtUtc" Format="MMM d, h:mm tt" ShowUtc="false" /></td>
                                     <td class="small">@c.ChangedBy</td>
                                     <td class="small">@c.FieldName</td>
                                     <td class="small text-muted">@(string.IsNullOrEmpty(c.OldValue) ? "(empty)" : c.OldValue)</td>
@@ -872,8 +965,11 @@ else
     private InstanceOverview? _overview;
     private BackupRecord _newRecord = new();
     private RestoreEvent _newRestore = new();
-    private DateTime _newRecordOccurredLocal = DateTime.Now;
-    private DateTime _newRestoreOccurredLocal = DateTime.Now;
+    private DateTime _newRecordOccurredLocal = DateTime.UtcNow;
+    private DateTime _newRestoreOccurredLocal = DateTime.UtcNow;
+    private DateTime _entryDefaultLocal = DateTime.UtcNow;
+    private string _backupEntryZone = "viewer";
+    private string _restoreEntryZone = "viewer";
     private int _newRestoreLinkedBackupId;
     private string? _backupFormError;
     private string? _restoreFormError;
@@ -908,6 +1004,9 @@ else
     private bool _showArchiveConfirm;
     private IReadOnlyList<ArchiveImpactLine>? _archivePreview;
     private string _archiveReason = "";
+    private string? _archiveError;
+    private enum ArchiveKind { None, Mistake, Retirement }
+    private ArchiveKind _archiveKind;
 
     // Ownership status and contact-correction requests.
     private OwnershipStatus _ownershipStatus;
@@ -956,8 +1055,7 @@ else
         _archiveReason = "";
         _newRecord = new BackupRecord();
         _newRestore = new RestoreEvent();
-        _newRecordOccurredLocal = DateTime.Now;
-        _newRestoreOccurredLocal = DateTime.Now;
+        ResetEntryTimes();
         _newRestoreLinkedBackupId = 0;
         _backupFormError = null;
         _restoreFormError = null;
@@ -992,21 +1090,18 @@ else
             _explanation = BackupHealthCalculator.Explain(_overview.Instance, _overview.Instance.BackupRecords.ToList(), now);
             _scannerHealth = ScannerStalenessClassifier.Classify(
                 backupFileLocationConfigured: !string.IsNullOrWhiteSpace(_overview.Instance.BackupFileLocation),
-                lastScanUtc: _overview.Instance.LastScanUtc,
+                lastAttemptUtc: _overview.Instance.LastScanUtc,
                 lastScanStatus: _overview.Instance.LastScanStatus,
+                lastSuccessUtc: _overview.Instance.LastScanSuccessUtc,
                 scanIntervalMinutes: Configuration.GetValue("BackupScan:IntervalMinutes", 15),
                 staleAfterMultiplier: Configuration.GetValue("BackupScan:StaleAfterMultiplier", 3),
                 nowUtc: now);
 
             _effectiveRestoreTestIntervalDays = _overview.Instance.RestoreTestIntervalDaysOverride
                 ?? Configuration.GetValue("RestoreTest:IntervalDays", 90);
-            var lastSuccessfulRestore = _overview.Instance.RestoreEvents
-                .Where(r => r.Outcome == RestoreOutcome.Success)
-                .OrderByDescending(r => r.TimestampUtc)
-                .Select(r => r.TimestampUtc)
-                .FirstOrDefault();
+            // Imported restore history is shown but never counts as a restore test (G23).
             _restoreTestRecency = RestoreTestRecencyCalculator.Compute(
-                _overview.Instance.RestoreEvents.Any(r => r.Outcome == RestoreOutcome.Success) ? lastSuccessfulRestore : null,
+                RestoreEvidence.LastVerifiedUtc(_overview.Instance.RestoreEvents),
                 _effectiveRestoreTestIntervalDays, now);
         }
     }
@@ -1047,60 +1142,149 @@ else
 
     private async Task AcknowledgeIncident()
     {
-        if (_openIncident is null) return;
-        await Incidents.AcknowledgeAsync(_openIncident.Id, _userDisplayName ?? "", _ackNote, _ackTicket);
-        Toasts.Success("Incident acknowledged. Escalation stopped.");
+        if (_openIncident is null || !await CanRespondToIncidentAsync()) return;
+        if (await Incidents.AcknowledgeAsync(_openIncident.Id, _userId ?? "", _userDisplayName ?? "unknown", _ackNote, _ackTicket))
+        {
+            Toasts.Success("Incident acknowledged. Escalation stopped.");
+        }
+        else
+        {
+            Toasts.Error("This incident has already closed, so it can't be acknowledged.");
+        }
         await Load();
     }
 
     private async Task AssignIncident()
     {
-        if (_openIncident is null) return;
-        await Incidents.AssignAsync(_openIncident.Id, _assigneeName);
-        Toasts.Success($"Assigned to {_assigneeName}.");
+        if (_openIncident is null || !await CanRespondToIncidentAsync()) return;
+        if (await Incidents.AssignAsync(_openIncident.Id, _assigneeName, _userId ?? "", _userDisplayName ?? "unknown"))
+        {
+            Toasts.Success(string.IsNullOrWhiteSpace(_assigneeName) ? "Assignee cleared." : $"Assigned to {_assigneeName.Trim()}.");
+        }
         await Load();
+    }
+
+    // The buttons are hidden for read-only roles; this re-checks on the server so a crafted event can't write.
+    private async Task<bool> CanRespondToIncidentAsync()
+    {
+        var user = (await AuthProvider.GetAuthenticationStateAsync()).User;
+        if (Roles.CanEditPolicy.Split(',').Any(user.IsInRole))
+        {
+            return true;
+        }
+
+        Toasts.Error("Only DBA and Admin roles can acknowledge or assign incidents.");
+        return false;
     }
 
     private async Task<string?> CurrentUserNameAsync() =>
         (await AuthProvider.GetAuthenticationStateAsync()).User.Identity?.Name ?? "unknown";
 
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            Viewer.Changed += OnViewerZoneChanged;
+        }
+        if (!Viewer.Known)
+        {
+            await Viewer.EnsureLoadedAsync(JS);
+        }
+    }
+
+    /// <summary>Once the browser reports its zone, move the untouched "now" defaults into it.</summary>
+    private void OnViewerZoneChanged() => InvokeAsync(() =>
+    {
+        var untouched = _newRecordOccurredLocal == _entryDefaultLocal && _newRestoreOccurredLocal == _entryDefaultLocal;
+        if (untouched)
+        {
+            ResetEntryTimes();
+        }
+        StateHasChanged();
+    });
+
+    public void Dispose() => Viewer.Changed -= OnViewerZoneChanged;
+
+    private void ResetEntryTimes()
+    {
+        var now = Viewer.ToViewer(DateTime.UtcNow);
+        _entryDefaultLocal = new DateTime(now.Year, now.Month, now.Day, now.Hour, now.Minute, 0);
+        _newRecordOccurredLocal = _entryDefaultLocal;
+        _newRestoreOccurredLocal = _entryDefaultLocal;
+    }
+
+    private TimeZoneInfo EntryZone(string choice) => choice == EventTimeZones.Utc ? TimeZoneInfo.Utc : Viewer.Zone;
+
+    private string EntryZoneLabel(string choice) => EventTimeZones.Label(EntryZone(choice), DateTime.UtcNow);
+
+    /// <summary>Converts a form's occurrence time from its chosen zone, or returns the error to show.</summary>
+    private (DateTime Utc, string ZoneId)? ResolveOccurred(DateTime wallClock, string zoneChoice, out string? error)
+    {
+        var untouched = wallClock == _entryDefaultLocal && zoneChoice != EventTimeZones.Utc;
+        var result = EventTimeZones.FromEntryForm(wallClock, EntryZone(zoneChoice), untouched, DateTime.UtcNow);
+        error = result.Error;
+        return result.Ok ? (result.Utc!.Value, result.ZoneId) : null;
+    }
+
+    private static string RecordedByText(string recordedBy, BackupSource source)
+    {
+        var who = string.IsNullOrWhiteSpace(recordedBy) ? "Not recorded" : recordedBy;
+        return source == BackupSource.Imported ? $"Imported by {who}" : who;
+    }
+
+    /// <summary>Names the zone a person stated the time in when it differs from the viewer's, so a backdated entry reads unambiguously.</summary>
+    private string EnteredZoneNote(string zoneId) =>
+        string.IsNullOrWhiteSpace(zoneId) || zoneId == Viewer.ZoneId ? "" : $" (entered in {zoneId})";
+
     private async Task LogBackup()
     {
-        var occurredUtc = _newRecordOccurredLocal.ToUniversalTime();
-        if (occurredUtc > DateTime.UtcNow.AddMinutes(1))
+        if (ResolveOccurred(_newRecordOccurredLocal, _backupEntryZone, out var timeError) is not { } occurred)
         {
-            _backupFormError = "Occurrence time can't be in the future.";
+            _backupFormError = timeError;
             return;
         }
+        var occurredUtc = occurred.Utc;
 
         _backupFormError = null;
         _newRecord.DatabaseInstanceId = Id;
         _newRecord.TimestampUtc = occurredUtc;
+        _newRecord.OccurredTimeZone = occurred.ZoneId;
         _newRecord.RecordedByUserName = await CurrentUserNameAsync() ?? "unknown";
         Db.BackupRecords.Add(_newRecord);
         await Db.SaveChangesAsync();
         Db.ChangeTracker.Clear();
+        await Audit.RecordUserActionAsync(_userId ?? "", _userDisplayName ?? "unknown", "BackupRecordLogged", "BackupRecord", _newRecord.Id.ToString(), _overview?.Instance.Name ?? $"Instance #{Id}",
+            reason: $"Manual entry: {_newRecord.Type} {_newRecord.Status}", afterJson: EvidenceAuditSnapshot.Backup(_newRecord));
         Toasts.Success($"Backup result logged ({_newRecord.Status}).");
         await Load();
     }
 
     private async Task LogRestore()
     {
-        var occurredUtc = _newRestoreOccurredLocal.ToUniversalTime();
-        if (occurredUtc > DateTime.UtcNow.AddMinutes(1))
+        if (ResolveOccurred(_newRestoreOccurredLocal, _restoreEntryZone, out var timeError) is not { } occurred)
         {
-            _restoreFormError = "Occurrence time can't be in the future.";
+            _restoreFormError = timeError;
             return;
         }
+        if (_newRestore.EvidenceReference.Length > EvidenceHistoryCsvImporter.MaxEvidenceReferenceLength)
+        {
+            _restoreFormError = $"Evidence reference is longer than {EvidenceHistoryCsvImporter.MaxEvidenceReferenceLength} characters.";
+            return;
+        }
+        var occurredUtc = occurred.Utc;
 
         _restoreFormError = null;
         _newRestore.DatabaseInstanceId = Id;
         _newRestore.TimestampUtc = occurredUtc;
+        _newRestore.OccurredTimeZone = occurred.ZoneId;
+        _newRestore.EvidenceReference = _newRestore.EvidenceReference.Trim();
         _newRestore.LinkedBackupRecordId = _newRestoreLinkedBackupId == 0 ? null : _newRestoreLinkedBackupId;
         _newRestore.RecordedByUserName = await CurrentUserNameAsync() ?? "unknown";
         Db.RestoreEvents.Add(_newRestore);
         await Db.SaveChangesAsync();
         Db.ChangeTracker.Clear();
+        await Audit.RecordUserActionAsync(_userId ?? "", _userDisplayName ?? "unknown", "RestoreEventLogged", "RestoreEvent", _newRestore.Id.ToString(), _overview?.Instance.Name ?? $"Instance #{Id}",
+            reason: $"Manual entry: {_newRestore.Reason} restore, {_newRestore.Outcome}", afterJson: EvidenceAuditSnapshot.Restore(_newRestore));
         Toasts.Success($"Restore logged ({_newRestore.Outcome}).");
         await Load();
     }
@@ -1163,7 +1347,8 @@ else
         await Db.SaveChangesAsync();
         Db.ChangeTracker.Clear();
         await Audit.RecordUserActionAsync(_userId ?? "", _userDisplayName ?? "unknown", "BackupRecordCorrected", "BackupRecord", _correctingBackupId.ToString(), _overview!.Instance.Name,
-            reason: _correctionReason, beforeJson: $"{{\"Status\":\"{currentStatus}\"}}", afterJson: $"{{\"Status\":\"{_correctedBackupStatus}\"}}");
+            reason: _correctionReason, beforeJson: EvidenceAuditSnapshot.BackupCorrectionSide(currentStatus, currentNotes),
+            afterJson: EvidenceAuditSnapshot.BackupCorrectionSide(_correctedBackupStatus, _correctedBackupNotes));
         Toasts.Success("Correction recorded. The original entry is kept.");
         await Load();
     }
@@ -1192,7 +1377,8 @@ else
         await Db.SaveChangesAsync();
         Db.ChangeTracker.Clear();
         await Audit.RecordUserActionAsync(_userId ?? "", _userDisplayName ?? "unknown", "RestoreEventCorrected", "RestoreEvent", _correctingRestoreId.ToString(), _overview!.Instance.Name,
-            reason: _correctionReasonRestore, beforeJson: $"{{\"Outcome\":\"{currentOutcome}\"}}", afterJson: $"{{\"Outcome\":\"{_correctedRestoreOutcome}\"}}");
+            reason: _correctionReasonRestore, beforeJson: EvidenceAuditSnapshot.RestoreCorrectionSide(currentOutcome, currentNotes),
+            afterJson: EvidenceAuditSnapshot.RestoreCorrectionSide(_correctedRestoreOutcome, _correctedRestoreNotes));
         Toasts.Success("Correction recorded. The original entry is kept.");
         await Load();
     }
@@ -1225,22 +1411,27 @@ else
     {
         _archivePreview = ArchivePreviewBuilder.Build(await ArchiveService.PreviewAsync(Id));
         _archiveReason = "";
+        _archiveError = null;
+        _archiveKind = ArchiveKind.None;
         _showArchiveConfirm = true;
     }
 
     private async Task ConfirmArchive()
     {
-        if (string.IsNullOrWhiteSpace(_archiveReason))
+        if (_archiveKind != ArchiveKind.Mistake || string.IsNullOrWhiteSpace(_archiveReason))
         {
             return;
         }
 
-        var ok = await ArchiveService.ArchiveAsync(Id, _archiveReason, _userId ?? "", _userDisplayName ?? "unknown");
+        var outcome = await ArchiveService.ArchiveAsync(Id, _archiveReason, _userId ?? "", _userDisplayName ?? "unknown");
         Db.ChangeTracker.Clear();
-        if (ok)
+        if (!outcome.Ok)
         {
-            Toasts.Success($"{_overview?.Instance.Name} archived.");
+            _archiveError = outcome.Message;
+            return;
         }
+
+        Toasts.Success($"{_overview?.Instance.Name} archived.");
         Nav.NavigateTo("/instances");
     }
 
@@ -1331,14 +1522,6 @@ else
         EvidenceLevel.RestoreTested => "OnTrack",
         EvidenceLevel.ReportedSuccess => "Overdue",
         _ => "NeverBackedUp"
-    };
-
-    private static string EvidenceTooltip(EvidenceLevel level) => level switch
-    {
-        EvidenceLevel.Discovered => "A file was found on the shared drive. That shows it exists, not that anyone confirmed it.",
-        EvidenceLevel.ReportedSuccess => "Logged by hand as successful. A report, not file proof.",
-        EvidenceLevel.RestoreTested => "A restore has since succeeded from this instance, proving the chain recoverable.",
-        _ => ""
     };
 
     private static string ScannerFreshnessClass(ScannerFreshness freshness) => freshness switch

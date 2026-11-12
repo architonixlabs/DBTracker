@@ -39,7 +39,7 @@ else
         <select id="policy-select" class="form-select" value="@_selectedPolicyId" @onchange="OnPolicyChanged">
             @foreach (var p in _policies)
             {
-                <option value="@p.Id">@p.Name (v@p.Version: every @p.ExpectedBackupIntervalHours h, retain @(p.RetentionPolicyDays?.ToString() ?? "org default") d, restore-test every @(p.RestoreTestIntervalDays?.ToString() ?? "org default") d)</option>
+                <option value="@p.Id">@p.Name (v@(p.Version): every @p.ExpectedBackupIntervalHours h, retain @(p.RetentionPolicyDays?.ToString() ?? "org default") d, restore-test every @(p.RestoreTestIntervalDays?.ToString() ?? "org default") d)</option>
             }
         </select>
         <button type="button" class="btn btn-outline-secondary mt-3" @onclick="RefreshPreview" disabled="@(_selectedPolicyId == 0)">
@@ -87,6 +87,9 @@ else
 @code {
     [SupplyParameterFromQuery] public string? Ids { get; set; }
 
+    /// <summary>Preselects a policy, e.g. when coming from a policy edit to apply its new version.</summary>
+    [SupplyParameterFromQuery] public int? Policy { get; set; }
+
     private List<int> _instanceIds = new();
     private List<BackupPolicy> _policies = new();
     private int _selectedPolicyId;
@@ -115,7 +118,7 @@ else
         }
         if (_policies.Count > 0)
         {
-            _selectedPolicyId = _policies[0].Id;
+            _selectedPolicyId = Policy is { } requested && _policies.Any(p => p.Id == requested) ? requested : _policies[0].Id;
         }
         _loaded = true;
 

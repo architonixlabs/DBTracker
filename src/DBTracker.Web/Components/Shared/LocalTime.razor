@@ -1,0 +1,53 @@
+@* G11: a UTC instant in the viewer's own zone with the zone named, and the UTC time beside it, so no time on screen silently uses the server's zone. *@
+@implements IDisposable
+@inject ViewerTimeZone Viewer
+@inject IJSRuntime JS
+
+@if (Utc is { } utc)
+{
+    var u = DateTime.SpecifyKind(utc, DateTimeKind.Utc);
+    var (main, zone, utcPart) = Parts(u);
+    <time datetime="@u.ToString("yyyy-MM-ddTHH:mm:ssZ")" title="@($"{u:yyyy-MM-dd HH:mm:ss} UTC")">@main<span class="text-muted"> @zone</span>@if (utcPart is not null)
+        {<span class="text-muted small"> · @utcPart</span>}</time>
+}
+else
+{
+    <span>@Empty</span>
+}
+
+@code {
+    [Parameter] public DateTime? Utc { get; set; }
+
+    /// <summary>Format of the viewer-local part.</summary>
+    [Parameter] public string Format { get; set; } = "MMM d, yyyy h:mm tt";
+
+    /// <summary>Also show the UTC time beside the local one (on by default; turn off in dense tables).</summary>
+    [Parameter] public bool ShowUtc { get; set; } = true;
+
+    [Parameter] public string Empty { get; set; } = "Never";
+
+    private (string Main, string Zone, string? UtcPart) Parts(DateTime u)
+    {
+        var offset = EventTimeZones.OffsetLabel(Viewer.Zone.GetUtcOffset(u));
+        if (!Viewer.Known || offset == "UTC")
+        {
+            return (u.ToString(Format), "UTC", null);
+        }
+
+        return (Viewer.ToViewer(u).ToString(Format), $"({offset})", ShowUtc ? $"{u:HH:mm} UTC" : null);
+    }
+
+    protected override void OnInitialized() => Viewer.Changed += OnZoneChanged;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!Viewer.Known)
+        {
+            await Viewer.EnsureLoadedAsync(JS);
+        }
+    }
+
+    private void OnZoneChanged() => InvokeAsync(StateHasChanged);
+
+    public void Dispose() => Viewer.Changed -= OnZoneChanged;
+}

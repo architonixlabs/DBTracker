@@ -1,0 +1,268 @@
+@page "/assurance/import"
+@attribute [Authorize(Roles = Roles.CanEditPolicy)]
+@using DBTracker.Infrastructure.Recovery
+@inject MaintenanceEvidenceService Maintenance
+@inject CapacityPlanningService Capacity
+@inject ToastService Toasts
+@inject IJSRuntime JS
+@inject AuthenticationStateProvider AuthProvider
+
+<PageTitle>Import assurance evidence · DBTracker</PageTitle>
+
+<div class="app-topbar">
+    <div>
+        <h1>Import assurance evidence</h1>
+        <div class="subtitle">
+            Bring in integrity-check, replication or failover-drill and maintenance-job results, or capacity and performance measurements, exported
+            from your monitoring or job system. These are recorded results, not live monitoring, and importing runs nothing on any database.
+        </div>
+    </div>
+    <button type="button" class="btn btn-outline-secondary" @onclick="DownloadTemplate" data-testid="download-assurance-template">
+        <i class="bi bi-download" aria-hidden="true"></i> Download CSV template
+    </button>
+</div>
+
+<div class="dbt-card" style="max-width: 900px;">
+    <h2 class="h6 text-muted mb-3">File</h2>
+    <fieldset class="mb-3">
+        <legend class="form-label small mb-1">What the file contains</legend>
+        <div class="form-check form-check-inline">
+            <input class="form-check-input" type="radio" name="import-kind" id="import-kind-results" checked="@(_kind == Kind.Results)" @onchange="() => SetKind(Kind.Results)" data-testid="import-kind-results" />
+            <label class="form-check-label small" for="import-kind-results">Integrity, HA and maintenance results</label>
+        </div>
+        <div class="form-check form-check-inline">
+            <input class="form-check-input" type="radio" name="import-kind" id="import-kind-capacity" checked="@(_kind == Kind.Capacity)" @onchange="() => SetKind(Kind.Capacity)" data-testid="import-kind-capacity" />
+            <label class="form-check-label small" for="import-kind-capacity">Capacity and performance measurements</label>
+        </div>
+    </fieldset>
+    <p class="text-muted small mb-3" id="assurance-import-help">
+        The first row must be a header; columns can be in any order. Rows match instances by name, ignoring case. A result or measurement that is
+        already recorded is skipped, so importing the same file again is safe; a row that clashes with a recorded one is shown and not imported,
+        because recorded evidence is never overwritten. Lines starting with <code>#</code> are ignored. Times are UTC. Maximum file size is 2 MB.
+    </p>
+    <details class="mb-3">
+        <summary class="small">Column guide</summary>
+        <table class="table table-sm dbt-table mt-2 mb-0" aria-label="Import columns and the values they accept">
+            <thead><tr><th scope="col">Column</th><th scope="col">Required</th><th scope="col">Accepts</th></tr></thead>
+            <tbody>
+                @foreach (var column in Guide)
+                {
+                    <tr>
+                        <td class="small"><code>@column.Name</code></td>
+                        <td class="small">@(column.Required ? "Yes" : "")</td>
+                        <td class="small">@column.Help</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </details>
+    <label class="form-label small" for="assurance-import-file">CSV file</label>
+    <InputFile id="assurance-import-file" OnChange="OnFileSelected" class="form-control" accept=".csv" aria-describedby="assurance-import-help" disabled="@_parsing" data-testid="assurance-import-file" />
+    @if (_parsing)
+    {
+        <p class="text-muted small mt-2 mb-0" role="status">Reading @_fileName…</p>
+    }
+    else if (_fileError is not null)
+    {
+        <p class="small mt-2 mb-0" role="alert" style="color:var(--dbt-failed);">@_fileError</p>
+    }
+</div>
+
+@if (_rows is not null)
+{
+    <div class="dbt-card mt-4" data-testid="assurance-import-preview">
+        <h2 class="h6 text-muted mb-3">Preview of @_fileName</h2>
+        <p class="mb-3" role="status" data-testid="assurance-import-counts">
+            <span style="color:var(--dbt-ontrack)">@_rows.Count(r => r.Plan == EvidenceImportRowPlan.Create) new</span>,
+            <span class="text-muted">@_rows.Count(r => r.Plan == EvidenceImportRowPlan.Skip) already recorded (skip)</span>
+            @if (_rows.Any(r => r.Plan == EvidenceImportRowPlan.Conflict))
+            {
+                <span>, <span style="color:var(--dbt-failed)">@_rows.Count(r => r.Plan == EvidenceImportRowPlan.Conflict) conflicting (not imported)</span></span>
+            }
+            @if (_errors.Count > 0)
+            {
+                <span>, <span style="color:var(--dbt-failed)">@_errors.Count row(s) with errors (skipped)</span></span>
+            }
+        </p>
+
+        @if (_errors.Count > 0)
+        {
+            <div class="dbt-table mb-4">
+                <table class="table" aria-label="Rows with errors" data-testid="assurance-import-errors">
+                    <thead><tr><th scope="col">Row</th><th scope="col">Error</th></tr></thead>
+                    <tbody>
+                        @foreach (var e in _errors)
+                        {
+                            <tr><td>@e.RowNumber</td><td class="text-danger">@e.Message</td></tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+
+        @if (_rows.Count > 0)
+        {
+            <div class="dbt-table mb-4">
+                <table class="table" aria-label="Import plan per row" data-testid="assurance-import-rows">
+                    <thead><tr><th scope="col">Row</th><th scope="col">Plan</th><th scope="col">Instance</th><th scope="col">What</th><th scope="col">Detail</th></tr></thead>
+                    <tbody>
+                        @foreach (var row in _rows.Take(100))
+                        {
+                            <tr data-testid="assurance-import-row">
+                                <td class="small">@row.RowNumber</td>
+                                <td><span class="badge-health dot @PlanClass(row.Plan)">@row.Plan</span></td>
+                                <td class="small">@row.InstanceName</td>
+                                <td class="small">@row.What</td>
+                                <td class="small text-muted">@row.Reason</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+            @if (_rows.Count > 100)
+            {
+                <p class="text-muted small">…and @(_rows.Count - 100) more.</p>
+            }
+        }
+
+        @if (_importError is not null)
+        {
+            <p class="small" role="alert" style="color:var(--dbt-failed);">@_importError</p>
+        }
+        <button type="button" class="btn btn-primary" @onclick="Import" disabled="@(_importing || !_rows.Any(r => r.Plan == EvidenceImportRowPlan.Create))" data-testid="apply-assurance-import">
+            <i class="bi bi-upload" aria-hidden="true"></i> @(_importing ? "Importing…" : $"Record {_rows.Count(r => r.Plan == EvidenceImportRowPlan.Create)} new row(s)")
+        </button>
+    </div>
+}
+
+@code {
+    private enum Kind { Results, Capacity }
+
+    private sealed record PreviewRow(int RowNumber, EvidenceImportRowPlan Plan, string InstanceName, string What, string? Reason);
+
+    private const long MaxFileBytes = 2 * 1024 * 1024;
+
+    private Kind _kind = Kind.Results;
+    private string? _fileName, _content, _fileError, _importError;
+    private List<PreviewRow>? _rows;
+    private IReadOnlyList<ImportRowError> _errors = [];
+    private bool _parsing, _importing;
+
+    private IReadOnlyList<ImportColumnHelp> Guide => _kind == Kind.Results ? MaintenanceEvidenceCsvImporter.ColumnGuide : CapacityMeasurementCsvImporter.ColumnGuide;
+
+    private async Task SetKind(Kind kind)
+    {
+        _kind = kind;
+        if (_content is not null)
+        {
+            await BuildPreview();
+        }
+    }
+
+    private async Task OnFileSelected(InputFileChangeEventArgs e)
+    {
+        _rows = null;
+        _fileError = _importError = null;
+        _fileName = e.File.Name;
+        if (e.File.Size > MaxFileBytes)
+        {
+            _fileError = $"{e.File.Name} is larger than 2 MB. Split it into smaller files and import each one.";
+            return;
+        }
+
+        _parsing = true;
+        try
+        {
+            using var stream = e.File.OpenReadStream(maxAllowedSize: MaxFileBytes);
+            using var reader = new StreamReader(stream);
+            _content = await reader.ReadToEndAsync();
+            await BuildPreview();
+        }
+        catch (Exception)
+        {
+            _fileError = $"Couldn't read {e.File.Name}. Check that it is a UTF-8 CSV file and try again.";
+        }
+        finally
+        {
+            _parsing = false;
+        }
+    }
+
+    private async Task BuildPreview()
+    {
+        if (_content is null)
+        {
+            return;
+        }
+
+        if (_kind == Kind.Results)
+        {
+            var preview = await Maintenance.PreviewImportAsync(_content);
+            _errors = preview.Errors;
+            _rows = preview.Rows.Select(r => new PreviewRow(r.RowNumber, r.Plan, r.InstanceName,
+                r.Record is { } m ? $"{m.CheckType} {m.Outcome}, {m.RanAtUtc:yyyy-MM-dd HH:mm}" + (string.IsNullOrWhiteSpace(m.NodeOrDeploymentLabel) ? "" : $" on {m.NodeOrDeploymentLabel}") : "",
+                r.Reason)).ToList();
+        }
+        else
+        {
+            var preview = await Capacity.PreviewImportAsync(_content);
+            _errors = preview.Errors;
+            _rows = preview.Rows.Select(r => new PreviewRow(r.RowNumber, r.Plan, r.InstanceName,
+                r.Record is { } m ? $"{m.MeasurementType} {m.Value:N1} {m.Unit}, {m.MeasuredAtUtc:yyyy-MM-dd HH:mm}" : "",
+                r.Reason)).ToList();
+        }
+    }
+
+    private async Task Import()
+    {
+        if (_content is null)
+        {
+            return;
+        }
+
+        _importing = true;
+        try
+        {
+            var state = await AuthProvider.GetAuthenticationStateAsync();
+            var userId = state.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? "";
+            var userName = state.User.Identity?.Name ?? "unknown";
+            var roles = state.User.Claims.Where(c => c.Type == System.Security.Claims.ClaimTypes.Role).Select(c => c.Value).ToList();
+
+            var (ok, message, _) = _kind == Kind.Results
+                ? await Maintenance.ApplyImportAsync(_content, _fileName ?? "", userId, userName, roles)
+                : await Capacity.ApplyImportAsync(_content, _fileName ?? "", userId, userName, roles);
+            if (!ok)
+            {
+                _importError = message;
+                return;
+            }
+
+            _importError = null;
+            Toasts.Success($"Import complete: {message}");
+            await BuildPreview();
+        }
+        catch (Exception)
+        {
+            _importError = "The import failed and nothing was saved. Reload the file and try again.";
+        }
+        finally
+        {
+            _importing = false;
+        }
+    }
+
+    private async Task DownloadTemplate()
+    {
+        var (name, csv) = _kind == Kind.Results
+            ? ("dbtracker-assurance-results-template.csv", MaintenanceEvidenceCsvImporter.TemplateCsv())
+            : ("dbtracker-capacity-measurements-template.csv", CapacityMeasurementCsvImporter.TemplateCsv());
+        await JS.InvokeVoidAsync("dbtracker.downloadCsv", name, csv);
+    }
+
+    private static string PlanClass(EvidenceImportRowPlan plan) => plan switch
+    {
+        EvidenceImportRowPlan.Create => "OnTrack",
+        EvidenceImportRowPlan.Skip => "NeverBackedUp",
+        _ => "Failed"
+    };
+}

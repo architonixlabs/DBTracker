@@ -45,15 +45,33 @@ public static class ChangeCompletionGateEvaluator
             {
                 reasons.Add("A new successful backup/restore-evidence check has not passed.");
             }
+            else if (validation.LinkedBackupRecordId is null && validation.LinkedRestoreEventId is null)
+            {
+                reasons.Add("Backup/restore evidence is marked Passed, but no backup or restore record is linked to prove it.");
+            }
         }
 
+        var approverIdsByScope = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         foreach (var scope in RequiredSignoffScopes)
         {
-            var hasApproval = signoffs.Any(s => string.Equals(s.ReviewerScope, scope, StringComparison.OrdinalIgnoreCase) && s.Outcome == SignoffOutcome.Approved);
-            if (!hasApproval)
+            var approval = signoffs
+                .Where(s => string.Equals(s.ReviewerScope, scope, StringComparison.OrdinalIgnoreCase) && s.Outcome == SignoffOutcome.Approved)
+                .OrderByDescending(s => s.SignedAtUtc)
+                .FirstOrDefault();
+            if (approval is null)
             {
                 reasons.Add($"Missing sign-off: {scope}.");
             }
+            else if (!string.IsNullOrWhiteSpace(approval.ReviewerUserId))
+            {
+                approverIdsByScope[scope] = approval.ReviewerUserId;
+            }
+        }
+
+        // One person approving both required scopes would make the second sign-off meaningless.
+        if (approverIdsByScope.Count == RequiredSignoffScopes.Length && approverIdsByScope.Values.Distinct(StringComparer.Ordinal).Count() < approverIdsByScope.Count)
+        {
+            reasons.Add($"The {string.Join(" and ", RequiredSignoffScopes)} sign-offs must come from different people.");
         }
 
         if (rehearsalResult is { BlocksNormalReadiness: true })

@@ -1,4 +1,5 @@
 using DBTracker.Core.Services;
+using DBTracker.Infrastructure.Audit;
 using DBTracker.Infrastructure.Diagnostics;
 using DBTracker.Infrastructure.Identity;
 using Microsoft.AspNetCore.Identity;
@@ -10,7 +11,7 @@ using Microsoft.Extensions.Logging;
 
 namespace DBTracker.Infrastructure.Notifications;
 
-/// <summary>Recomputes every active instance's health and alerts (in-app, plus email to the contact and Email/Both subscribers) when it crosses into an alertable state, opening, escalating or closing the instance's incident in step.</summary>
+/// <summary>Recomputes every active instance's health and alerts (in-app, plus email to the contact and Email/Both subscribers outside their quiet hours) when it crosses into an alertable state, opening, escalating or closing the instance's incident in step.</summary>
 /// <remarks>Alerts:IntervalMinutes (default 10); &lt;= 0 disables it.</remarks>
 public class AlertCheckHostedService(
     IServiceScopeFactory scopeFactory,
@@ -63,26 +64,38 @@ public class AlertCheckHostedService(
     {
         using var scope = scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<DBTrackerDbContext>();
-        var emailSender = scope.ServiceProvider.GetRequiredService<IEmailSender>();
-        var webhookSender = scope.ServiceProvider.GetRequiredService<IWebhookSender>();
-        var notifications = scope.ServiceProvider.GetRequiredService<NotificationService>();
-        var subscriptionService = scope.ServiceProvider.GetRequiredService<NotificationSubscriptionService>();
-        var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+        var context = new AlertContext(
+            scope.ServiceProvider.GetRequiredService<NotificationService>(),
+            scope.ServiceProvider.GetRequiredService<NotificationSubscriptionService>(),
+            scope.ServiceProvider.GetRequiredService<NotificationPreferenceService>(),
+            scope.ServiceProvider.GetRequiredService<DeliveryAttemptService>(),
+            scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>(),
+            scope.ServiceProvider.GetRequiredService<IEmailSender>(),
+            scope.ServiceProvider.GetRequiredService<IWebhookSender>(),
+            logger);
 
         var graceHours = configuration.GetValue("Alerts:NeverBackedUpGraceHours", 24);
         var escalationMinutes = configuration.GetValue("Alerts:EscalationIntervalMinutes", 240);
+        var emailOnRecovery = configuration.GetValue("Alerts:EmailOnRecovery", true);
 
         var instances = await db.DatabaseInstances
             .Where(i => !i.IsArchived)
             .Include(i => i.BackupRecords)
+            .Include(i => i.RestoreEvents).ThenInclude(r => r.Corrections)
             .AsSplitQuery()
             .ToListAsync(ct);
 
         var now = DateTime.UtcNow;
 
+        // Incident changes are audited after the save, when a newly opened incident has its id.
+        var incidentAudit = new List<IncidentAuditEntry>();
+
         foreach (var instance in instances)
         {
-            var health = BackupHealthCalculator.Compute(instance, instance.BackupRecords.ToList(), now);
+            var records = instance.BackupRecords.ToList();
+            var health = BackupHealthCalculator.Compute(instance, records, now);
+            var lastSuccessUtc = BackupHealthCalculator.LastSuccessfulBackupUtc(records, now);
+            var evidence = BackupEvidenceClassifier.ClassifyLatestSuccess(records, instance.RestoreEvents.ToList(), now);
 
             // Maintenance suppresses the alert and the state update, so a still-bad health re-alerts when the window ends.
             // Any open incident stays open; it just doesn't page anyone until then.
@@ -99,25 +112,42 @@ public class AlertCheckHostedService(
             if (isAlertableNow)
             {
                 var incident = await IncidentLifecycle.OpenOrContinueAsync(db, instance.Id, health, now);
+                if (incident.Id == 0)
+                {
+                    incidentAudit.Add(new(incident, "IncidentOpened", instance.Name,
+                        $"Opened because the instance is {AlertMessageBuilder.DescribeHealth(health)}."));
+                }
 
                 if (shouldNotify)
                 {
-                    await RaiseAlertAsync(db, instance, health, now, notifications, subscriptionService, userManager, emailSender, webhookSender, logger, ct);
+                    await RaiseAlertAsync(context, instance, health, lastSuccessUtc, evidence, now, ct);
                 }
                 else if (IncidentEscalationEvaluator.ShouldEscalate(incident, now, escalationMinutes))
                 {
                     incident.EscalationLevel++;
                     incident.LastEscalatedAtUtc = now;
-                    await RaiseAlertAsync(db, instance, health, now, notifications, subscriptionService, userManager, emailSender, webhookSender, logger, ct,
-                        escalationLevel: incident.EscalationLevel);
+                    incidentAudit.Add(new(incident, "IncidentEscalated", instance.Name,
+                        $"Reminder {incident.EscalationLevel}: not acknowledged after {escalationMinutes} minutes. The instance is still {AlertMessageBuilder.DescribeHealth(health)}."));
+                    await RaiseAlertAsync(context, instance, health, lastSuccessUtc, evidence, now, ct, escalationLevel: incident.EscalationLevel);
                 }
             }
             else if (health == Core.Enums.BackupHealth.OnTrack)
             {
-                var hadOpenIncident = await IncidentLifecycle.CloseOpenAsync(db, instance.Id, now);
-                if (hadOpenIncident)
+                var closed = await IncidentLifecycle.CloseOpenAsync(db, instance.Id, now);
+                incidentAudit.AddRange(closed.Select(c => new IncidentAuditEntry(c, "IncidentClosed", instance.Name, "Backup health recovered to on track.")));
+                if (closed.Count > 0)
                 {
-                    await notifications.CreateAsync(instance, $"{instance.Name} has recovered: backup health is on track again.", Core.Enums.NotificationSeverity.Info);
+                    var message = AlertMessageBuilder.BuildRecovery(instance.Name, lastSuccessUtc, evidence);
+                    await context.Notifications.CreateAsync(instance, message, Core.Enums.NotificationSeverity.Info);
+
+                    // Recovery reaches the same people the alert did, so nobody keeps working an incident that has closed.
+                    if (emailOnRecovery)
+                    {
+                        await EmailRecipientsAsync(context, instance, Core.Enums.DeliveryKind.Recovery,
+                            $"DBTracker: {instance.Name} has recovered",
+                            $"{message}\n\nApplication: {instance.Application}\nCompany: {instance.Company}\n\nThe incident is closed. Open DBTracker for the backup history.",
+                            isCritical: false, now, ct);
+                    }
                 }
             }
 
@@ -129,68 +159,132 @@ public class AlertCheckHostedService(
         }
 
         await db.SaveChangesAsync(ct);
+
+        var audit = scope.ServiceProvider.GetRequiredService<AuditRecorder>();
+        foreach (var entry in incidentAudit)
+        {
+            try
+            {
+                await audit.RecordSystemActionAsync(WorkerName, entry.Action, IncidentService.AuditTargetType, entry.Incident.Id.ToString(),
+                    entry.InstanceName, entry.Reason, ct);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                logger.LogWarning(ex, "Could not audit {Action} for incident {IncidentId}.", entry.Action, entry.Incident.Id);
+            }
+        }
     }
 
+    private sealed record IncidentAuditEntry(Core.Entities.Incident Incident, string Action, string InstanceName, string Reason);
+
+    private sealed record AlertContext(
+        NotificationService Notifications,
+        NotificationSubscriptionService Subscriptions,
+        NotificationPreferenceService Preferences,
+        DeliveryAttemptService DeliveryAttempts,
+        UserManager<ApplicationUser> UserManager,
+        IEmailSender EmailSender,
+        IWebhookSender WebhookSender,
+        ILogger Logger);
+
     private static async Task RaiseAlertAsync(
-        DBTrackerDbContext db,
+        AlertContext context,
         Core.Entities.DatabaseInstance instance,
         Core.Enums.BackupHealth health,
+        DateTime? lastSuccessUtc,
+        Core.Enums.EvidenceLevel? evidence,
         DateTime now,
-        NotificationService notifications,
-        NotificationSubscriptionService subscriptionService,
-        UserManager<ApplicationUser> userManager,
-        IEmailSender emailSender,
-        IWebhookSender webhookSender,
-        ILogger<AlertCheckHostedService> logger,
         CancellationToken ct,
         int? escalationLevel = null)
     {
-        var message = escalationLevel is { } level
-            ? $"{instance.Name} is still {DescribeHealth(health)} (escalation #{level}, unacknowledged)."
-            : $"{instance.Name} is now {DescribeHealth(health)}.";
+        var message = AlertMessageBuilder.BuildAlert(instance.Name, health, lastSuccessUtc, evidence, escalationLevel);
+        var isCritical = health == Core.Enums.BackupHealth.Failed;
 
-        await notifications.CreateAsync(instance, message, health == Core.Enums.BackupHealth.Failed
+        await context.Notifications.CreateAsync(instance, message, isCritical
             ? Core.Enums.NotificationSeverity.Critical
             : Core.Enums.NotificationSeverity.Warning);
 
+        await EmailRecipientsAsync(context, instance, Core.Enums.DeliveryKind.Alert,
+            $"DBTracker alert: {instance.Name} is {AlertMessageBuilder.DescribeHealth(health)}",
+            $"{message}\n\nApplication: {instance.Application}\nCompany: {instance.Company}\n\nOpen DBTracker to view backup history and log a fix.",
+            isCritical, now, ct);
+
+        var webhookResult = await context.WebhookSender.SendAsync(WebhookPayloadBuilder.BuildAlertPayload(instance, health, now), ct);
+
+        // An unconfigured webhook is a choice, not a fault, so it adds no row; configured sends are kept like email.
+        if (webhookResult.Outcome != Core.Enums.EmailSendOutcome.Disabled)
+        {
+            try
+            {
+                await context.DeliveryAttempts.RecordAsync(Core.Enums.DeliveryKind.Alert, instance.Name, [webhookResult],
+                    AuditEventFactory.SystemActorPrefix + WorkerName, attemptedAtUtc: now, ct: ct, channel: DeliveryAttemptService.WebhookChannel);
+            }
+            catch (Exception ex)
+            {
+                context.Logger.LogWarning(ex, "Could not store the webhook delivery attempt for {Instance}.", instance.Name);
+            }
+        }
+    }
+
+    /// <summary>Emails the instance contact and Email/Both subscribers, skipping subscribers in their quiet hours, and stores the attempt.</summary>
+    /// <remarks>Quiet hours belong to subscribers (accounts with preferences), not to the instance contact address, which has none.</remarks>
+    private static async Task EmailRecipientsAsync(
+        AlertContext context,
+        Core.Entities.DatabaseInstance instance,
+        Core.Enums.DeliveryKind kind,
+        string subject,
+        string body,
+        bool isCritical,
+        DateTime now,
+        CancellationToken ct)
+    {
         var recipientEmails = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         if (!string.IsNullOrWhiteSpace(instance.ContactEmail))
         {
             recipientEmails.Add(instance.ContactEmail);
         }
 
-        var subscriberUserIds = await subscriptionService.GetEmailSubscriberUserIdsAsync(instance.Id, instance.Company, instance.OwnerTeamId);
+        var subscriberUserIds = await context.Subscriptions.GetEmailSubscriberUserIdsAsync(instance.Id, instance.Company, instance.OwnerTeamId);
+        var holding = await context.Preferences.GetUsersHoldingEmailAsync(subscriberUserIds, isCritical, now);
+        var held = 0;
         foreach (var userId in subscriberUserIds)
         {
-            var user = await userManager.FindByIdAsync(userId);
-            if (user?.Email is { Length: > 0 } email)
+            var user = await context.UserManager.FindByIdAsync(userId);
+            if (user?.Email is not { Length: > 0 } email || recipientEmails.Contains(email))
             {
-                recipientEmails.Add(email);
+                continue;
             }
+
+            if (holding.Contains(userId))
+            {
+                held++;
+                continue;
+            }
+
+            recipientEmails.Add(email);
         }
 
+        var results = new List<EmailSendResult>(recipientEmails.Count);
         foreach (var email in recipientEmails)
         {
-            var emailResult = await emailSender.SendAsync(
-                email,
-                $"DBTracker alert: {instance.Name} is {DescribeHealth(health)}",
-                $"{message}\n\nApplication: {instance.Application}\nCompany: {instance.Company}\n\nOpen DBTracker to view backup history and log a fix.",
-                ct);
+            var emailResult = await context.EmailSender.SendAsync(email, subject, body, ct);
+            results.Add(emailResult);
 
             if (emailResult.Outcome == Core.Enums.EmailSendOutcome.Failed)
             {
-                logger.LogWarning("Alert email to {Email} for {Instance} failed: {Detail}", email, instance.Name, emailResult.Detail);
+                context.Logger.LogWarning("{Kind} email to {Email} for {Instance} failed: {Detail}", kind, email, instance.Name, emailResult.Detail);
             }
         }
 
-        await webhookSender.SendAsync(WebhookPayloadBuilder.BuildAlertPayload(instance, health, now), ct);
+        try
+        {
+            await context.DeliveryAttempts.RecordAsync(kind, instance.Name, results,
+                AuditEventFactory.SystemActorPrefix + WorkerName, held, now, ct);
+        }
+        catch (Exception ex)
+        {
+            // The history is diagnostic: failing to store it must not stop the sweep saving incident state.
+            context.Logger.LogWarning(ex, "Could not store the delivery attempt for {Instance}.", instance.Name);
+        }
     }
-
-    private static string DescribeHealth(Core.Enums.BackupHealth health) => health switch
-    {
-        Core.Enums.BackupHealth.Overdue => "overdue for backup",
-        Core.Enums.BackupHealth.Failed => "failing backups",
-        Core.Enums.BackupHealth.NeverBackedUp => "never backed up",
-        _ => health.ToString()
-    };
 }

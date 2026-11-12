@@ -33,7 +33,7 @@ else
         <div>
             <h1>Scheduled change windows</h1>
             <div class="subtitle">
-                @_campaign.Name · <a href="/campaigns/@Id">Back to campaign</a> ·
+                @_campaign.Name · <a href="/campaigns/@Id">Back to campaign</a> · <a href="/change-freezes">Change freezes</a> ·
                 Planning a window here never executes anything or sends any notification by itself.
             </div>
         </div>
@@ -84,12 +84,28 @@ else
                     </div>
                     @if (_conflictResult is not null)
                     {
-                        <div class="small mb-2" data-testid="conflict-result">
+                        <div class="small mb-2" data-testid="conflict-result" role="status">
                             @if (_conflictResult.HasFreezeConflicts)
                             {
-                                <div style="color:var(--dbt-overdue);"><strong>Freeze conflicts:</strong>
+                                <div style="color:var(--dbt-failed);" data-testid="freeze-conflicts"><strong>Change freeze:</strong>
                                     <ul class="mb-1">
                                         @foreach (var c in _conflictResult.FreezeConflicts)
+                                        {
+                                            <li>@c</li>
+                                        }
+                                    </ul>
+                                    You can still plan it, but it can't be approved or started unless an approved emergency exception is linked.
+                                </div>
+                            }
+                            else
+                            {
+                                <div style="color:var(--dbt-ontrack);">No change freeze covers this time for these instances' environments.</div>
+                            }
+                            @if (_conflictResult.HasWindowOverlaps)
+                            {
+                                <div style="color:var(--dbt-overdue);" data-testid="window-overlaps"><strong>Overlapping change windows:</strong>
+                                    <ul class="mb-1">
+                                        @foreach (var c in _conflictResult.WindowOverlaps)
                                         {
                                             <li>@c</li>
                                         }
@@ -98,7 +114,7 @@ else
                             }
                             else
                             {
-                                <div style="color:var(--dbt-ontrack);">No freeze conflicts with other scheduled windows.</div>
+                                <div style="color:var(--dbt-ontrack);">No overlap with other scheduled windows on these instances.</div>
                             }
                             @foreach (var m in _conflictResult.MaintenanceOverlaps)
                             {
@@ -107,7 +123,11 @@ else
                         </div>
                     }
 
-                    <button class="btn btn-primary btn-sm" @onclick="CreateWindow" disabled="@(string.IsNullOrWhiteSpace(_title) || _start == default || _end == default)" data-testid="create-window-button">Plan window</button>
+                    <button class="btn btn-primary btn-sm" @onclick="CreateWindow" disabled="@(string.IsNullOrWhiteSpace(_title) || _start == default || _end == default || _selectedScopes.Count == 0)" data-testid="create-window-button">Plan window</button>
+                    @if (_selectedScopes.Count == 0)
+                    {
+                        <p class="small text-muted mt-1 mb-0" role="status">Pick at least one required approval. A window with no approvers could start unchecked.</p>
+                    }
                 </div>
             </div>
         </AuthorizeView>

@@ -12,7 +12,8 @@ public record BackupActivityRow(
     BackupStatus Status,
     double? SizeMb,
     double? DurationMinutes,
-    BackupSource Source);
+    BackupSource Source,
+    EvidenceLevel? Evidence = null);
 
 public record BackupActivitySummary(int TotalRuns, int SuccessCount, int FailedCount, int MissedCount, double TotalSizeMb, double? AvgDurationMinutes);
 

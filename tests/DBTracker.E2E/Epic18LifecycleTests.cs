@@ -115,10 +115,26 @@ public class Epic18LifecycleTests
         await Assertions.Expect(advisoryCard).ToContainTextAsync("Version matching alone cannot confirm vulnerability");
 
         await advisoryCard.GetByRole(AriaRole.Button, new LocatorGetByRoleOptions { Name = "Confirm" }).First.ClickAsync();
+        var form = advisoryCard.Locator("[data-testid=advisory-review-form]");
+        await Assertions.Expect(form).ToBeVisibleAsync();
+
+        // A confirmed exposure needs evidence, an owner and a deadline; saving without evidence is refused.
+        await form.Locator("[data-testid=advisory-review-save]").ClickAsync();
+        await Assertions.Expect(form.Locator("[role=alert]")).ToContainTextAsync("Evidence is required");
+
+        await form.Locator("[data-testid=advisory-review-evidence]").FillAsync("Build 8.0.36 confirmed; the affected plugin is enabled.");
+        await form.Locator("[data-testid=advisory-review-owner]").FillAsync("Priya Nair");
+        await form.Locator("[data-testid=advisory-review-deadline]").FillAsync(DateTime.UtcNow.AddDays(14).ToString("yyyy-MM-dd"));
+        await form.Locator("[data-testid=advisory-review-target]").FillAsync("8.0.41");
+        await form.Locator("[data-testid=advisory-review-save]").ClickAsync();
         await _page.WaitForTimeoutAsync(500);
 
         await Assertions.Expect(_page.Locator(".dbt-toast").First).ToContainTextAsync("reviewed");
         await Assertions.Expect(advisoryCard).ToContainTextAsync("Reviewed by priya.nair@architonixlabs.com");
+        var summary = advisoryCard.Locator("[data-testid=advisory-review-summary]").First;
+        await Assertions.Expect(summary).ToContainTextAsync("Owner: Priya Nair");
+        await Assertions.Expect(summary).ToContainTextAsync("Target patch: 8.0.41");
+        await Assertions.Expect(summary).ToContainTextAsync("Unverified");
     }
 
     [Test]
@@ -170,7 +186,7 @@ public class Epic18LifecycleTests
     private async Task LoginAsync(string email)
     {
         await GotoAsync("/Account/Login");
-        await _page.FillAsync("input[autocomplete=username]", email);
+        await _page.FillAsync("input[autocomplete~=username]", email);
         await _page.FillAsync("input[autocomplete=current-password]", "ArxDemo#2026!");
 
         await _page.ClickAsync("button[type=submit]");

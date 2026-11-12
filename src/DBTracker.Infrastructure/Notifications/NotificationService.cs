@@ -6,10 +6,11 @@ using Microsoft.EntityFrameworkCore;
 namespace DBTracker.Infrastructure.Notifications;
 
 public record NotificationInboxItem(int Id, int? DatabaseInstanceId, string InstanceName, string Message, NotificationSeverity Severity, DateTime CreatedAtUtc, bool IsRead);
-public record NotificationInboxPage(IReadOnlyList<NotificationInboxItem> Items, int TotalCount, int UnreadCount);
+/// <param name="InboxOptedOut">The user has subscriptions but none deliver in-app, so the inbox is empty by their choice.</param>
+public record NotificationInboxPage(IReadOnlyList<NotificationInboxItem> Items, int TotalCount, int UnreadCount, bool InboxOptedOut = false);
 
 /// <summary>Uses a short-lived DbContext per call because NotificationBell renders beside every page's own scoped context, and sharing one would race.</summary>
-/// <remarks>Notifications are broadcast; read state is per user. On a user's first visit, every existing notification is marked read, so nobody starts with a backlog of unread alerts.</remarks>
+/// <remarks>Notifications are broadcast; read state is per user. On a user's first visit, the notifications that already exist are marked read once, so nobody starts with a backlog of old alerts; later ones arrive unread.</remarks>
 public class NotificationService(IDbContextFactory<DBTrackerDbContext> factory)
 {
     public async Task<NotificationInboxPage> GetInboxAsync(string userId, int page = 1, int pageSize = 20)
@@ -17,31 +18,34 @@ public class NotificationService(IDbContextFactory<DBTrackerDbContext> factory)
         using var db = await factory.CreateDbContextAsync();
         await EnsureBackfilledAsync(db, userId);
 
-        var subscriptions = await db.NotificationSubscriptions.AsNoTracking().Where(s => s.UserId == userId).ToListAsync();
-        var readIds = await db.NotificationReadStates.AsNoTracking().Where(s => s.UserId == userId).Select(s => s.NotificationId).ToListAsync();
-        var readSet = readIds.ToHashSet();
+        var subscriptions = await SubscriptionsAsync(db, userId);
+        var visible = Visible(db, subscriptions);
 
-        var all = await db.Notifications.AsNoTracking().OrderByDescending(n => n.CreatedAtUtc).ToListAsync();
-        var visible = subscriptions.Count == 0
-            ? all
-            : all.Where(n => NotificationSubscriptionMatcher.AnyMatches(subscriptions, n.DatabaseInstanceId ?? 0, n.Company, n.OwnerTeamId)).ToList();
+        // Filtering, counting and paging run in the database; only the requested page is loaded.
+        var totalCount = await visible.CountAsync();
+        var unreadCount = await Unread(db, visible, userId).CountAsync();
+        var pageItems = await visible
+            .OrderByDescending(n => n.CreatedAtUtc).ThenByDescending(n => n.Id)
+            .Skip(Math.Max(0, page - 1) * Math.Max(1, pageSize))
+            .Take(Math.Max(1, pageSize))
+            .Select(n => new NotificationInboxItem(n.Id, n.DatabaseInstanceId, n.InstanceName, n.Message, n.Severity, n.CreatedAtUtc,
+                db.NotificationReadStates.Any(r => r.UserId == userId && r.NotificationId == n.Id)))
+            .ToListAsync();
 
-        var unreadCount = visible.Count(n => !readSet.Contains(n.Id));
-        var pageItems = visible
-            .Skip(Math.Max(0, page - 1) * pageSize)
-            .Take(pageSize)
-            .Select(n => new NotificationInboxItem(n.Id, n.DatabaseInstanceId, n.InstanceName, n.Message, n.Severity, n.CreatedAtUtc, readSet.Contains(n.Id)))
-            .ToList();
-
-        return new NotificationInboxPage(pageItems, visible.Count, unreadCount);
+        return new NotificationInboxPage(pageItems, totalCount, unreadCount, NotificationSubscriptionMatcher.InboxIsOptedOut(subscriptions));
     }
 
     /// <summary>Bell-dropdown convenience: most recent page of this user's personal inbox.</summary>
     public async Task<List<NotificationInboxItem>> GetRecentAsync(string userId, int take = 20) =>
         (await GetInboxAsync(userId, page: 1, pageSize: take)).Items.ToList();
 
-    public async Task<int> UnreadCountAsync(string userId) =>
-        (await GetInboxAsync(userId, page: 1, pageSize: 1)).UnreadCount;
+    public async Task<int> UnreadCountAsync(string userId)
+    {
+        using var db = await factory.CreateDbContextAsync();
+        await EnsureBackfilledAsync(db, userId);
+        var subscriptions = await SubscriptionsAsync(db, userId);
+        return await Unread(db, Visible(db, subscriptions), userId).CountAsync();
+    }
 
     public async Task MarkReadAsync(string userId, int notificationId)
     {
@@ -59,20 +63,23 @@ public class NotificationService(IDbContextFactory<DBTrackerDbContext> factory)
         using var db = await factory.CreateDbContextAsync();
         await EnsureBackfilledAsync(db, userId);
 
-        var subscriptions = await db.NotificationSubscriptions.AsNoTracking().Where(s => s.UserId == userId).ToListAsync();
-        var readIds = await db.NotificationReadStates.AsNoTracking().Where(s => s.UserId == userId).Select(s => s.NotificationId).ToHashSetAsync();
-
-        var all = await db.Notifications.AsNoTracking().Select(n => new { n.Id, n.DatabaseInstanceId, n.Company, n.OwnerTeamId }).ToListAsync();
-        var visible = subscriptions.Count == 0
-            ? all
-            : all.Where(n => NotificationSubscriptionMatcher.AnyMatches(subscriptions, n.DatabaseInstanceId ?? 0, n.Company, n.OwnerTeamId)).ToList();
+        var subscriptions = await SubscriptionsAsync(db, userId);
+        // Only the ids of this user's unread, visible notifications come back.
+        var unreadIds = await Unread(db, Visible(db, subscriptions), userId).Select(n => n.Id).ToListAsync();
 
         var now = DateTime.UtcNow;
-        var newlyRead = visible.Where(n => !readIds.Contains(n.Id))
-            .Select(n => new NotificationReadState { UserId = userId, NotificationId = n.Id, ReadAtUtc = now });
-        db.NotificationReadStates.AddRange(newlyRead);
+        db.NotificationReadStates.AddRange(unreadIds.Select(id => new NotificationReadState { UserId = userId, NotificationId = id, ReadAtUtc = now }));
         await db.SaveChangesAsync();
     }
+
+    private static Task<List<NotificationSubscription>> SubscriptionsAsync(DBTrackerDbContext db, string userId) =>
+        db.NotificationSubscriptions.AsNoTracking().Where(s => s.UserId == userId).ToListAsync();
+
+    private static IQueryable<Notification> Visible(DBTrackerDbContext db, IReadOnlyCollection<NotificationSubscription> subscriptions) =>
+        db.Notifications.AsNoTracking().Where(NotificationInboxFilter.For(subscriptions));
+
+    private static IQueryable<Notification> Unread(DBTrackerDbContext db, IQueryable<Notification> visible, string userId) =>
+        visible.Where(n => !db.NotificationReadStates.Any(r => r.UserId == userId && r.NotificationId == n.Id));
 
     public async Task<Notification> CreateAsync(DatabaseInstance instance, string message, NotificationSeverity severity)
     {
@@ -91,22 +98,34 @@ public class NotificationService(IDbContextFactory<DBTrackerDbContext> factory)
         return notification;
     }
 
+    /// <summary>Runs once per user, recorded in NotificationInboxStarts even when there is nothing to mark, so alerts
+    /// raised after the first visit are never pre-marked read.</summary>
     private static async Task EnsureBackfilledAsync(DBTrackerDbContext db, string userId)
     {
-        var hasAnyReadState = await db.NotificationReadStates.AnyAsync(s => s.UserId == userId);
-        if (hasAnyReadState)
-        {
-            return;
-        }
-
-        var existingIds = await db.Notifications.Select(n => n.Id).ToListAsync();
-        if (existingIds.Count == 0)
+        if (await db.NotificationInboxStarts.AnyAsync(s => s.UserId == userId))
         {
             return;
         }
 
         var now = DateTime.UtcNow;
-        db.NotificationReadStates.AddRange(existingIds.Select(id => new NotificationReadState { NotificationId = id, UserId = userId, ReadAtUtc = now }));
-        await db.SaveChangesAsync();
+        db.NotificationInboxStarts.Add(new NotificationInboxStart { UserId = userId, StartedAtUtc = now });
+
+        // A user with read state from before this marker existed has already been backfilled; only record the marker.
+        var hasAnyReadState = await db.NotificationReadStates.AnyAsync(s => s.UserId == userId);
+        if (!hasAnyReadState)
+        {
+            var existingIds = await db.Notifications.Where(n => n.CreatedAtUtc <= now).Select(n => n.Id).ToListAsync();
+            db.NotificationReadStates.AddRange(existingIds.Select(id => new NotificationReadState { NotificationId = id, UserId = userId, ReadAtUtc = now }));
+        }
+
+        try
+        {
+            await db.SaveChangesAsync();
+        }
+        catch (DbUpdateException)
+        {
+            // The bell and the inbox page can start the same user's first visit at once; the other call already recorded it.
+            db.ChangeTracker.Clear();
+        }
     }
 }

@@ -13,6 +13,9 @@ public record RecoveryEvidenceView(
     BackupChainCoverageResult Coverage,
     IReadOnlyList<RestoreEvent> RecentRestores);
 
+/// <summary>Copy expectations set with the recovery objectives. Null means not recorded.</summary>
+public record CopyExpectations(bool? RequiresOffsite, bool? RequiresImmutable, bool? RequiresEncrypted);
+
 /// <summary>Recovery objectives and chain coverage. Coverage is computed live from the recorded requirements and backups; none recorded is Unknown.</summary>
 public class RecoveryObjectiveService(IDbContextFactory<DBTrackerDbContext> factory, AuditRecorder audit)
 {
@@ -44,7 +47,8 @@ public class RecoveryObjectiveService(IDbContextFactory<DBTrackerDbContext> fact
         return new RecoveryEvidenceView(instance, objective, requirements, coverage, restores);
     }
 
-    public async Task SetObjectiveAsync(int instanceId, int? rpoMinutes, int? rtoMinutes, string encryptionKeyNote, string offsiteCopyNote, string notes, string actorName)
+    public async Task SetObjectiveAsync(int instanceId, int? rpoMinutes, int? rtoMinutes, string encryptionKeyNote, string offsiteCopyNote, string notes,
+        CopyExpectations expectations, string actorName)
     {
         using var db = await factory.CreateDbContextAsync();
         var objective = await db.RecoveryObjectives.FirstOrDefaultAsync(o => o.DatabaseInstanceId == instanceId);
@@ -59,13 +63,18 @@ public class RecoveryObjectiveService(IDbContextFactory<DBTrackerDbContext> fact
         objective.EncryptionKeyReferenceNote = encryptionKeyNote;
         objective.OffsiteCopyReferenceNote = offsiteCopyNote;
         objective.Notes = notes;
+        objective.RequiresOffsiteCopy = expectations.RequiresOffsite;
+        objective.RequiresImmutableCopy = expectations.RequiresImmutable;
+        objective.RequiresEncryptedCopies = expectations.RequiresEncrypted;
         objective.UpdatedAtUtc = DateTime.UtcNow;
         objective.UpdatedBy = actorName;
         await db.SaveChangesAsync();
 
+        static string Show(bool? value) => value switch { true => "required", false => "not required", null => "not set" };
         var instance = await db.DatabaseInstances.FirstAsync(i => i.Id == instanceId);
         await audit.RecordUserActionAsync("", actorName, "RecoveryObjectiveSet", "DatabaseInstance", instanceId.ToString(), instance.Name,
-            reason: $"RPO {rpoMinutes?.ToString() ?? "unset"}m / RTO {rtoMinutes?.ToString() ?? "unset"}m");
+            reason: $"RPO {rpoMinutes?.ToString() ?? "unset"}m / RTO {rtoMinutes?.ToString() ?? "unset"}m; offsite {Show(expectations.RequiresOffsite)}, " +
+                    $"immutable {Show(expectations.RequiresImmutable)}, encrypted {Show(expectations.RequiresEncrypted)}");
     }
 
     public async Task<BackupChainRequirement> AddChainRequirementAsync(int instanceId, ChainMemberType memberType, bool isRequired, int? maxAgeHoursOverride, string notes, string actorName)

@@ -13,7 +13,8 @@ public class ChangeCompletionGateEvaluatorTests
         IntegrityCheckOutcome = EvidenceCheckOutcome.Passed,
         JobsPermissionsOutcome = EvidenceCheckOutcome.Passed,
         HaReplicationStateOutcome = EvidenceCheckOutcome.Passed,
-        NewBackupRestoreEvidenceOutcome = EvidenceCheckOutcome.Passed
+        NewBackupRestoreEvidenceOutcome = EvidenceCheckOutcome.Passed,
+        LinkedBackupRecordId = 42
     };
 
     private static List<ChangeValidationSignoff> PassingSignoffs() =>
@@ -125,5 +126,54 @@ public class ChangeCompletionGateEvaluatorTests
         Assert.True(result.CanComplete);
         Assert.True(result.UsedException);
         Assert.NotEmpty(result.BlockingReasons); // never silently erased
+    }
+
+    [Fact]
+    public void PassedBackupEvidence_WithoutALinkedRecord_Blocks()
+    {
+        var validation = PassingValidation();
+        validation.LinkedBackupRecordId = null;
+
+        var result = ChangeCompletionGateEvaluator.Evaluate(validation, PassingSignoffs(), PassingRehearsal, hasActiveException: false);
+
+        Assert.False(result.CanComplete);
+        Assert.Contains(result.BlockingReasons, r => r.Contains("no backup or restore record is linked"));
+    }
+
+    [Fact]
+    public void LinkedRestore_SatisfiesTheEvidenceLink()
+    {
+        var validation = PassingValidation();
+        validation.LinkedBackupRecordId = null;
+        validation.LinkedRestoreEventId = 3;
+
+        Assert.True(ChangeCompletionGateEvaluator.Evaluate(validation, PassingSignoffs(), PassingRehearsal, false).CanComplete);
+    }
+
+    [Fact]
+    public void SamePersonSigningBothRequiredScopes_Blocks()
+    {
+        List<ChangeValidationSignoff> signoffs =
+        [
+            new() { ReviewerScope = "DBA", Outcome = SignoffOutcome.Approved, ReviewerUserId = "u1" },
+            new() { ReviewerScope = "Application owner", Outcome = SignoffOutcome.Approved, ReviewerUserId = "u1" }
+        ];
+
+        var result = ChangeCompletionGateEvaluator.Evaluate(PassingValidation(), signoffs, PassingRehearsal, false);
+
+        Assert.False(result.CanComplete);
+        Assert.Contains(result.BlockingReasons, r => r.Contains("different people"));
+    }
+
+    [Fact]
+    public void DifferentPeopleSigningTheRequiredScopes_CanComplete()
+    {
+        List<ChangeValidationSignoff> signoffs =
+        [
+            new() { ReviewerScope = "DBA", Outcome = SignoffOutcome.Approved, ReviewerUserId = "u1" },
+            new() { ReviewerScope = "Application owner", Outcome = SignoffOutcome.Approved, ReviewerUserId = "u2" }
+        ];
+
+        Assert.True(ChangeCompletionGateEvaluator.Evaluate(PassingValidation(), signoffs, PassingRehearsal, false).CanComplete);
     }
 }

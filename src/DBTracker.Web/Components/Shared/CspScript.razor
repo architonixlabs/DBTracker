@@ -1,0 +1,14 @@
+@* A <script> that carries this request's CSP nonce. Every script tag in a component must use this; a bare <script>
+   is refused by the Content-Security-Policy (see SecurityHeaderPolicy). *@
+<script nonce="@Nonce" src="@Src" type="@Type"></script>
+
+@code {
+    [CascadingParameter] private HttpContext? HttpContext { get; set; }
+
+    [Parameter, EditorRequired] public string Src { get; set; } = "";
+
+    /// <summary>Optional, for example "module".</summary>
+    [Parameter] public string? Type { get; set; }
+
+    private string Nonce => HttpContext?.Items[DBTracker.Web.Services.SecurityHeadersMiddleware.NonceKey] as string ?? "";
+}

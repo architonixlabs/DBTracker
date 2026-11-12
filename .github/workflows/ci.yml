@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+    branches: [main, "backlog/**", "release/**"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    # The tray app targets .NET Framework 4.6.2, so the job runs on Windows.
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Build
+        run: dotnet build DBTracker.slnx -c Release --nologo
+
+      - name: Unit tests
+        run: dotnet test tests/DBTracker.UnitTests -c Release --no-build --nologo --logger "trx;LogFileName=unit.trx"
+
+      - name: Tray logic tests
+        run: dotnet test tests/DBTracker.Tray.Tests -c Release --nologo --logger "trx;LogFileName=tray.trx"
+
+      - name: SBOM (CycloneDX)
+        run: |
+          dotnet tool install --global CycloneDX --version 6.3.1
+          dotnet-CycloneDX DBTracker.slnx -o sbom -fn dbtracker-sbom.json -F Json
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results-and-sbom
+          path: |
+            **/TestResults/*.trx
+            sbom/dbtracker-sbom.json
+
+  # The E2E suite needs SQL Server with Windows authentication and a browser, and SonarQube,
+  # Dependency-Track and DefectDojo are LAN-only, so both run locally: see "Quality checks" in README.md.

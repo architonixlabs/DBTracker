@@ -40,7 +40,24 @@ else if (_instance.IsArchived)
         <a class="btn btn-outline-secondary" href="/instances/@Id">Back to instance detail</a>
     </div>
 }
-else if (_view is not null)
+else if (_view is null)
+{
+    <div class="dbt-card" style="max-width:700px;">
+        <h1 class="h5">@_instance.Name: retirement</h1>
+        <p class="small text-muted">
+            No retirement checklist is open. Start one when this database is being decommissioned or replaced. Its gates
+            (consumers moved, jobs removed, final backup kept, rollback window closed, legal hold, sign-offs, cost review)
+            must pass before it is archived, and a plain archive is refused while the checklist is open.
+        </p>
+        <div class="d-flex gap-2 flex-wrap">
+            <AuthorizeView Roles="@Roles.CanEditPolicy">
+                <button type="button" class="btn btn-primary btn-sm" @onclick="StartChecklist" data-testid="start-retirement-checklist">Start retirement checklist</button>
+            </AuthorizeView>
+            <a class="btn btn-outline-secondary btn-sm" href="/instances/@Id">Back to instance detail</a>
+        </div>
+    </div>
+}
+else
 {
     <div class="app-topbar">
         <div>
@@ -150,10 +167,39 @@ else if (_view is not null)
                         @(_completing ? "Retiring…" : "Complete retirement (archive)")
                     </button>
                 </div>
+
+                <div class="dbt-card mt-3">
+                    <h2 class="h6 text-muted mb-3">Cancel this checklist</h2>
+                    <p class="small text-muted">If it was started by mistake, or the database is staying. The checklist and its sign-offs are kept in history, and the instance stays active.</p>
+                    <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="OpenCancelDialog" data-testid="open-cancel-checklist">Cancel checklist…</button>
+                </div>
             </AuthorizeView>
         </div>
     </div>
 }
+
+@* Outside the branches above, so it survives the re-render that follows a cancel and can hand focus to Start. *@
+<ModalDialog Title="Cancel this retirement checklist?" @bind-Open="_showCancelDialog" FallbackFocusSelector="[data-testid=start-retirement-checklist]" data-testid="cancel-checklist-dialog">
+    @if (_view is not null && _instance is not null)
+    {
+        <p class="small mb-3">
+            Cancelling closes checklist #@_view.Checklist.Id for <strong>@_instance.Name</strong>. The checklist and its sign-offs stay in
+            history, and the instance stays active. Use this if it was started by mistake, or the database is staying.
+        </p>
+        <label class="form-label small mb-1" for="cancel-reason">Reason (required)</label>
+        <input id="cancel-reason" class="form-control form-control-sm" @bind="_cancelReason" @bind:event="oninput" data-testid="cancel-checklist-reason" />
+        @if (_cancelError is not null)
+        {
+            @* Shown here, not as a toast: the page behind a modal is inert, so a toast there would go unannounced. *@
+            <p class="small mt-2 mb-0" role="alert" style="color:var(--dbt-failed)">@_cancelError</p>
+        }
+        <div class="dbt-dialog-actions">
+            <button type="button" class="btn btn-danger btn-sm" @onclick="CancelChecklist"
+                    disabled="@string.IsNullOrWhiteSpace(_cancelReason)" data-testid="cancel-checklist-button">Cancel checklist</button>
+            <button type="button" class="btn btn-outline-secondary btn-sm" autofocus @onclick="() => _showCancelDialog = false">Keep checklist</button>
+        </div>
+    }
+</ModalDialog>
 
 @code {
     [Parameter] public int Id { get; set; }
@@ -163,10 +209,19 @@ else if (_view is not null)
     private string? _userId, _userName;
     private RetirementChecklistView? _view;
     private bool _completing;
+    private bool _showCancelDialog;
+    private string? _cancelError;
+
+    private void OpenCancelDialog()
+    {
+        _cancelReason = "";
+        _cancelError = null;
+        _showCancelDialog = true;
+    }
 
     private bool _legalHoldReviewed, _costContractReviewed;
     private string _legalHoldNotes = "", _costContractNotes = "", _finalBackupNotes = "", _externalCleanupNotes = "";
-    private string _appOwnerName = "", _platformOwnerName = "", _retirementReason = "";
+    private string _appOwnerName = "", _platformOwnerName = "", _retirementReason = "", _cancelReason = "";
 
     protected override async Task OnInitializedAsync()
     {
@@ -199,8 +254,8 @@ else if (_view is not null)
             return;
         }
 
-        var checklist = await Checklists.GetOrCreateForInstanceAsync(Id, null, _userName ?? "unknown");
-        _view = await Checklists.GetViewAsync(checklist.Id);
+        var checklist = await Checklists.GetOpenForInstanceAsync(Id);
+        _view = checklist is null ? null : await Checklists.GetViewAsync(checklist.Id);
         if (_view is not null)
         {
             _legalHoldReviewed = _view.Checklist.LegalHoldReviewed;
@@ -234,6 +289,29 @@ else if (_view is not null)
         Toasts.Success("Platform sign-off recorded.");
         _platformOwnerName = "";
         await Load();
+    }
+
+    private async Task StartChecklist()
+    {
+        await Checklists.GetOrCreateForInstanceAsync(Id, null, _userName ?? "unknown");
+        Toasts.Success("Retirement checklist started.");
+        await Load();
+    }
+
+    private async Task CancelChecklist()
+    {
+        var (ok, reason) = await Checklists.CancelAsync(_view!.Checklist.Id, _cancelReason, _userId ?? "unknown", _userName ?? "unknown");
+        if (ok)
+        {
+            Toasts.Success("Retirement checklist cancelled. The instance stays active.");
+            _cancelReason = "";
+            _showCancelDialog = false;
+            await Load();
+        }
+        else
+        {
+            _cancelError = reason;
+        }
     }
 
     private async Task CompleteRetirement()

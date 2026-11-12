@@ -17,6 +17,8 @@ public class BackupCopyLocation
     /// <summary>Flagged by whoever recorded this location — a claim, not a verified guarantee of provider-side immutability.</summary>
     public bool IsImmutableFlagged { get; set; }
     public bool EncryptionExpected { get; set; }
+    /// <summary>What the last check found about encryption at rest for this copy. Null means not checked, which never counts as encrypted.</summary>
+    public bool? EncryptionConfirmed { get; set; }
 
     /// <summary>Raw storage path/URL/bucket reference — sensitive, masked by role wherever displayed or exported.</summary>
     public string StoragePathOrReference { get; set; } = string.Empty;

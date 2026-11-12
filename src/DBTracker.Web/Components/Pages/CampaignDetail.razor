@@ -77,10 +77,43 @@ else
                     <dt class="col-5">DBA owner</dt><dd class="col-7">@OrNotRecorded(_campaign.AccountableDbaTeam?.Name)</dd>
                     <dt class="col-5">App owner</dt><dd class="col-7">@OrNotRecorded(_campaign.AccountableAppTeam?.Name)</dd>
                     <dt class="col-5">Platform owner</dt><dd class="col-7">@OrNotRecorded(_campaign.AccountablePlatformTeam?.Name)</dd>
-                    <dt class="col-5">Estimated effort</dt><dd class="col-7">@(_campaign.EstimatedEffortHours is { } effort ? $"{effort:0.#} h" : "Not estimated")</dd>
-                    <dt class="col-5">Estimated cost</dt><dd class="col-7">@(_campaign.EstimatedCost?.ToString("0.##") ?? "Not estimated")</dd>
-                    <dt class="col-5">Blockers</dt><dd class="col-7">@OrNotRecorded(_campaign.Blockers)</dd>
+                    <dt class="col-5">Estimated effort</dt><dd class="col-7" data-testid="campaign-effort">@(_campaign.EstimatedEffortHours is { } effort ? $"{effort:0.#} h" : "Not estimated")</dd>
+                    <dt class="col-5">Estimated cost</dt><dd class="col-7" data-testid="campaign-cost">@CostText(_campaign.EstimatedCost)</dd>
+                    <dt class="col-5">Blockers</dt><dd class="col-7" data-testid="campaign-blockers">@OrNotRecorded(_campaign.Blockers)</dd>
+                    <dt class="col-5">Milestones</dt><dd class="col-7" data-testid="campaign-milestones" style="white-space:pre-line;">@OrNotRecorded(_campaign.Milestones)</dd>
                 </dl>
+
+                @if (_editingPlan)
+                {
+                    <div class="p-2 mb-2" style="border:1px dashed var(--dbt-line);" data-testid="campaign-plan-form">
+                        <div class="mb-2"><label class="form-label small mb-1" for="plan-blockers">Blockers</label><textarea id="plan-blockers" class="form-control form-control-sm" rows="2" maxlength="1000" @bind="_planBlockers" @bind:event="oninput" data-testid="plan-blockers"></textarea></div>
+                        <div class="mb-2"><label class="form-label small mb-1" for="plan-milestones">Milestones (one per line, with dates)</label><textarea id="plan-milestones" class="form-control form-control-sm" rows="3" maxlength="2000" @bind="_planMilestones" @bind:event="oninput" data-testid="plan-milestones"></textarea></div>
+                        <div class="row g-2 mb-2">
+                            <div class="col-4"><label class="form-label small mb-1" for="plan-effort">Effort (hours)</label><input id="plan-effort" type="number" min="0" step="0.5" class="form-control form-control-sm" @bind="_planEffort" data-testid="plan-effort" /></div>
+                            <div class="col-4">
+                                @if (_canViewCost)
+                                {
+                                    <label class="form-label small mb-1" for="plan-cost">Cost</label><input id="plan-cost" type="number" min="0" step="0.01" class="form-control form-control-sm" @bind="_planCost" data-testid="plan-cost" />
+                                }
+                                else
+                                {
+                                    <span class="form-label small mb-1 d-block">Cost</span><span class="small text-muted">Only Admin or IT Manager can enter or see cost.</span>
+                                }
+                            </div>
+                            <div class="col-4"><label class="form-label small mb-1" for="plan-ticket">Change ticket</label><input id="plan-ticket" class="form-control form-control-sm" maxlength="200" @bind="_planTicket" @bind:event="oninput" /></div>
+                        </div>
+                        @if (_planError is not null)
+                        {
+                            <p class="small mb-1" role="alert" style="color:var(--dbt-failed);">@_planError</p>
+                        }
+                        <button class="btn btn-primary btn-sm" @onclick="SavePlan" data-testid="plan-save">Save plan</button>
+                        <button class="btn btn-link btn-sm" @onclick="() => _editingPlan = false">Cancel</button>
+                    </div>
+                }
+                else
+                {
+                    <button class="btn btn-link btn-sm p-0 mb-2" @onclick="OpenPlan" data-testid="plan-edit">Edit blockers, milestones and estimates</button>
+                }
 
                 <p class="small text-muted mb-1">Affected deployments:</p>
                 <ul class="small mb-2">
@@ -126,6 +159,26 @@ else
                         <label class="visually-hidden" for="campaigndetail-transition-reason">Transition reason</label><input id="campaigndetail-transition-reason" class="form-control form-control-sm" placeholder="Reason" @bind="_transitionReason" @bind:event="oninput" />
                         <button class="btn btn-primary btn-sm" @onclick="Transition" data-testid="transition-button">Transition</button>
                     </div>
+                    <p class="small text-muted mb-2">Ready, Scheduled and In progress need a current, passing rehearsal for every instance (or an active campaign exception). Scheduled and In progress also need an approval, with no scope's latest decision a rejection.</p>
+                    @if (_transitionGates.TryGetValue(_nextState, out var gate) && (!gate.Allowed || gate.UsedException))
+                    {
+                        <div class="small mb-2" role="status" data-testid="transition-gate" style="color:@(gate.Allowed ? "var(--dbt-overdue)" : "var(--dbt-failed)");">
+                            @if (gate.Allowed)
+                            {
+                                <span>Moving to @_nextState relies on an active exception instead of rehearsal evidence.</span>
+                            }
+                            else
+                            {
+                                <span>Moving to @_nextState is blocked:</span>
+                                <ul class="mb-0">
+                                    @foreach (var r in gate.BlockingReasons)
+                                    {
+                                        <li>@r</li>
+                                    }
+                                </ul>
+                            }
+                        </div>
+                    }
                 }
 
                 @if (_campaign.StateTransitions.Count == 0)
@@ -139,7 +192,7 @@ else
                         <tbody>
                             @foreach (var t in _campaign.StateTransitions.OrderByDescending(t => t.TransitionedAtUtc))
                             {
-                                <tr><td class="small">@t.TransitionedAtUtc.ToLocalTime().ToString("MMM d, h:mm tt")</td><td class="small">@t.FromState → @t.ToState</td><td class="small">@t.TransitionedBy</td><td class="small">@t.Reason</td></tr>
+                                <tr><td class="small"><LocalTime Utc="t.TransitionedAtUtc" Format="MMM d, h:mm tt" ShowUtc="false" /></td><td class="small">@t.FromState → @t.ToState</td><td class="small">@t.TransitionedBy</td><td class="small">@t.Reason</td></tr>
                             }
                         </tbody>
                     </table>
@@ -163,7 +216,7 @@ else
                         <div class="mb-2 pb-2 d-flex justify-content-between align-items-start" style="border-bottom:1px solid var(--dbt-line);" data-testid="alternative-row">
                             <div>
                                 <strong class="small">@alt.Type</strong> <span class="small text-muted">: @alt.Description</span>
-                                <div class="small text-muted">@(alt.EstimatedEffortHours is { } altEffort ? $"{altEffort:0.#} h" : "Effort not estimated") · @(alt.EstimatedCost?.ToString("0.##") ?? "Cost not estimated") · @alt.RiskNotes</div>
+                                <div class="small text-muted" data-testid="alternative-estimates">@(alt.EstimatedEffortHours is { } altEffort ? $"{altEffort:0.#} h" : "Effort not estimated") · @(alt.EstimatedCost is null ? "Cost not estimated" : $"Cost {CostText(alt.EstimatedCost)}") · Risk: @(string.IsNullOrWhiteSpace(alt.RiskNotes) ? "not recorded" : alt.RiskNotes)</div>
                             </div>
                             @if (alt.IsChosen)
                             {
@@ -188,6 +241,14 @@ else
                     </div>
                     <div class="col-8"><label class="form-label small mb-1" for="campaigndetail-description">Description</label><input class="form-control form-control-sm" placeholder="Description" id="campaigndetail-description" @bind="_altDescription" @bind:event="oninput" /></div>
                 </div>
+                <div class="row g-2 mb-2">
+                    <div class="col-4"><label class="form-label small mb-1" for="alt-effort">Effort (hours)</label><input id="alt-effort" type="number" min="0" step="0.5" class="form-control form-control-sm" @bind="_altEffort" data-testid="alt-effort" /></div>
+                    @if (_canViewCost)
+                    {
+                        <div class="col-4"><label class="form-label small mb-1" for="alt-cost">Cost</label><input id="alt-cost" type="number" min="0" step="0.01" class="form-control form-control-sm" @bind="_altCost" data-testid="alt-cost" /></div>
+                    }
+                    <div class="@(_canViewCost ? "col-4" : "col-8")"><label class="form-label small mb-1" for="alt-risk">Risk</label><input id="alt-risk" class="form-control form-control-sm" placeholder="Main risk of this option" maxlength="1000" @bind="_altRisk" @bind:event="oninput" data-testid="alt-risk" /></div>
+                </div>
                 <button class="btn btn-outline-secondary btn-sm" @onclick="AddAlternative" disabled="@string.IsNullOrWhiteSpace(_altDescription)">Add alternative</button>
             </div>
         </div>
@@ -203,11 +264,11 @@ else
                 else
                 {
                     <table aria-label="Approval history" class="table table-sm dbt-table mb-2">
-                        <thead><tr><th>Scope</th><th>Decision</th><th>Approver</th><th>When</th></tr></thead>
+                        <thead><tr><th>Scope</th><th>Decision</th><th>Approver</th><th>When</th><th>Notes</th></tr></thead>
                         <tbody>
                             @foreach (var a in _campaign.Approvals.OrderByDescending(a => a.DecidedAtUtc))
                             {
-                                <tr><td class="small">@a.Scope</td><td class="small">@a.Decision</td><td class="small">@a.ApproverName</td><td class="small">@a.DecidedAtUtc.ToLocalTime().ToString("MMM d, h:mm tt")</td></tr>
+                                <tr><td class="small">@a.Scope</td><td class="small">@a.Decision</td><td class="small">@a.ApproverName</td><td class="small"><LocalTime Utc="a.DecidedAtUtc" Format="MMM d, h:mm tt" ShowUtc="false" /></td><td class="small" data-testid="approval-notes">@a.Notes</td></tr>
                             }
                         </tbody>
                     </table>
@@ -224,7 +285,9 @@ else
                         </select>
                     </div>
                     <div class="col-4"><label class="form-label small mb-1" for="campaigndetail-approver-name">Approver name</label><input class="form-control form-control-sm" placeholder="Approver name" id="campaigndetail-approver-name" @bind="_approverName" @bind:event="oninput" /></div>
+                    <div class="col-12"><label class="form-label small mb-1" for="campaigndetail-approval-notes">Notes</label><input class="form-control form-control-sm" placeholder="Conditions or reasons for the decision" id="campaigndetail-approval-notes" maxlength="1000" @bind="_approvalNotes" @bind:event="oninput" data-testid="approval-notes-input" /></div>
                 </div>
+                <p class="small text-muted mb-2">Scheduling needs at least one approval. A rejection blocks scheduling until a later approval for the same scope.</p>
                 <button class="btn btn-outline-secondary btn-sm" @onclick="RecordApproval" disabled="@(string.IsNullOrWhiteSpace(_approvalScope) || string.IsNullOrWhiteSpace(_approverName))">Record approval</button>
             </div>
         </div>
@@ -245,17 +308,62 @@ else
     private string _transitionReason = "";
 
     private CampaignAlternativeType _altType = CampaignAlternativeType.Upgrade;
-    private string _altDescription = "";
+    private string _altDescription = "", _altRisk = "";
+    private decimal? _altEffort, _altCost;
 
-    private string _approvalScope = "", _approverName = "";
+    private string _approvalScope = "", _approverName = "", _approvalNotes = "";
     private CampaignApprovalDecision _approvalDecision = CampaignApprovalDecision.Approved;
+
+    private Dictionary<CampaignState, CampaignTransitionGateResult> _transitionGates = new();
+    private bool _canViewCost, _editingPlan;
+    private string _planBlockers = "", _planMilestones = "", _planTicket = "";
+    private decimal? _planEffort, _planCost;
+    private string? _planError;
 
     protected override async Task OnInitializedAsync()
     {
         var state = await AuthProvider.GetAuthenticationStateAsync();
         _userName = state.User.Identity?.Name ?? "unknown";
+        _canViewCost = Roles.CommercialEvidencePolicy.Split(',').Any(state.User.IsInRole);
         await Load();
         _loaded = true;
+    }
+
+    private string CostText(decimal? amount) => amount is not { } a
+        ? "Not estimated"
+        : _canViewCost ? a.ToString("N2", System.Globalization.CultureInfo.InvariantCulture) : CostEvidenceMasker.MaskedPlaceholder;
+
+    private void OpenPlan()
+    {
+        if (_campaign is null)
+        {
+            return;
+        }
+        _planBlockers = _campaign.Blockers;
+        _planMilestones = _campaign.Milestones;
+        _planEffort = _campaign.EstimatedEffortHours;
+        _planCost = _campaign.EstimatedCost;
+        _planTicket = _campaign.ChangeTicketReference;
+        _planError = null;
+        _editingPlan = true;
+    }
+
+    private async Task SavePlan()
+    {
+        if (_planEffort < 0 || _planCost < 0)
+        {
+            _planError = "Effort and cost can't be negative.";
+            return;
+        }
+        var ok = await Campaigns.UpdatePlanAsync(Id, _planBlockers.Trim(), _planMilestones.Trim(), _planEffort, _planCost, _canViewCost, _planTicket.Trim(), _userName ?? "unknown");
+        if (!ok)
+        {
+            _planError = "The plan wasn't saved. Check the values and try again.";
+            return;
+        }
+        Toasts.Success("Campaign plan saved.");
+        _editingPlan = false;
+        await Load();
     }
 
     private async Task Load()
@@ -268,6 +376,11 @@ else
             if (next.Count > 0)
             {
                 _nextState = next[0];
+            }
+            _transitionGates = new();
+            foreach (var s in next)
+            {
+                _transitionGates[s] = await Campaigns.EvaluateTransitionGateAsync(Id, s);
             }
             _completionGate = await CompletionGate.EvaluateAsync(Id);
         }
@@ -302,9 +415,15 @@ else
 
     private async Task AddAlternative()
     {
-        await Campaigns.AddAlternativeAsync(Id, _altType, _altDescription, null, null, "", _userName ?? "unknown");
+        if (_altEffort < 0 || _altCost < 0)
+        {
+            Toasts.Error("Effort and cost can't be negative.");
+            return;
+        }
+        await Campaigns.AddAlternativeAsync(Id, _altType, _altDescription, _altEffort, _canViewCost ? _altCost : null, _altRisk.Trim(), _userName ?? "unknown");
         Toasts.Success("Alternative recorded.");
-        _altDescription = "";
+        _altDescription = _altRisk = "";
+        _altEffort = _altCost = null;
         await Load();
     }
 
@@ -317,9 +436,9 @@ else
 
     private async Task RecordApproval()
     {
-        await Campaigns.RecordApprovalAsync(Id, _approvalScope, _approvalDecision, _approverName, "", _userName ?? "unknown");
+        await Campaigns.RecordApprovalAsync(Id, _approvalScope.Trim(), _approvalDecision, _approverName.Trim(), _approvalNotes.Trim(), _userName ?? "unknown");
         Toasts.Success("Approval recorded.");
-        _approvalScope = _approverName = "";
+        _approvalScope = _approverName = _approvalNotes = "";
         await Load();
     }
 

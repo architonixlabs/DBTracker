@@ -37,6 +37,8 @@ public static class InstallStartupExtensions
         var state = new InstallState(builder.Configuration, featureEnabled, installed);
 
         builder.Services.AddSingleton(state);
+        builder.Services.AddSingleton<DatabaseReadiness>();
+        builder.Services.AddHostedService<DatabaseReadinessService>();
         builder.Services.AddSingleton(paths);
         builder.Services.AddSingleton(new SetupKeyStore(paths.SetupKeyFile));
         builder.Services.AddSingleton(new AttemptLimiter(maxFailures: 5, window: TimeSpan.FromMinutes(1)));
@@ -57,17 +59,35 @@ public static class InstallStartupExtensions
             return;
         }
 
-        using var scope = app.Services.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<DBTrackerDbContext>();
-        await db.Database.MigrateAsync();
+        // A few quick tries cover SQL Server finishing its start-up; after that the site opens in a waiting state instead of
+        // crashing, and DatabaseReadinessService keeps retrying (see DatabaseReadiness).
+        var readiness = app.Services.GetRequiredService<DatabaseReadiness>();
+        for (var attempt = 1; attempt <= 4; attempt++)
+        {
+            try
+            {
+                await DatabaseReadiness.MigrateAsync(app.Services, state, CancellationToken.None);
+                readiness.MarkReady();
+                return;
+            }
+            catch (Exception ex)
+            {
+                readiness.MarkFailed(ex);
+                app.Logger.LogWarning("Can't reach the database yet (attempt {Attempt} of 4): {Error}", attempt, readiness.LastError);
+                if (attempt < 4)
+                {
+                    await Task.Delay(DBTracker.Core.Services.DatabaseReadinessGate.StartupBackoff(attempt));
+                }
+            }
+        }
 
+        // Testing and Development need a working database for every test and page; fail loudly there.
         if (!state.InstallFeatureEnabled)
         {
-            await SeedData.SeedAsync(db);
-            await IdentitySeedData.SeedAsync(
-                scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>(),
-                scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>());
+            throw new InvalidOperationException("The database isn't reachable: " + readiness.LastError);
         }
+        app.Logger.LogError("DBTracker started without its database ({Error}). Pages say so and the app retries every {Seconds} seconds.",
+            readiness.LastError, DBTracker.Core.Services.DatabaseReadinessGate.RetryAfterSeconds);
     }
 
     /// <summary>Before setup, every page goes to the wizard; afterwards the wizard is gone (404).</summary>

@@ -12,6 +12,7 @@
 @inject DependencyService Dependencies
 @inject PathAssessmentService PathAssessments
 @inject ReadinessChecklistService Readiness
+@inject VersionIdentityService IdentityService
 @inject TeamService Teams
 @inject AuthenticationStateProvider AuthProvider
 @inject DBTracker.Web.Services.ToastService Toasts
@@ -70,16 +71,51 @@ else
                 {
                     <div class="table-responsive" role="region" aria-label="Technical dependencies" tabindex="0">
                         <table class="table table-sm dbt-table mb-0" data-testid="dependency-table">
-                            <thead><tr><th scope="col">Kind</th><th scope="col">Direction</th><th scope="col">Name</th><th scope="col">Version state</th><th scope="col">Owner team</th><th scope="col">Resolved</th><th scope="col"><span class="visually-hidden">Actions</span></th></tr></thead>
+                            <thead><tr><th scope="col">Kind</th><th scope="col">Direction</th><th scope="col">Name</th><th scope="col">Version state</th><th scope="col">Owner team</th><th scope="col">Evidence and last review</th><th scope="col">Resolved</th><th scope="col"><span class="visually-hidden">Actions</span></th></tr></thead>
                             <tbody>
                                 @foreach (var d in _dependencies)
                                 {
                                     <tr data-testid="dependency-row">
                                         <td class="small">@d.Kind</td>
                                         <td class="small">@d.Direction</td>
-                                        <td class="small">@d.Name @(string.IsNullOrWhiteSpace(d.RecordedVersionText) ? "" : $"({d.RecordedVersionText})")</td>
+                                        <td class="small">
+                                            @d.Name @(string.IsNullOrWhiteSpace(d.RecordedVersionText) ? "" : $"({d.RecordedVersionText})")
+                                            @if (!string.IsNullOrWhiteSpace(d.OsRuntimeConstraint))
+                                            {
+                                                <div class="text-muted">OS or runtime: @d.OsRuntimeConstraint</div>
+                                            }
+                                            @if (!string.IsNullOrWhiteSpace(d.ManagedProviderConstraint))
+                                            {
+                                                <div class="text-muted">Provider: @d.ManagedProviderConstraint</div>
+                                            }
+                                        </td>
                                         <td class="small">@d.VersionState</td>
                                         <td class="small">@(d.OwnerTeam?.Name ?? "None")</td>
+                                        <td class="small" data-testid="dependency-evidence">
+                                            @if (IsLink(d.EvidenceUrl))
+                                            {
+                                                <a href="@d.EvidenceUrl" target="_blank" rel="noopener noreferrer">Evidence</a>
+                                            }
+                                            else if (!string.IsNullOrWhiteSpace(d.EvidenceUrl))
+                                            {
+                                                <span>Evidence: @d.EvidenceUrl</span>
+                                            }
+                                            else
+                                            {
+                                                <span class="text-muted">No evidence recorded</span>
+                                            }
+                                            @if (!string.IsNullOrWhiteSpace(d.EvidenceNotes))
+                                            {
+                                                <div class="text-muted">@d.EvidenceNotes</div>
+                                            }
+                                            <div class="text-muted" data-testid="dependency-last-review">
+                                                @if (d.LastReviewedAtUtc is { } lr) { <span>Reviewed <LocalTime Utc="lr" Format="MMM d, yyyy" ShowUtc="false" /> by @d.LastReviewedBy</span> } else { <span>Never reviewed</span> }
+                                            </div>
+                                            @if (!string.IsNullOrWhiteSpace(d.ResolutionNotes))
+                                            {
+                                                <div class="text-muted">Resolution: @d.ResolutionNotes</div>
+                                            }
+                                        </td>
                                         <td class="small">
                                             @if (d.IsResolved)
                                             {
@@ -149,6 +185,7 @@ else
                         <div class="col-md-3"><label class="form-label small mb-1" for="dep-os">OS or runtime constraint</label><input id="dep-os" class="form-control form-control-sm" placeholder="OS/runtime constraint" @bind="_depOsConstraint" @bind:event="oninput" /></div>
                         <div class="col-md-3"><label class="form-label small mb-1" for="dep-provider">Managed-provider constraint</label><input id="dep-provider" class="form-control form-control-sm" placeholder="Managed-provider constraint" @bind="_depProviderConstraint" @bind:event="oninput" /></div>
                         <div class="col-md-3"><label class="form-label small mb-1" for="dep-evidence">Evidence URL or reference</label><input id="dep-evidence" class="form-control form-control-sm" placeholder="Evidence URL/reference" @bind="_depEvidenceUrl" @bind:event="oninput" /></div>
+                        <div class="col-md-12"><label class="form-label small mb-1" for="dep-evidence-notes">Evidence notes</label><input id="dep-evidence-notes" class="form-control form-control-sm" placeholder="What the evidence shows" maxlength="1000" @bind="_depEvidenceNotes" @bind:event="oninput" data-testid="dependency-evidence-notes" /></div>
                     </div>
                     <button type="button" class="btn btn-primary btn-sm" @onclick="AddDependency" disabled="@string.IsNullOrWhiteSpace(_depName)">Record dependency</button>
                 </AuthorizeView>
@@ -175,7 +212,34 @@ else
                                         <td class="small"><span class="badge-health dot @PathStatusCssClass(a.Status)" data-testid="path-status">@a.Status</span></td>
                                     </tr>
                                     <tr>
-                                        <td colspan="4" class="small text-muted" data-testid="path-reasoning">@a.StatusReasoning</td>
+                                        <td colspan="4" class="small text-muted" data-testid="path-reasoning">
+                                            @a.StatusReasoning
+                                            <div data-testid="path-detail">
+                                                @PathContext("Source", a.SourceEdition, a.SourcePlatform, a.SourceTopology)
+                                                @PathContext("Target", a.TargetEdition, a.TargetPlatform, a.TargetTopology)
+                                                @if (!string.IsNullOrWhiteSpace(a.RequiredIntermediateVersions))
+                                                {
+                                                    <div>Required intermediate versions: @a.RequiredIntermediateVersions</div>
+                                                }
+                                                @if (!string.IsNullOrWhiteSpace(a.DowngradeConstraints))
+                                                {
+                                                    <div>Downgrade constraints: @a.DowngradeConstraints</div>
+                                                }
+                                                @if (!string.IsNullOrWhiteSpace(a.VendorGuidanceNotes))
+                                                {
+                                                    <div>Guidance: @a.VendorGuidanceNotes</div>
+                                                }
+                                                @if (IsLink(a.VendorGuidanceUrl))
+                                                {
+                                                    <div><a href="@a.VendorGuidanceUrl" target="_blank" rel="noopener noreferrer">Vendor guidance</a></div>
+                                                }
+                                                @if (a.MatchedRule is { } rule)
+                                                {
+                                                    <div>Matched rule: @rule.SourceFamily (@rule.SourceBuildMin–@rule.SourceBuildMax) to @rule.TargetFamily (@rule.TargetBuildMin–@rule.TargetBuildMax), @rule.Status, reviewed by @rule.ReviewedBy.</div>
+                                                }
+                                                <div>Evaluated <LocalTime Utc="a.EvaluatedAtUtc" Format="MMM d, yyyy" ShowUtc="false" /> by @a.EvaluatedBy.</div>
+                                            </div>
+                                        </td>
                                     </tr>
                                 }
                             </tbody>
@@ -216,6 +280,23 @@ else
                         <div class="col-6"><label class="form-label small mb-1" for="path-tgt-product">Target product (required)</label><input id="path-tgt-product" class="form-control form-control-sm" placeholder="Target product/family" @bind="_pathTargetProduct" @bind:event="oninput" /></div>
                         <div class="col-6"><label class="form-label small mb-1" for="path-tgt-build">Target build</label><input id="path-tgt-build" class="form-control form-control-sm" placeholder="Target build" @bind="_pathTargetBuild" @bind:event="oninput" /></div>
                     </div>
+                    <div class="row g-2 mb-2">
+                        <div class="col-4"><label class="form-label small mb-1" for="path-src-edition">Source edition</label><input id="path-src-edition" class="form-control form-control-sm" maxlength="100" @bind="_pathSourceEdition" @bind:event="oninput" data-testid="path-src-edition" /></div>
+                        <div class="col-4"><label class="form-label small mb-1" for="path-src-platform">Source platform</label><input id="path-src-platform" class="form-control form-control-sm" placeholder="e.g. Windows, RDS" maxlength="100" @bind="_pathSourcePlatform" @bind:event="oninput" /></div>
+                        <div class="col-4"><label class="form-label small mb-1" for="path-src-topology">Source topology</label><input id="path-src-topology" class="form-control form-control-sm" placeholder="e.g. AG, standalone" maxlength="100" @bind="_pathSourceTopology" @bind:event="oninput" /></div>
+                        <div class="col-4"><label class="form-label small mb-1" for="path-tgt-edition">Target edition</label><input id="path-tgt-edition" class="form-control form-control-sm" maxlength="100" @bind="_pathTargetEdition" @bind:event="oninput" data-testid="path-tgt-edition" /></div>
+                        <div class="col-4"><label class="form-label small mb-1" for="path-tgt-platform">Target platform</label><input id="path-tgt-platform" class="form-control form-control-sm" maxlength="100" @bind="_pathTargetPlatform" @bind:event="oninput" /></div>
+                        <div class="col-4"><label class="form-label small mb-1" for="path-tgt-topology">Target topology</label><input id="path-tgt-topology" class="form-control form-control-sm" maxlength="100" @bind="_pathTargetTopology" @bind:event="oninput" /></div>
+                    </div>
+                    <details class="mb-2">
+                        <summary class="small">Guidance and constraints (a matched rule's values are added automatically)</summary>
+                        <div class="row g-2 mt-1">
+                            <div class="col-6"><label class="form-label small mb-1" for="path-guidance-url">Vendor guidance URL</label><input id="path-guidance-url" class="form-control form-control-sm" maxlength="500" @bind="_pathGuidanceUrl" @bind:event="oninput" /></div>
+                            <div class="col-6"><label class="form-label small mb-1" for="path-guidance-notes">Guidance notes</label><input id="path-guidance-notes" class="form-control form-control-sm" maxlength="1000" @bind="_pathGuidanceNotes" @bind:event="oninput" /></div>
+                            <div class="col-6"><label class="form-label small mb-1" for="path-intermediate">Required intermediate versions</label><input id="path-intermediate" class="form-control form-control-sm" maxlength="500" @bind="_pathIntermediate" @bind:event="oninput" data-testid="path-intermediate" /></div>
+                            <div class="col-6"><label class="form-label small mb-1" for="path-downgrade">Downgrade constraints</label><input id="path-downgrade" class="form-control form-control-sm" maxlength="500" @bind="_pathDowngrade" @bind:event="oninput" /></div>
+                        </div>
+                    </details>
                     <button type="button" class="btn btn-primary btn-sm" @onclick="EvaluatePath" disabled="@(string.IsNullOrWhiteSpace(_pathSourceProduct) || string.IsNullOrWhiteSpace(_pathTargetProduct))">Evaluate path</button>
                 </AuthorizeView>
             </div>
@@ -266,6 +347,27 @@ else
                             {
                                 <p class="small text-muted mb-1">@item.Findings</p>
                             }
+                            @if (item.Status != ReadinessCheckStatus.Unknown || !string.IsNullOrWhiteSpace(item.SourceReference) || !string.IsNullOrWhiteSpace(item.TargetReference) || !string.IsNullOrWhiteSpace(item.RemediationNotes))
+                            {
+                                <dl class="row small text-muted mb-1" data-testid="readiness-item-detail">
+                                    @if (!string.IsNullOrWhiteSpace(item.SourceReference))
+                                    {
+                                        <dt class="col-4 fw-normal">Source evidence</dt><dd class="col-8 mb-0">@item.SourceReference</dd>
+                                    }
+                                    @if (!string.IsNullOrWhiteSpace(item.TargetReference))
+                                    {
+                                        <dt class="col-4 fw-normal">Target evidence</dt><dd class="col-8 mb-0">@item.TargetReference</dd>
+                                    }
+                                    @if (!string.IsNullOrWhiteSpace(item.Reviewer))
+                                    {
+                                        <dt class="col-4 fw-normal">Reviewed</dt><dd class="col-8 mb-0">@item.Reviewer@if (item.ReviewedAtUtc is { } ra) { <span>, <LocalTime Utc="ra" Format="MMM d, yyyy" ShowUtc="false" /></span> }</dd>
+                                    }
+                                    @if (!string.IsNullOrWhiteSpace(item.RemediationOwner) || !string.IsNullOrWhiteSpace(item.RemediationNotes))
+                                    {
+                                        <dt class="col-4 fw-normal">Remediation</dt><dd class="col-8 mb-0">@item.RemediationOwner@(string.IsNullOrWhiteSpace(item.RemediationNotes) ? "" : $": {item.RemediationNotes}")</dd>
+                                    }
+                                </dl>
+                            }
 
                             <AuthorizeView Roles="@Roles.CanEditPolicy">
                                 @if (_editingItemId == item.Id)
@@ -284,11 +386,16 @@ else
                                         <div class="col-6"><label class="form-label small mb-1" for="item-findings-@item.Id">Findings</label><input id="item-findings-@item.Id" class="form-control form-control-sm" placeholder="Findings" @bind="_itemFindings" @bind:event="oninput" /></div>
                                     </div>
                                     <div class="row g-2 mb-1">
+                                        <div class="col-6"><label class="form-label small mb-1" for="item-src-ref-@item.Id">Source evidence reference</label><input id="item-src-ref-@item.Id" class="form-control form-control-sm" placeholder="e.g. assessment report on the source" maxlength="500" @bind="_itemSourceReference" @bind:event="oninput" data-testid="readiness-source-ref" /></div>
+                                        <div class="col-6"><label class="form-label small mb-1" for="item-tgt-ref-@item.Id">Target evidence reference</label><input id="item-tgt-ref-@item.Id" class="form-control form-control-sm" placeholder="e.g. vendor certification for the target" maxlength="500" @bind="_itemTargetReference" @bind:event="oninput" data-testid="readiness-target-ref" /></div>
+                                    </div>
+                                    <div class="row g-2 mb-1">
                                         <div class="col-6"><label class="form-label small mb-1" for="item-owner-@item.Id">Remediation owner</label><input id="item-owner-@item.Id" class="form-control form-control-sm" placeholder="Remediation owner" @bind="_itemRemediationOwner" @bind:event="oninput" /></div>
                                         <div class="col-6">
                                             <label class="form-label small mb-1" for="item-expires-@item.Id">Evidence expires</label>
                                             <input id="item-expires-@item.Id" type="date" class="form-control form-control-sm" @bind="_itemEvidenceExpires" />
                                         </div>
+                                        <div class="col-12"><label class="form-label small mb-1" for="item-remediation-@item.Id">Remediation notes</label><input id="item-remediation-@item.Id" class="form-control form-control-sm" maxlength="1000" @bind="_itemRemediationNotes" @bind:event="oninput" data-testid="readiness-remediation-notes" /></div>
                                     </div>
                                     <button type="button" class="btn btn-primary btn-sm" @onclick="() => SaveItem(item.Id)">Save check</button>
                                     <button type="button" class="btn btn-link btn-sm" @onclick="() => _editingItemId = null">Cancel</button>
@@ -303,6 +410,19 @@ else
 
                     <AuthorizeView Roles="@Roles.CanEditPolicy">
                         <hr />
+                        <div class="row g-2 mb-2 align-items-end">
+                            <div class="col-7"><label class="form-label small mb-1" for="custom-check-label">Add a check</label><input id="custom-check-label" class="form-control form-control-sm" placeholder="e.g. Linked server to the billing database" maxlength="200" @bind="_customCheckLabel" @bind:event="oninput" data-testid="custom-check-label" /></div>
+                            <div class="col-3">
+                                <label class="form-label small mb-1" for="custom-check-area">Area</label>
+                                <select id="custom-check-area" class="form-select form-select-sm" @bind="_customCheckArea">
+                                    @foreach (var area in Enum.GetValues<ReadinessCheckArea>())
+                                    {
+                                        <option value="@area">@area</option>
+                                    }
+                                </select>
+                            </div>
+                            <div class="col-2"><button type="button" class="btn btn-outline-secondary btn-sm w-100" @onclick="AddCustomCheck" disabled="@string.IsNullOrWhiteSpace(_customCheckLabel)" data-testid="custom-check-add">Add check</button></div>
+                        </div>
                         <div class="d-flex gap-2">
                             <label class="visually-hidden" for="checklist-new-target">New target label</label>
                             <input id="checklist-new-target" class="form-control form-control-sm" placeholder="New target label" @bind="_checklistTargetLabel" @bind:event="oninput" />
@@ -332,7 +452,7 @@ else
     // Dependency form.
     private DependencyKind _depKind = DependencyKind.Driver;
     private DependencyDirection _depDirection = DependencyDirection.Upstream;
-    private string _depName = "", _depVersionText = "", _depOsConstraint = "", _depProviderConstraint = "", _depEvidenceUrl = "";
+    private string _depName = "", _depVersionText = "", _depOsConstraint = "", _depProviderConstraint = "", _depEvidenceUrl = "", _depEvidenceNotes = "";
     private DependencyVersionState _depVersionState = DependencyVersionState.Current;
     private int _depOwnerTeamId;
 
@@ -340,13 +460,18 @@ else
     private MigrationAssessmentType _pathAssessmentType = MigrationAssessmentType.VersionUpgrade;
     private MigrationMethod _pathMethod = MigrationMethod.InPlaceUpgrade;
     private string _pathSourceProduct = "", _pathSourceBuild = "", _pathTargetProduct = "", _pathTargetBuild = "";
+    private string _pathSourceEdition = "", _pathSourcePlatform = "", _pathSourceTopology = "", _pathTargetEdition = "", _pathTargetPlatform = "", _pathTargetTopology = "";
+    private string _pathGuidanceUrl = "", _pathGuidanceNotes = "", _pathIntermediate = "", _pathDowngrade = "";
+    private bool _pathPrefilled;
 
     // Readiness checklist form.
     private string _checklistSourceLabel = "", _checklistTargetLabel = "";
     private int? _editingItemId;
     private ReadinessCheckStatus _itemStatus = ReadinessCheckStatus.Unknown;
-    private string _itemReviewer = "", _itemFindings = "", _itemRemediationOwner = "";
+    private string _itemReviewer = "", _itemFindings = "", _itemRemediationOwner = "", _itemRemediationNotes = "", _itemSourceReference = "", _itemTargetReference = "";
     private DateTime? _itemEvidenceExpires;
+    private string _customCheckLabel = "";
+    private ReadinessCheckArea _customCheckArea = ReadinessCheckArea.Other;
 
     protected override async Task OnInitializedAsync()
     {
@@ -383,6 +508,18 @@ else
         _teams = (await Teams.ListAsync()).Select(s => s.Team).ToList();
 
         _pathAssessments = await PathAssessments.ListForInstanceAsync(Id);
+
+        // Start the source side from the recorded identity, so edition and build aren't retyped (or left out).
+        if (!_pathPrefilled && await IdentityService.GetByInstanceAsync(Id) is { ResolutionStatus: VersionResolutionStatus.Resolved } identity)
+        {
+            _pathSourceProduct = identity.Family;
+            _pathSourceBuild = string.IsNullOrWhiteSpace(identity.Build)
+                ? $"{identity.Major}{(identity.Minor is { } mn ? $".{mn}" : "")}"
+                : (identity.Build.Contains('.') ? identity.Build : $"{identity.Major}.{identity.Minor ?? 0}.{identity.Build}");
+            _pathSourceEdition = identity.Edition;
+            _pathSourcePlatform = identity.HostingProvider;
+        }
+        _pathPrefilled = true;
         _checklist = await Readiness.GetLatestForInstanceAsync(Id);
         if (_checklist is not null && string.IsNullOrWhiteSpace(_checklistTargetLabel))
         {
@@ -403,10 +540,11 @@ else
             RecordedVersionText = _depVersionText,
             OsRuntimeConstraint = _depOsConstraint,
             ManagedProviderConstraint = _depProviderConstraint,
-            EvidenceUrl = _depEvidenceUrl
+            EvidenceUrl = _depEvidenceUrl,
+            EvidenceNotes = _depEvidenceNotes.Trim()
         }, _userName ?? "unknown");
         Toasts.Success($"Dependency \"{_depName}\" recorded.");
-        _depName = _depVersionText = _depOsConstraint = _depProviderConstraint = _depEvidenceUrl = "";
+        _depName = _depVersionText = _depOsConstraint = _depProviderConstraint = _depEvidenceUrl = _depEvidenceNotes = "";
         _depOwnerTeamId = 0;
         await Load();
     }
@@ -421,9 +559,9 @@ else
     private async Task EvaluatePath()
     {
         var result = await PathAssessments.EvaluateAsync(Id, _pathAssessmentType, _pathMethod,
-            _pathSourceProduct, _pathSourceBuild, "", "", "",
-            _pathTargetProduct, _pathTargetBuild, "", "", "",
-            "", "", "", "", _userName ?? "unknown");
+            _pathSourceProduct.Trim(), _pathSourceBuild.Trim(), _pathSourceEdition.Trim(), _pathSourcePlatform.Trim(), _pathSourceTopology.Trim(),
+            _pathTargetProduct.Trim(), _pathTargetBuild.Trim(), _pathTargetEdition.Trim(), _pathTargetPlatform.Trim(), _pathTargetTopology.Trim(),
+            _pathGuidanceUrl.Trim(), _pathGuidanceNotes.Trim(), _pathIntermediate.Trim(), _pathDowngrade.Trim(), _userName ?? "unknown");
         Toasts.Success($"Path assessment recorded: {result.Status}.");
         await Load();
     }
@@ -442,16 +580,46 @@ else
         _itemReviewer = item.Reviewer;
         _itemFindings = item.Findings;
         _itemRemediationOwner = item.RemediationOwner;
+        _itemRemediationNotes = item.RemediationNotes;
+        _itemSourceReference = item.SourceReference;
+        _itemTargetReference = item.TargetReference;
         _itemEvidenceExpires = item.EvidenceExpiresAtUtc;
     }
 
     private async Task SaveItem(int itemId)
     {
-        await Readiness.UpdateCheckItemAsync(itemId, _itemStatus, _itemFindings, _itemReviewer, "", "",
-            _itemRemediationOwner, "", _itemEvidenceExpires, _userName ?? "unknown");
+        await Readiness.UpdateCheckItemAsync(itemId, _itemStatus, _itemFindings, _itemReviewer, _itemSourceReference.Trim(), _itemTargetReference.Trim(),
+            _itemRemediationOwner, _itemRemediationNotes.Trim(), _itemEvidenceExpires is { } exp ? DateTime.SpecifyKind(exp.Date, DateTimeKind.Utc) : null, _userName ?? "unknown");
         Toasts.Success("Check result saved.");
         _editingItemId = null;
         await Load();
+    }
+
+    private async Task AddCustomCheck()
+    {
+        if (_checklist is null)
+        {
+            return;
+        }
+        var added = await Readiness.AddCustomCheckAsync(_checklist.Id, _customCheckLabel, _userName ?? "unknown", _customCheckArea);
+        if (added is null)
+        {
+            Toasts.Error("Check not added. Enter a name for it.");
+            return;
+        }
+        Toasts.Success($"Check \"{added.Label}\" added as Unknown.");
+        _customCheckLabel = "";
+        _customCheckArea = ReadinessCheckArea.Other;
+        await Load();
+    }
+
+    private static bool IsLink(string? value) =>
+        Uri.TryCreate(value, UriKind.Absolute, out var uri) && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps);
+
+    private static RenderFragment PathContext(string side, string edition, string platform, string topology)
+    {
+        var parts = new[] { edition, platform, topology }.Where(s => !string.IsNullOrWhiteSpace(s)).ToList();
+        return parts.Count == 0 ? (_ => { }) : @<div>@side: @string.Join(", ", parts)</div>;
     }
 
     private async Task UpdateTarget()

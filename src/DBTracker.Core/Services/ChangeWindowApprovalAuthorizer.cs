@@ -13,6 +13,13 @@ public static class ChangeWindowApprovalAuthorizer
         ["Platform"] = ["Admin", "ITManager", "DBA"],
     };
 
+    /// <summary>The named scopes, in display order. Change-validation sign-offs use the same scopes and role rules.</summary>
+    public static IReadOnlyList<string> KnownScopes { get; } = ["DBA", "Change manager", "Application owner", "Security", "Platform"];
+
+    /// <summary>The known scopes these roles may approve or sign off.</summary>
+    public static IReadOnlyList<string> AuthorizedScopes(IReadOnlyCollection<string> callerRoles) =>
+        KnownScopes.Where(s => IsAuthorized(s, callerRoles)).ToList();
+
     public static bool IsAuthorized(string requiredScope, IReadOnlyCollection<string> callerRoles)
     {
         if (callerRoles.Contains("Admin"))

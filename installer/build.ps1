@@ -10,7 +10,7 @@
 #>
 [CmdletBinding()]
 param(
-    [string]$Version = "1.0.0",
+    [string]$Version = "1.1.0",
     [string]$Configuration = "Release",
     [switch]$SkipBundle,
     [switch]$Validate
@@ -84,6 +84,18 @@ if (-not $SkipBundle -and (Test-Path $bundleProject)) {
 }
 elseif (-not $SkipBundle) {
     Write-Host "==> Skipping DBTracker-Setup.exe: installer\DBTracker.Bundle is not in this checkout." -ForegroundColor Yellow
+}
+
+# SETUP-GUIDE.md tells users to check their download against this file; publish it beside the installers.
+# Format matches sha256sum: "<lowercase hash>  <file name>", so `sha256sum -c` also works.
+Invoke-Step "Write SHA256SUMS.txt" {
+    $sums = Join-Path $out "SHA256SUMS.txt"
+    $lines = Get-ChildItem $out -File |
+        Where-Object { $_.Extension -in '.exe', '.msi' } |
+        Sort-Object Name |
+        ForEach-Object { "{0}  {1}" -f (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant(), $_.Name }
+    [System.IO.File]::WriteAllLines($sums, [string[]]$lines)
+    Write-Host "    $sums"
 }
 
 Write-Host "Done. Output in $out" -ForegroundColor Green

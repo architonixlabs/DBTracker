@@ -1653,3 +1653,688 @@ a user, so personal access tokens are a separate web-app item (I06).
   bearer token and returns read-only counts (Failed, Overdue, NeverBackedUp) plus the at-risk list,
   401 otherwise. Anonymous `GET /healthz` returns status (ok, degraded, setup-required), whether setup
   is done, database reachability and version, with no other details. Unit and E2E tests.
+
+## Backlog audit - 2026-11-11
+
+2026-11-11 | NEW-006 | The owner asked for a check of the backlog for missing features and features
+that need updating. Each ticked item's acceptance text was compared with the code by reading it (no
+build, test or UI run). Only I01 and I06 fully met their acceptance text; U20 was not checked in
+depth. Most gaps follow one pattern: the entity and service exist, but the page never fills in or
+shows the field, so the feature is stored but unusable. Findings marked ✔ were also checked by hand
+in the code; the rest come from the code reading and should be confirmed before work starts.
+
+Tracking: original items and their ticks are kept as delivery history (convention above). Each G
+item reopens the named original by listing only what is still missing; close a G item when its gaps
+are closed and tested, and record that as a dated entry. Priorities use the earlier P1/P2/P3 and
+S/M/L definitions.
+
+### Epic 24 - Correctness and security fixes from the audit
+
+*Bugs and bypasses, where the app does something wrong or unsafe today. Ahead of all other open
+work.*
+
+- [x] **2026-11-11 | G01 | REOPENS D22 | P1 | S - Archive bypasses the retirement checklist.** ✔
+  Angela (auditor) and Priya (DBA) rely on the checklist to stop an unsafe retirement. Today the
+  plain Archive button on the instance page calls `InstanceArchiveService.ArchiveAsync` directly
+  with no checklist, and a missing rollback-retention deadline returns NotApplicable, which the
+  evaluator counts as satisfied (`RetirementChecklistGateEvaluator.cs`, `allSatisfied`). The Progress
+  log says both cannot happen.
+  **Acceptance:** decide (owner) whether plain archive stays for non-retirement cases, such as a
+  record created by mistake. If it stays, label it and require a reason; if not, route it through
+  the checklist. A missing rollback deadline becomes Unknown unless the instance has no change
+  history. The checklist is linked to its campaign so the rollback gate can apply. Tests for both
+  paths.
+
+- [x] **2026-11-11 | G02 | REOPENS U07 | P1 | S - New users' first alerts arrive already read.** ✔
+  Priya and Noor (on-call) would miss the first alerts after a fresh install.
+  `NotificationService.EnsureBackfilledAsync` writes no read-state marker when a user's first visit
+  finds zero notifications, so every notification that arrives later is backfilled as read.
+  **Acceptance:** the backfill runs once per user, even when nothing exists to mark yet, and only
+  marks notifications created before that first visit. A test covers a fresh install followed by an
+  alert.
+
+- [x] **2026-11-11 | G03 | REOPENS D12 | P1 | S - Change windows can complete without approval.** ✔
+  The change manager's approvals gate only Approved and InProgress. A Planned window can be set
+  straight to Completed or RolledBack, and the status menu offers every status.
+  **Acceptance:** define the allowed status transitions. Completed and RolledBack require a window
+  that was approved and InProgress, or an active D14 emergency exception. The UI offers only the
+  allowed next states, and the server enforces them.
+
+- [x] **2026-11-11 | G04 | REOPENS U17 | P1 | M - Bulk edit writes unchecked values.** ✔
+  Sam (admin) and Angela need a reviewed, attributable batch.
+  **Acceptance:**
+  - `InstanceBulkEditService.ApplyAsync` runs `InstanceValidator` (it always returns no
+    validation errors today) and rechecks permission.
+  - It detects instances changed since the preview and skips or flags them.
+  - Audit rows are written in the same save as the changes and share a batch id, so a failed save
+    leaves no audit row.
+
+- [x] **2026-11-11 | G05 | REOPENS U16 | P1 | M - Invitations, temporary passwords and downgrades.** ✔
+  Sam and Angela.
+  - `SendInviteAsync` emails the temporary password in plain text; the acceptance asks for an
+    expiring single-use link.
+  - The forced password change is a one-time redirect after sign-in, so the user can navigate away.
+  - The security stamp rotates only for Admin to non-Admin, so DBA to Viewer keeps DBA rights until
+    the next sign-in. Device links are not revoked on any downgrade.
+  - Creating a user is audited only when the invite email is sent.
+
+  **Acceptance:** invite by an expiring single-use set-password link (reuse the reset-token
+  plumbing). A must-change-password user is held on that page on every request. Any role change
+  rotates the stamp and revokes pending device links. User creation is always audited.
+
+- [x] **2026-11-11 | G06 | REOPENS D21 | P1 | S - Cost figures leak through the audit log.** ✔
+  Procurement and Marcus need commercial figures limited to `CommercialEvidencePolicy`.
+  `EditionCostEstimateRecorded` writes the amount and currency into the audit reason, and `/audit`
+  plus its CSV are open to Auditor.
+  **Acceptance:** the audit reason names the estimate, not its figures, or the figures are masked
+  for roles outside the policy on the Audit page and in its export. Existing audit rows are masked
+  on display. The Progress log says a DBA can record a contract, but the form is Admin/ITManager
+  only: settle which is intended.
+
+- [x] **2026-11-11 | G07 | REOPENS U01 | P1 | S - A rewritten backup file of the same size is ignored.** ✔
+  Angela and Priya: the scanner's dedup signature is file name plus size, so a nightly file
+  overwritten under the same name and size is never recorded again.
+  **Acceptance:** add the file's last-write time to the signature, and update the unique index with
+  a migration. Legacy grandfathered records keep working. Discovered files can be given a type
+  (Full, Differential, Log) by file-name rule instead of always Full.
+
+- [x] **2026-11-11 | G08 | REOPENS I05 | P2 | S - Tray token left on disk after uninstall.**
+  Angela: each user's DPAPI-protected access token (`%LOCALAPPDATA%\DBTracker\Tray\token.dat`) and
+  the HKCU preference outlive the uninstall.
+  **Acceptance:** say plainly in the uninstall text and DEPLOYMENT.md that tokens must be revoked
+  at `/account/tokens`. Optionally, the tray deletes its own files on first start once the app is
+  gone. An MSI cannot reach other users' profiles reliably.
+
+- [x] **2026-11-11 | G24 | REOPENS U17 | P1 | M - Re-import resets fields the file doesn't contain.**
+  Found while building G23. An Update row was saved as a whole new record, so every re-import
+  silently reset the matched instance's other fields:
+  - owner team, region, cluster, replica set, criticality and backup contact
+  - file-name patterns, scan status, applied policy and connectivity overrides
+  - creation time and archive state, so an archived instance came back
+
+  It also ignored edits made since the preview, and two instances sharing a name made the whole
+  file fail with "Couldn't read". Sam, Angela and Priya are all affected.
+  **Acceptance:**
+  - Updates load the stored record and copy only the importer's columns, with the preview-time
+    row version, so a concurrent edit fails the save.
+  - A row matching an archived instance, or several instances, is shown as ambiguous with the
+    reason and never applied.
+  - Unit and E2E tests prove the untouched fields and the archive state survive.
+
+#### Epic 24 delivery - 2026-11-11
+
+Each item was checked against the personas before it was built; the decisions are noted below.
+
+- **G01:**
+  - **Personas.** Sam needs to remove a duplicate without a 10-gate retirement. Angela and Priya need
+    a real decommission to go through the checklist.
+  - **Archive.** The archive panel asks why: "Duplicate, or entered by mistake" archives directly
+    with a reason. "Being decommissioned or replaced" points to the retirement checklist.
+    `InstanceArchiveService.ArchiveAsync` refuses while a checklist is open, and only
+    `ArchiveForRetirementAsync` (called by the checklist) archives a retirement.
+  - **Checklist.** Opening `/instances/{id}/retirement` no longer creates a checklist; "Start
+    retirement checklist" does. A checklist can be cancelled with a reason, and is kept for history.
+  - **Rollback gate.** It now looks at change validations from any campaign. It is NotApplicable
+    only when the instance has no validation at all, and Unknown when a change exists without a
+    deadline.
+  - **Audit and migration.** The audit reason says "Not a retirement" or "Retired through checklist
+    #n". Migration `AddRetirementChecklistCancellation`.
+- **G02:**
+  - **Fix.** `NotificationInboxStarts` records each user's first inbox visit once, even when nothing
+    exists to mark. Only notifications created before that visit are pre-marked read; later ones
+    arrive unread.
+  - **Personas.** Noor keeps the "no backlog of old alerts on day one" behavior.
+  - **Migration.** `AddNotificationInboxStart`.
+- **G03:**
+  - **Transitions.** `ChangeWindowStatusTransitionValidator` allows Planned to Approved, InProgress
+    or Cancelled; Approved to InProgress, Planned or Cancelled; and InProgress to Completed or
+    RolledBack. Completed, RolledBack and Cancelled are final. The page offers only the allowed next
+    statuses, and the server refuses others. Planned to InProgress still needs approvals or an
+    active emergency exception.
+  - **Also found.** A window could be planned with no required approvals, which made the gate pass
+    trivially. Planning now needs at least one.
+- **G04:**
+  - **Apply.** Bulk edit is all or nothing. It validates the edited fields with `InstanceValidator`
+    and names each instance and error. An older, unrelated problem on a record doesn't block the
+    batch.
+  - **Checks.** Apply skips and names instances changed since the preview (row version), and
+    rechecks the actor's role and active status in the database.
+  - **Audit.** Audit rows are written in the same save as the edits, under "Bulk edit batch
+    <id>".
+  - **Also found.** Apply used whatever was in the form at click time; it now applies exactly the
+    previewed values.
+- **G05:**
+  - **Invites.** They email a single-use set-password link (24 hours) and never the password. The
+    reset page reads "Set your password" for invites, and if mail isn't sent the admin shares the
+    temporary password in person.
+  - **Forced change.** `MustChangePasswordGuard` in the main layout returns a must-change user to
+    `/account/change-password` on full loads and on in-app navigation.
+  - **Role changes.** Every role change rotates the security stamp and cancels approved device
+    links; sessions still pick it up within the 30-minute revalidation window.
+  - **Audit.** User creation is audited (`UserCreated`) whether or not an invite is sent.
+- **G06:**
+  - **Audit.** New cost-estimate audit rows carry no figures. Older rows are masked on `/audit` and
+    in its CSV for roles outside `CommercialEvidencePolicy`, and audit search ignores those rows'
+    reason text, so an amount can't be found by searching for it.
+  - **Roles.** Support contracts (no amounts) now use a new `ContractEvidencePolicy`
+    (Admin, DBA, IT Manager), so the Progress log statement is true. Marcus keeps access, since he
+    owns vendor relationships.
+- **G07:**
+  - **Signature.** The scanner signature is name + size + last-write time (stored as the record's
+    TimestampUtc, so existing records still match and nothing is re-recorded on upgrade). A file
+    rewritten at the same size is new evidence.
+  - **Type.** Discovered files get a type from the name (`BackupFileTypeClassifier`): `.trn` or a
+    log/tlog/trn name part means a log backup, `.dif` or a diff/differential part a differential,
+    anything else full. The scan preview shows "Would be recorded as ...".
+  - **Migration.** `WidenDiscoveredBackupSignature`.
+- **G08:**
+  - **Docs.** DEPLOYMENT.md now says tray tokens and preferences survive uninstall, and how to
+    revoke them at `/account/tokens`.
+  - **Not done.** No installer change: deleting other users' profile files from an MSI is
+    unreliable, and the file is readable only by its Windows user and expires.
+
+Tests added: unit tests for the transition validator, rollback gate, file-type classifier,
+commercial audit masking and invite text. E2E tests for each item (archive refused while a checklist
+is open, then allowed after cancel; first inbox visit; change-window transitions; bulk edit
+validation and batch audit; forced password change on in-app navigation; cost figures hidden from
+the auditor and from search; DBA contract access; same-size rewrite and log typing). Existing E2E
+tests were updated for the archive choice and the explicit checklist start.
+
+- 2026-11-11 | UPDATE-026 | Closes G01-G08 (Epic 24), G19 and G24 after their acceptance checks: 664 unit tests and the full E2E suite (109 of 109 before G23/G24, then the import, instance and ownership tests after them) pass. G19: `installeruild.ps1` writes `SHA256SUMS.txt` (sha256sum format) and SETUP-GUIDE.md gives a one-line check, verified against a real build output. G23 is partly delivered: the instance template now has an example row, allowed values as `#` comment lines (ignored on import), a column guide on the import page, and the 12 missing columns (Region, Cluster, ReplicaSet, Criticality, OwnerTeam by name, BackupContactName/Email/Phone, BackupFileNamePatterns, ConnectivityHost/Port, RestoreTestIntervalDays). The backup and restore history import is still to do, so G23 stays open. Also from G12: InstanceValidator now rejects a connectivity port outside 1-65535 instead of silently using the default.
+- 2026-11-11 | UPDATE-027 | Progress on G16, G20, G21 and G22. Persona notes are inline.
+  - **G16 (partial).**
+    - Port check: on a first install it now also refuses a port any program is listening on, even
+      when IIS config is readable (Sam).
+    - Hosting Bundle detection: Setup accepts any 20.x ASP.NET Core Module at or above the pinned
+      build, so a server on a newer .NET 10 patch is not given an older bundle and an IIS restart. A
+      21.x module still needs the pinned runtime folder.
+    - SQL Express: the Options hint says that ticking it accepts Microsoft's license terms (Angela).
+      The download note says the SQL Express installer fetches its own media.
+    - Tray: Admin > Restart the site added (stop then start), with a tray test.
+    - Docs: DEPLOYMENT.md hash statements corrected.
+    - Kept: the two-poll delay before a tray status notification (avoids noise on app pool recycles;
+      Sam). The guide already says "when the state changes and stays changed".
+    - Still open: a keep-data checkbox in the MSI's own uninstall screens (the default keeps data, and
+      full removal is `RemoveData=1`). All installer changes still need a Hyper-V run (G18).
+  - **G20 (partial).**
+    - Built: the app no longer redirects `/healthz` and `/api/tray` to HTTPS when the request comes
+      from the same machine (`HttpsRedirectExemption`, unit tested), so adding an HTTPS binding
+      doesn't break the tray (Sam). The token never crosses the network over HTTP (Angela).
+    - Docs: DEPLOYMENT.md explains adding the binding.
+    - Still open: choosing a certificate and creating the HTTPS binding inside the MSI.
+  - **G21 (partial).**
+    - Code platform: `tools/scan.sh` runs the shared code-platform scan (SonarQube, Dependency-Track,
+      DefectDojo) through `DockerSecurity/code-platform/scan-project.sh`, with no tokens in the repo.
+    - CI: `.github/workflows/ci.yml` builds, runs unit and tray tests and produces a CycloneDX SBOM
+      (command verified locally with CycloneDX 6.3.1).
+    - Logs: `tools/Ship-IisLogs.ps1` sends the site's IIS W3C logs to `/srv/weblogs/dbtracker/` for
+      GoAccess, and DEPLOYMENT.md explains scheduling it.
+    - README has a "Quality checks" section.
+    - Still open: the first scan itself, because Docker Desktop was not running on this machine.
+  - **G22 (partial).**
+    - Verified: `dotnet publish src/DBTracker.Web -p:PublishProfile=FolderProfile` succeeds and the
+      output has `web.config` and no Development or Testing settings.
+    - Still open: the tray checks (autostart, admin prompts, closing on uninstall), which need the
+      Hyper-V desktop run with G18.
+- 2026-11-11 | UPDATE-028 | Delivery of G09-G15 and the rest of G23 (four parallel tracks, each
+  checked against the personas, merged into `backlog/audit-fixes` with one migration per track).
+  Details are in each track's merge commit.
+  - **G09 (track A):**
+    - Scanners: a Disabled state, a stored last success, and a dashboard link to the affected Scan
+      Activity rows.
+    - Bell: pause and an error state.
+    - Evidence labels in alerts, exports, compliance and the management report.
+    - Saved views can be renamed, and the Reports range is kept in the URL.
+    - Instance list filters, sorts and pages in SQL, with latest-only loads for reports.
+    - Benchmark recorded (see G32 for targets).
+  - **G10 (track A):**
+    - Team subscriptions and channel-aware inbox.
+    - Per-user quiet hours: email only, with escalation still sent.
+    - Recovery emails, and incident acknowledge and assign are audited.
+    - Every send stored as a delivery attempt, shown on `/setup`.
+  - **G11 (track B):**
+    - Snapshot policy fingerprint and evidence provenance. Frozen rows carry evidence level and
+      restore recency.
+    - Viewer-zone times with UTC beside them, and the zone stored on entries.
+    - Restore evidence references.
+    - Trends: period-bound snapshots, policy changes, restore recency and drill-down. Caption bug
+      fixed.
+  - **G12 (track B):**
+    - Conflict review with field-level merge.
+    - Real archive-preview report line; unarchive needs a reason.
+    - Import matches by Name or Id, with an inventory export and fixable error rows.
+    - Audit before/after on create, edit and import; `/audit` date filter, full export and stated
+      retention.
+    - Policy edits are versioned with an impact preview.
+  - **G13 (track C):**
+    - Full catalogue fields and revision history; expired overrides ignored.
+    - Milestone-based notice dedupe; Unknown and Needs review kept separate; ESU needs an active
+      Extended contract; edition- and channel-aware matching (fixes MySQL 8.0 getting 8.4 dates).
+    - Required-by and build comparison on baselines.
+    - Advisory review records owner, deadline and verification, with multi-factor ranking.
+    - Failed version reads recorded. CSV imports for the catalogue, advisories and version metadata
+      at `/lifecycle/import`.
+  - **G14 (track C):**
+    - Dependency evidence displayed.
+    - Full path-assessment fields, merged with the matched rule.
+    - Check references and custom checks.
+    - Campaign milestones, effort and cost editable, with cost masked for DBAs; alternatives have
+      effort, cost and risk.
+    - Approvals gate Scheduled and In progress. A passing rehearsal is required for Ready,
+      Scheduled and In progress. RPO/RTO is compared with targets, and NotPerformed no longer
+      passes.
+  - **G15 (track D):**
+    - Change freezes (Admin and IT Manager) and runbook steps.
+    - Account-bound approvals and sign-offs, with the two required scopes kept separate.
+    - Linked post-change evidence and before/after snapshots.
+    - Exception target picker, revoke reason and owner routing, chosen renewal expiry and history.
+    - Workspace branch and owner filters, hosted databases and late detection; CSV header lines.
+    - WAL and binlog chain roles.
+    - Legal hold, and offsite, immutable and encryption checks.
+    - Required maintenance checks, and imports at `/assurance/import`.
+    - Capacity limit and pre/post comparison.
+    - Certificate renewal and rotation history, with notices to the certificate owner.
+  - **G23 (track B):** a backup and restore history import at `/instances/import-history` with an
+    explicit zone per time, preview, rows-to-fix download and repeat-safe matching. Imported entries
+    are labelled Imported and never count as verified or restore-tested.
+  - **Migrations:**
+    - `AddScanSuccessDeliveryAttemptsAndNotificationPreferences`
+    - `AddImportedEvidenceAndEventTimeZones`
+    - `AddLifecycleNoticeMilestonesAndCatalogueFields`
+    - `AddChangeFreezesAssuranceAndCertificateHistory`
+  - **Merge conflicts:** tracks A and B conflicted on evidence classification, compliance and
+    Reports. They were resolved so that imported evidence short-circuits and only verified
+    (non-imported) restores upgrade a backup.
+  - **After deploy:** the first support-runway sweep sends one Unknown or Needs review notice for
+    each instance in that state.
+- 2026-11-11 | UPDATE-029 | G25 and G27 delivered, following the installed `modern-web-guidance`
+  skill (Google Chrome) guides `security`, `performance` and `visually-stable-font-fallbacks`.
+  - **G25:**
+    - CSP with a per-request nonce and `'strict-dynamic'`, `object-src 'none'`, `base-uri 'self'`
+      (needed by Blazor), `frame-ancestors 'none'` and `form-action 'self'`. Trusted Types is
+      report-only.
+    - Companion headers, a `/csp-reports` log without query strings, and `Clear-Site-Data` on
+      logout.
+    - A `CspScript` component stamps the nonce on component script tags.
+    - The E2E test proves no CSP violations and no third-party requests on the main pages. It first
+      caught the unnonced QR sign-in script.
+  - **G27:**
+    - Unused `bootstrap.bundle.min.js` removed.
+    - Inter and IBM Plex Mono self-hosted (latin and latin-ext WOFF2 with OFL texts), Inter latin
+      preloaded with `crossorigin`, and `font-size-adjust: from-font`.
+  - **Still open:** the LCP before/after numbers belong to G28.
+- 2026-11-11 | UPDATE-030 | Closes G09-G15, G23, G25 and G27. Full E2E run on the merged tracks: 127 of 135 passed. The 8 failures were fixed and all 8 rerun green. Two were real bugs: (1) Razor rendered "v@p.Version" literally on the Ownership and Apply policy pages, because Razor reads `v@p` as an email address; it is now `v@(p.Version)`. (2) A backup or restore logged with the untouched "now" default was stored rounded down to the minute, up to 59 seconds early, so it could fall before a change start and be excluded as post-change evidence; it now means the actual current time. The rest were test issues: two tests clicked the first submit button on the page, which is the sidebar sign-out; a caption and an alert text had changed wording; a one-shot click raced the circuit; and the paging test assumed a single page. 988 unit tests pass.
+- 2026-11-12 | UPDATE-031 | G26 and G29-G31 delivered (tracks E and F, following the installed modern-web-guidance
+  skill's passkey, dialog, popover, menu, toggletip and container-query guides).
+  - **G26 (passkeys):**
+    - `/account/passkeys` adds, renames and removes passkeys, and every change is audited. Sign-in has a "Sign in with a
+      passkey" button and passkey autofill on the email field.
+    - Built on ASP.NET Core Identity's .NET 10 passkey support (schema version 3, migration `AddPasskeys` adds only
+      `AspNetUserPasskeys`), with user verification required.
+    - `webauthn-polyfills@0.1.7` (Apache-2.0) is served from wwwroot, not a CDN.
+    - Deactivated accounts are refused and must-change-password users are still sent to change it. Both are proven by
+      E2E with a Chrome virtual authenticator.
+    - `Passkeys:ServerDomain` is documented in DEPLOYMENT.md. Passkeys need HTTPS or localhost.
+  - **G29:** a `ModalDialog` component (`<dialog>` with `showModal()`) for archive, cancel retirement checklist, revoke
+    access token, and exception revoke and renew. Focus returns to the opener, Esc closes, and errors show inside the
+    dialog. Revoking a token now asks for confirmation.
+  - **G30:**
+    - The notification menu is a `popover="auto"`.
+    - A `Toggletip` component replaces title-only explanations; the 13 remaining titles only repeat visible text or
+      aria-labels.
+    - Anchor positioning sits behind `@supports`, with a script fallback. Each anchor is named explicitly
+      (`anchor-name`/`position-anchor`) after E2E showed the implicit popovertarget anchor isn't reliable.
+    - Polyfills from a CDN were not used, to keep the no-third-party rule (G27).
+  - **G31:** container queries for the stat strip, detail-card rows and key-value lists, with the old media queries as the
+    fallback.
+- 2026-11-12 | UPDATE-032 | G28 delivered: lab Core Web Vitals baseline with `tests/DBTracker.E2E/Benchmarks/CoreWebVitalsBaseline.cs`.
+  It is `[Explicit]`, uses PerformanceObserver for LCP, CLS, Event Timing and long animation frames, and tops the inventory
+  up to 1,000 instances with 30 days of backups.
+  - **Reports:** it didn't finish loading within 30 s, because Backup activity rendered every run (about 7,000 rows). It now
+    shows the newest 200, with "Show 200 more" and a "failed and missed only" switch; the export still has every run.
+  - **Dashboard:** it took 7.9 s to be ready on the phone profile (LCP 2.9 s), because it rendered every instance. It now
+    shows the 25 most at risk, with a link to the full list in Instances.
+  - **Results after both fixes:**
+
+| Profile | Page | Ready ms | LCP ms | CLS | Slowest interaction ms |
+|---|---|---|---|---|---|
+| Desktop | Dashboard | 164 | 153 | 0.000 | 24 |
+| Desktop | Instances | 400 | 320 | 0.009 | under 16 |
+| Desktop | Reports | 384 | 273 | 0.000 | 16 |
+| Desktop | Instance detail | 83 | 130 | 0.008 | 16 |
+| Desktop | New instance form | 83 | 50 | 0.000 | under 16 |
+| Phone 360 px, 4x CPU | Dashboard | 516 | 284 | 0.000 | 56 |
+| Phone 360 px, 4x CPU | Instances | 690 | 338 | 0.042 | under 16 |
+| Phone 360 px, 4x CPU | Reports | 1,608 | 670 | 0.000 | 96 |
+| Phone 360 px, 4x CPU | Instance detail | 473 | 761 | 0.110 | 32 |
+| Phone 360 px, 4x CPU | New instance form | 336 | 194 | 0.000 | under 16 |
+
+  - **Against the "good" limits:** every LCP is under 2.5 s and every interaction under 200 ms. CLS is under 0.1 except
+    instance detail on the phone (0.110), opened as G33.
+  - **Other fixes from the post-merge E2E run:** popover anchors, and four test issues: a test user's display name
+    containing "Deactivated", a sign-in selector, a 360 px row click, and the inbox tests' menu close.
+- 2026-11-12 | UPDATE-033 | G32 delivered (track G), except the owner's decision on U06 response-time targets.
+  - **Delivery and audit:**
+    - Webhook sends are stored as delivery attempts; the URL is never stored, and nothing is written when no webhook is set.
+    - The alert worker audits incident open, escalate and close as system actions.
+  - **Inbox:** filtering, counts and paging now run in SQL, matching the in-app rules exactly (unit-tested).
+  - **Report errors:** non-Admin report senders get a next step they can take; only Admins are pointed to `/setup`.
+  - **Time zones:** no server-zone `ToLocalTime()` is left in the Web project.
+  - **Evidence:**
+    - Manual backup and restore entries are audited with their entered values.
+    - Restore corrections are honoured for restore-tested, while as-of views ignore later corrections.
+  - **Lifecycle:** instances with no version identity get one Unknown notice. The dedupe state is the audit record, not an
+    invented identity, to keep Angela's provenance rule.
+  - **Assurance:** the retirement gate counts hosted databases, and maintenance results can be backdated.
+  - **CSV:** one CSV reader (`CsvRecordSplitter` removed).
+  - **Checks:** no migration needed; 1053 unit tests pass. New findings are in G34.
+- 2026-11-11 | UPDATE-025 | Clarifies the Progress log's D22 entry (see UPDATE-022): after G01, "NotApplicable is not treated as passing" is replaced by "NotApplicable only when proven" and "no second archive path" holds for retirements. The D21 entry's "a DBA can record a contract" is true after G06. Earlier wording is kept as history.
+
+### Epic 25 - Finish partly built features
+
+*Ticked items whose acceptance text is only partly met. Grouped by area; the gaps listed are the
+remaining scope of each original item.*
+
+- [x] **2026-11-11 | G09 | REOPENS U02, U03, U04, U05, U06 | P2 | M - Monitoring and browsing gaps.**
+  - U02: there is no Disabled scanner state (interval 0 shows Healthy), and last success is lost
+    after a failed scan because one `LastScanUtc` is stored. The banner links to the whole report,
+    not the affected rows.
+  - U03: the notification bell has no pause control and no visible error state.
+  - U04: evidence levels appear only on instance detail, not in alerts, report exports or
+    compliance rows.
+  - U05: saved views cannot be renamed (`RenameAsync` has no caller). The Reports date range and
+    custom dates are not in the URL.
+  - U06 ✔: `GetPagedAsync` loads every summary and then pages in memory, and Reports and Compliance
+    still load full histories. No benchmark exists: run the 1,000-instance / 100,000-backup baseline
+    from USABILITY_REVIEW.md before choosing targets.
+
+- [x] **2026-11-11 | G10 | REOPENS U07, U08, U09, U15 | P2 | M - Notifications, incidents and delivery records.**
+  - U07: the UI cannot subscribe by team (the matcher supports it), and the inbox ignores the
+    channel, so an email-only subscription also shows in-app.
+  - U08: there is no quiet hours setting, acknowledge and assign write no audit event, and recovery
+    is in-app only.
+  - U09/U15: send attempts are not stored (only a toast), and /setup shows no attempt history. Some
+    "next action" links point back to /setup.
+
+  **Acceptance:** a persisted send-attempt record (time, channel, scope, recipients count, outcome,
+  error) shown on /setup. Incident actions audited through U19.
+
+- [x] **2026-11-11 | G11 | REOPENS U10, U11, U12, U22 | P2 | M - Evidence time, snapshots and trends.**
+  - U10: `PolicyVersion` is always `default-v1`. Evidence provenance is one fixed string, and frozen
+    rows carry no evidence level.
+  - U10/U11: times use the server's zone without naming it. Show and store the zone, or use UTC with
+    the viewer's local time beside it.
+  - U12: restores have no evidence-reference field.
+  - U22: Trends lacks policy changes, drill-down links and Current/Overdue restore recency. Its
+    period snapshot can predate the period start.
+  - Bug: the Backup Activity caption says "in the last N day(s)" when a custom range is active.
+
+- [x] **2026-11-11 | G12 | REOPENS U13, U14, U17, U18, U19, U21 | P2 | M - Editing, archive, import and audit.**
+  - U13: a conflict offers reload or "Save anyway", with no view of the other change.
+  - U14: the archive preview's report line is hard-coded, and unarchive takes no reason.
+  - U17: import corrections download only Row and Error, not the row data to fix; the matching rule
+    is fixed to Name.
+  - U18: no port range validation, so an invalid port silently falls back to the default.
+  - U19: create, edit and import record no before/after; /audit neither shows nor exports it.
+    Export covers only the 200 on-screen rows, with no date filter, and retention is undocumented.
+  - U21: policies can never be edited, so every policy stays at version 1, and there is no impact
+    preview of a policy edit.
+
+- [x] **2026-11-11 | G13 | REOPENS D01-D06 | P2 | L - Lifecycle catalogue and patch facts.**
+  The data model is in place; most of the work is in the pages.
+  - D01: hosting context is always empty.
+  - D02: there is no catalogue import. The form omits build, patch train, edition, distribution,
+    applicability, ESU/GA dates, date precision and source. Revision history is never shown.
+    Expired overrides are checked only on Refresh, so runway and baselines keep using them. Nothing
+    separates vendor facts from internal policy.
+  - D03: notices do not re-fire after a date revision (`LastRunwayNoticeThresholdDays` is never
+    reset). Support contracts are never consulted, and Unknown and Needs-review are merged and
+    skipped. Catalogue matching ignores edition and channel.
+  - D04: no Required-by or release-notes fields, and no build-level comparison.
+  - D05 ✔: review saves an empty owner, no deadline, no target patch and status Verified. Ordering
+    is by severity only, and there is no advisory import.
+  - D06: no metadata import, and permission failures are never recorded.
+
+- [x] **2026-11-11 | G14 | REOPENS D07-D11 | P2 | L - Migration planning inputs and gates.**
+  - D07: last review and evidence are not displayed.
+  - D08 ✔: edition, platform, topology, guidance, intermediate versions and downgrade constraints
+    are always passed empty, and a matched rule's values are not copied or shown.
+  - D09: source/target references and remediation notes are always empty; custom checks have no UI.
+  - D10 ✔: no milestones, blockers, effort or cost entry; alternatives have no effort, cost or risk;
+    approval notes are always empty, and approvals gate nothing.
+  - D11: a missing rehearsal blocks only Completed, not Ready, Scheduled or InProgress. RPO/RTO
+    results are never compared with targets, and a NotPerformed performance check passes.
+
+- [x] **2026-11-11 | G15 | REOPENS D12-D20 | P2 | L - Change, recovery and assurance gaps.**
+  - D12: runbook steps have no UI; the freeze check is only overlap with other windows; the journal
+    time is always "now".
+  - D13: sign-offs are typed names with no role check; before/after evidence and linked backup or
+    restore ids are never written.
+  - D14: revocation alerts nobody, and expiry notices are not routed to the owner; affected assets
+    are hand-typed ids; renewal history is not viewable, and renewal hardcodes 30 days.
+  - D15: no branch or owner filter, no hosted databases, "late" is not detected, and the CSV has no
+    denominator or freshness.
+  - D16: `ChainRole` is never set, so WAL, binlog and archive requirements can never be met.
+  - D17: no legal-hold input, and no encryption, offsite or immutable expectation check.
+  - D18: no import, and a never-recorded required check is not flagged.
+  - D19: no pre/post comparison UI, no campaign link, and the capacity limit is not saved.
+  - D20: no renew or rotate path; notices go to the instance contact, not the certificate owner.
+
+- [ ] **2026-11-11 | G16 | REOPENS I03, I04, I05 | P2 | M - Installer and tray gaps.**
+  - I03: the port check ignores non-IIS listeners when IIS config is readable; keep-data on
+    uninstall is command-line only.
+  - I04: only the Hosting Bundle hash comes from Microsoft metadata. SQL Express is a bootstrapper
+    hashed at build time that downloads unpinned media, and its licence terms are accepted
+    silently. The Hosting Bundle detection needs exactly 10.0.15, so a newer 10.0.x is reinstalled
+    over.
+  - I05: no site restart, although CHANGELOG says so. A status change notifies only after two
+    polls, and the first state is never shown.
+  - Fix the I04 wording, DEPLOYMENT.md and the installer text to match the hash behavior; the
+    CHANGELOG wording is already correct.
+
+### Epic 26 - Release hardening and engineering standards
+
+*Not in the backlog before this audit. Sam (admin/installer) is the main user; Angela needs signed,
+verifiable downloads.*
+
+- [ ] **2026-11-11 | G17 | NEW | P1 | M - Code signing.** Sign Setup.exe, the MSI, the custom
+  action DLL and the tray app so SmartScreen and Smart App Control accept them. Remove the known
+  issue from CHANGELOG once shipped.
+
+- [ ] **2026-11-11 | G18 | NEW | P1 | M - Untested installer paths.** Click through the Setup.exe
+  Options page (SQL Express checkbox), run a version-to-version major upgrade (data and config
+  kept), and test Hosting Bundle before IIS (500.19, see DEPLOYMENT.md). Test on Windows Server 2016
+  or 2019 and on Windows 10/11, which SETUP-GUIDE.md claims; only Server 2025 has been tested.
+  Rerun `Start-HyperVTest.ps1` for each.
+  - **2026-11-12 progress: major upgrade verified.** `installer/test/Test-HyperVUpgrade.ps1` installed 1.1.1 over
+    1.1.0 on Server 2025. The version moved forward, the setup key and data-protection keys were kept (same hash), and
+    `/healthz` answered 200 before and after. The uninstall test phases that follow all passed: keep data, then full
+    removal, then reinstall. The first run (1.1.0 over 1.0.1) found G35. Still open: the Options page click-through,
+    Hosting Bundle before IIS, and the older Windows versions.
+
+- [x] **2026-11-11 | G19 | NEW | P1 | S - Release checksums.** SETUP-GUIDE.md tells users to
+  download `SHA256SUMS.txt`, but nothing generates it. `installer/build.ps1` writes it next to the
+  outputs, or the guide drops the step.
+
+- [ ] **2026-11-11 | G20 | NEW | P2 | M - HTTPS installs.** The MSI creates an HTTP-only site, and
+  the tray hardcodes `http://localhost:<port>` with redirects off, while DEPLOYMENT.md and
+  SETUP-GUIDE.md recommend adding an HTTPS binding and the app calls `UseHttpsRedirection`.
+  **Acceptance:** optional certificate and HTTPS binding in the MSI. The tray reads the scheme and
+  port the MSI records. `/healthz` answers the tray on loopback without a redirect. Document it.
+
+- [ ] **2026-11-11 | G21 | NEW | P2 | M - Org quality and log standards.**
+  - Add SonarQube analysis against `:7001`; tokens come from `scan.env`, never the repo.
+  - Add a CI build and test pipeline; the repo has none.
+  - Add SBOM upload to Dependency-Track.
+  - Write logs to a folder that can be mounted at `/srv/weblogs/dbtracker/` for GoAccess (IIS W3C
+    logs and app logs).
+
+- [ ] **2026-11-11 | G22 | NEW | P3 | S - Verification records for I02 and I05.** The Progress log
+  has no entry for `dotnet publish` with the profile or for the tray: autostart, the UAC actions and
+  closing on uninstall. Run them and record the result.
+
+- [x] **2026-11-11 | G23 | NEW | P2 | M - Bulk upload templates beyond the instance list.**
+  The owner asked whether data can be uploaded from a filled-in template instead of entered by hand.
+  Today only instances can be imported (`/instances/import`), and its template is a header row
+  covering 19 columns. Sam and Priya need to onboard many databases at once. Priya also wants past
+  backup and restore history loaded at onboarding. Angela needs imported evidence labelled as
+  imported, with who and when, and never counted as verified.
+  **Acceptance:**
+  - The instance template has an example row and a second "allowed values" section (engines,
+    roles, environments, criticality).
+  - It adds the missing columns: Region, Cluster, ReplicaSet, Criticality, OwnerTeam,
+    BackupContactName/Email/Phone, BackupFileNamePatterns, ConnectivityHost/Port and
+    RestoreTestIntervalDays.
+  - A backup and restore history import (instance name, time with zone, type, status, size,
+    duration, notes) uses the same preview, error download and repeat-safe matching, and records
+    entries with Source = Imported and the importing user.
+  - Lifecycle evidence imports (catalogue, advisories, metadata, maintenance results) follow under
+    G13 and G15.
+
+### Epic 27 - Modern web platform (Chrome Modern Web Guidance review, 2026-11-11)
+
+2026-11-11 | NEW-007 | The owner asked whether Chrome's Modern Web Guidance
+(developer.chrome.com/docs/modern-web-guidance) can be used in DBTracker. Each of its 11 topics was
+checked against the app and the personas. Adopted below.
+
+Not adopted:
+- Animated accordions: decorative motion the antislop pass removed on purpose.
+- A sliding tab highlight: cosmetic, and Priya wants the console look kept.
+- Hover preloading: Blazor Server navigates within one circuit, so speculative prerendering would
+  make the server render pages nobody opens.
+
+Browser target: Baseline "widely available". Newer features are used only as enhancements with a
+fallback.
+
+- [x] **2026-11-11 | G25 | NEW | P1 | S - Security headers and a Content Security Policy.**
+  Angela and Sam: the app sends no CSP, frame, sniffing or referrer headers.
+  **Acceptance:**
+  - Send `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`,
+    `frame-ancestors 'none'` and `Permissions-Policy` (camera allowed only where the QR flow needs it).
+  - Ship a CSP in report-only mode first, then enforce it: `default-src 'self'`, `script-src
+    'self'`, `connect-src 'self'` (covers the Blazor websocket), and `style-src 'self'
+    'unsafe-inline'` until inline style attributes move to classes. `font-src` follows G27.
+  - Verify the setup wizard, sign-in, the QR flow and every page with the E2E suite and no CSP
+    console errors.
+
+- [x] **2026-11-11 | G26 | NEW | P2 | M - Passkey sign-in.**
+  Dev forgets passwords, Sam wants fewer resets, Angela wants phishing-resistant sign-in, and Noor
+  signs in on a phone.
+  **Acceptance:**
+  - Use ASP.NET Core Identity's passkey support. Users register and remove passkeys on an account
+    page, and sign in with one as well as with a password.
+  - Registration and removal are audited, and deactivation (U16) blocks passkey sign-in.
+  - A temporary-password user must still change it first.
+  - The password stays as the fallback, and no passkey data is exported.
+  - Verify the API and options against the current .NET 10 documentation before building.
+
+- [x] **2026-11-11 | G27 | NEW | P2 | S - Faster first paint: self-hosted fonts, no unused script.**
+  `bootstrap.bundle.min.js` (80 KB) loads on every page but nothing uses it, and fonts come from
+  Google Fonts. Priya (LCP), Angela (no third-party request from an internal tool) and Sam (offline
+  or locked-down servers render correctly) all gain.
+  **Acceptance:**
+  - Remove the unused script.
+  - Serve Inter and IBM Plex Mono (both OFL) from `wwwroot` as WOFF2, with only the weights in use,
+    preloaded, using `font-display: swap`.
+  - Record LCP before and after on the dashboard (see G28).
+
+- [x] **2026-11-11 | G28 | NEW | P2 | S - Core Web Vitals baseline (LCP, INP, CLS).**
+  Measure before optimizing. This links to U06's never-run benchmark (G09).
+  **Acceptance:**
+  - Measure with Lighthouse or DevTools on the representative dataset: the dashboard, instance list,
+    reports, instance detail and one form, on desktop and a mobile profile (Noor).
+  - Record the numbers in the Progress log, list the long tasks and slow interactions found, and
+    open items for anything outside "good".
+
+- [x] **2026-11-11 | G29 | NEW | P3 | M - Native dialogs for confirmations.**
+  Alex needs focus kept inside a confirmation, Esc to cancel, and focus returned afterwards. Noor
+  needs it to fit a phone. Covers archive, cancel retirement checklist, revoke token and similar
+  consequential actions.
+  **Acceptance:**
+  - Use `<dialog>` with `showModal()`, a labelled title, the preview text inside, and Esc or Cancel
+    to close.
+  - Existing data-testids keep working, and the E2E tests pass.
+
+- [x] **2026-11-11 | G30 | NEW | P3 | M - Popover API for the notification menu and tooltips.**
+  The notification dropdown is hand-built, and 21 controls rely on `title` tooltips that touch and
+  keyboard users never see (Noor, Alex).
+  **Acceptance:**
+  - Use `popover` for the notification menu (light dismiss, top layer, focus return).
+  - Replace `title`-only explanations with visible text or a toggletip using `popover`.
+  - CSS anchor positioning only as an enhancement, with a plain fallback position.
+
+- [x] **2026-11-11 | G31 | NEW | P3 | S - Container queries for cards and stat cells.**
+  Noor and Alex at 200% zoom: dashboard stat cells and detail cards should reflow by their own
+  width, not just the window's.
+  **Acceptance:** container queries on the stat row, detail cards and key-value lists, with the
+  existing media queries as fallback. Check at 360 px and at 200% zoom.
+
+- [x] **2026-11-11 | G32 | NEW | P2 | M - Follow-ups found while closing G09-G15 and G23.**
+  The four delivery tracks reported these gaps, which no earlier item covered.
+  - **Monitoring and alerts:**
+    - Webhook sends are not stored as delivery attempts (email is).
+    - Opening, closing and escalating an incident by the alert worker is not audited (acknowledge
+      and assign are).
+    - `NotificationService` still loads every notification into memory.
+    - A non-Admin who sends a report and gets an error is pointed to `/setup`, which only Admins
+      can open.
+  - **Time zones:** some times still use the server's zone, not the viewer's: scan times,
+    maintenance, incidents, connectivity results, access tokens, the dashboard, notifications,
+    lifecycle and campaign pages (the U10/U11 component `LocalTime` exists for this).
+  - **Evidence:**
+    - Manual backup and restore entries are not audited.
+    - Restore-event corrections are ignored when deciding whether an instance is restore-tested.
+  - **Lifecycle:** instances with no version identity are skipped by the support-runway sweep;
+    they show as Unknown on the page but raise no notice.
+  - **Assurance:**
+    - The retirement gate doesn't count hosted databases (D15 added them).
+    - The manual "Record result (now)" form for maintenance results can't backdate; imports can.
+  - **Code:** `CsvRecordSplitter` (assurance imports) duplicates `CsvRecordReader`; merge them.
+  - **Decision for the owner:** response-time targets for U06. The benchmark (1,000 instances,
+    100,607 backups) gave medians of 48-65 ms for a list page and 144-240 ms for the heaviest
+    report loads. Suggested targets: 250 ms for a list page and 500 ms for a report, at this size.
+
+- [x] **2026-11-12 | G33 | NEW | P3 | S - Layout shift on instance detail (phone).**
+  Found by G28. On the 360 px, 4x CPU profile, instance detail scores CLS 0.110, just over the 0.1 "good" limit (desktop
+  0.008). Noor sees the page jump as later sections load.
+  **Acceptance:** find the shifting element with the Layout Shift API or DevTools, reserve its space, and re-measure with
+  `CoreWebVitalsBaseline` to below 0.1.
+
+- [ ] **2026-11-12 | G34 | NEW | P3 | S - Follow-ups found while closing G32.**
+  - Post-change evidence candidates (`ChangeValidationService`) and `ChangeEvidenceRules` still use the original restore
+    outcome, ignoring corrections (Angela).
+  - Capacity measurement times on the assurance page are entered and shown as plain UTC with no zone choice. The capacity
+    table, saved capacity limit and forecast dates print UTC timestamps with no label (Priya, Noor).
+  - Support-runway notice emails are not stored as delivery attempts (Sam).
+
+- [x] **2026-11-12 | G35 | NEW | P1 | S - An installed app must survive a database that starts after it.**
+  Found by the first Hyper-V upgrade run (G18). After the VM restarted, IIS started DBTracker while SQL Server Express was
+  still `StartPending`. The one start-up migration failed, and the site answered HTTP 500 until someone recycled it.
+  Sam needs it to recover by itself, Priya needs the app back after a reboot, and Angela needs no half-applied state.
+  **Delivered:**
+  - Start-up retries the migration four times with a short backoff.
+  - If the database still doesn't answer, the site starts anyway and pages answer 503 with a plain "waiting for its
+    database" explanation and `Retry-After: 15`. `/healthz` reports degraded, so the tray light turns amber.
+  - `DatabaseReadinessService` retries every 15 seconds and opens the site once migrations are applied.
+  - Development and Testing still fail loudly.
+  - The E2E test `DatabaseUnavailableAtStartupTests` starts a Production-mode copy against a missing SQL Server and checks
+    the 503, `Retry-After` and degraded health.
+  - The first version gated on "not migrated yet", which held the sign-in page after a fresh install finished the wizard;
+    the install E2E tests caught it. The gate now applies only while an installed app is actually waiting for its database.
+  - Full E2E: 145 of 147, with the 2 wizard failures fixed and rerun green.
+  - Verified in the Hyper-V upgrade rerun (1.1.0 to 1.1.1): the site answered after the upgrade and reboot.
+
+### Audit corrections to existing text
+
+- 2026-11-11 | UPDATE-017 | Clarifies the Epic 13-17 intro ("All items below are proposed and unimplemented"), the "planning checkboxes remain open" sentence, and the Epic 18-22 intro ("All D items below are proposed and unimplemented"): all are now ticked, with remaining gaps tracked as G09-G16. The original wording is kept as history.
+- 2026-11-11 | UPDATE-018 | Tracking correction: UPDATE-015 was used twice. The 2026-11-10 entry (Epics 13 and 14 implemented) and the 2026-11-11 entry (Design theme superseded) are distinct; refer to them by date as well as reference.
+- 2026-11-11 | UPDATE-019 | Supersedes the "Out of scope" line for a custom from/to date range on Backup Activity: it is built (Reports "Custom" range). The caption bug is in G11.
+- 2026-11-11 | UPDATE-020 | Clarifies Epic 3's shared filter bar (see also UPDATE-002): the full filter bar is on Instances only; the dashboard filters by health and links to Instances. No change is planned unless a persona asks.
+- 2026-11-11 | UPDATE-021 | Clarifies Epic 11: the Reports switcher also has a Trends report (U22), which is not in the Epic 11 list. Epic 12's "My instances" also matches the backup contact and team membership, and the maintenance icon is a cone, not a wrench.
+- 2026-11-11 | UPDATE-022 | Clarifies the Progress log: the support-runway check is enabled by default (1440 minutes), not disabled. The D22 entry's "NotApplicable is not treated as passing" and "no second archive path" are contradicted by the code; see G01. Settings missing from the backlog: `BackupScan:StaleAfterMultiplier` (3) and `Rehearsal:DefaultValidityDays`.
+- 2026-11-11 | UPDATE-023 | Clarifies the open Design "Further polish" item: the mobile pass is partly done (icon rail below 900px, 44px tap targets, stacked key-value rows), while the light-theme toggle and zero-state illustrations are not built. The item stays open.
+- 2026-11-11 | UPDATE-024 | Documentation to correct with G16/G19: README project layout omits `src/DBTracker.Tray`, `src/DBTracker.Tray.Core`, `installer/` and `tests/DBTracker.Tray.Tests`; CHANGELOG 1.0.0 claims a tray site restart that does not exist.
+
+Sequencing: Epic 24 first, starting with G01-G04 (small, and each makes a ticked claim true). Then
+G17-G19 before the next release. G09-G16 follow by area, each closed only after its gaps are
+tested, using the persona tasks in USABILITY_REVIEW.md and DBA_LIFECYCLE_REVIEW.md as earlier.

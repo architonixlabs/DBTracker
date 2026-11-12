@@ -24,14 +24,14 @@
             }
             else if (_result is not null)
             {
-                <span>Updated @_lastUpdatedUtc.ToLocalTime().ToString("h:mm:ss tt")</span>
+                <span>Updated <LocalTime Utc="_lastUpdatedUtc" Format="h:mm:ss tt" ShowUtc="false" /></span>
             }
         </div>
         <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="RefreshNow" disabled="@_refreshing">
             <i class="bi bi-arrow-clockwise" aria-hidden="true"></i> @(_refreshing ? "Refreshing…" : "Refresh")
         </button>
-        <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="ToggleAutoRefresh" aria-pressed="@(!_autoRefreshPaused)" title="Refreshes the list every 30 seconds while on">
-            <i class="bi @(_autoRefreshPaused ? "bi-play-fill" : "bi-pause-fill")" aria-hidden="true"></i> Auto-refresh @(_autoRefreshPaused ? "paused" : "on")
+        <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="ToggleAutoRefresh" aria-pressed="@(!_autoRefreshPaused)">
+            <i class="bi @(_autoRefreshPaused ? "bi-play-fill" : "bi-pause-fill")" aria-hidden="true"></i> Auto-refresh @(_autoRefreshPaused ? "paused" : "on, every 30s")
         </button>
         <AuthorizeView Roles="@Roles.CanEditPolicy">
             <div class="d-flex gap-2">
@@ -65,10 +65,29 @@
                 {
                     @foreach (var v in _savedViews)
                     {
-                        <div class="d-flex justify-content-between align-items-center mb-1">
-                            <a href="@("/instances?" + v.QueryString)" class="small text-truncate" style="max-width:160px;">@v.Name</a>
-                            <button type="button" class="btn btn-link btn-sm text-danger p-0" title="Delete view" aria-label="Delete view @v.Name" @onclick="() => DeleteView(v.Id)"><i class="bi bi-trash" aria-hidden="true"></i></button>
-                        </div>
+                        @if (_renamingViewId == v.Id)
+                        {
+                            <div class="d-flex gap-1 mb-1" data-testid="saved-view-rename-form">
+                                <label class="visually-hidden" for="rename-view-@v.Id">New name for @v.Name</label>
+                                <input id="rename-view-@v.Id" class="form-control form-control-sm" maxlength="@SavedViewNameRules.MaxLength" @bind="_renameViewName" aria-describedby="rename-view-error" />
+                                <button type="button" class="btn btn-primary btn-sm" data-testid="saved-view-rename-save" @onclick="() => RenameView(v.Id)">Save</button>
+                                <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="CancelRename">Cancel</button>
+                            </div>
+                            @if (_renameError is not null)
+                            {
+                                <div id="rename-view-error" class="small text-danger mb-1" role="alert">@_renameError</div>
+                            }
+                        }
+                        else
+                        {
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <a href="@("/instances?" + v.QueryString)" class="small text-truncate" style="max-width:150px;">@v.Name</a>
+                                <span class="d-flex gap-2">
+                                    <button type="button" class="btn btn-link btn-sm p-0" title="Rename view" aria-label="Rename view @v.Name" data-testid="saved-view-rename" @onclick="() => StartRename(v)"><i class="bi bi-pencil" aria-hidden="true"></i></button>
+                                    <button type="button" class="btn btn-link btn-sm text-danger p-0" title="Delete view" aria-label="Delete view @v.Name" @onclick="() => DeleteView(v.Id)"><i class="bi bi-trash" aria-hidden="true"></i></button>
+                                </span>
+                            </div>
+                        }
                     }
                 }
                 <hr class="my-2" />
@@ -400,6 +419,9 @@ else
     private bool _viewsOpen, _savingView;
     private ElementReference _viewsButtonRef;
     private string _newViewName = "";
+    private int? _renamingViewId;
+    private string _renameViewName = "";
+    private string? _renameError;
     private List<SavedView> _savedViews = new();
     private string? _userId;
     private readonly HashSet<int> _selectedIds = new();
@@ -627,6 +649,31 @@ else
         else
         {
             Toasts.Error("You already have a saved view with that name.");
+        }
+    }
+
+    private void StartRename(SavedView view)
+    {
+        _renamingViewId = view.Id;
+        _renameViewName = view.Name;
+        _renameError = null;
+    }
+
+    private void CancelRename()
+    {
+        _renamingViewId = null;
+        _renameError = null;
+    }
+
+    private async Task RenameView(int id)
+    {
+        if (string.IsNullOrEmpty(_userId)) return;
+        _renameError = await SavedViews.RenameAsync(id, _userId, _renameViewName);
+        if (_renameError is null)
+        {
+            _renamingViewId = null;
+            _savedViews = await SavedViews.ListAsync(_userId, "Instances");
+            Toasts.Success($"Renamed view to \"{SavedViewNameRules.Normalize(_renameViewName)}\".");
         }
     }
 

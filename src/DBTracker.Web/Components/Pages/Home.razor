@@ -6,6 +6,7 @@
 @inject IncidentService Incidents
 @inject NavigationManager Nav
 @inject IConfiguration Configuration
+@inject ViewerTimeZone Viewer
 
 <PageTitle>Dashboard · DBTracker</PageTitle>
 
@@ -49,17 +50,25 @@ else
             <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="RefreshNow" disabled="@_refreshing">
                 <i aria-hidden="true" class="bi bi-arrow-clockwise"></i> @(_refreshing ? "Refreshing…" : "Refresh")
             </button>
-            <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="ToggleAutoRefresh" title="Auto-refreshes every 30s while on">
-                <i aria-hidden="true" class="bi @(_autoRefreshPaused ? "bi-play-fill" : "bi-pause-fill")"></i> Auto-refresh @(_autoRefreshPaused ? "paused" : "on")
+            <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="ToggleAutoRefresh">
+                <i aria-hidden="true" class="bi @(_autoRefreshPaused ? "bi-play-fill" : "bi-pause-fill")"></i> Auto-refresh @(_autoRefreshPaused ? "paused" : "on, every 30s")
             </button>
         </div>
     </div>
 
-    @if (_scanIssueCount > 0)
+    @if (_scanIssues.Count > 0)
     {
-        <div class="alert alert-danger mb-4 d-flex justify-content-between align-items-center flex-wrap gap-2">
-            <span><i aria-hidden="true" class="bi bi-exclamation-triangle"></i> @_scanIssueCount shared-drive scan(s) erroring, stale or never completed.</span>
-            <a class="btn btn-outline-secondary btn-sm" href="/reports?type=ScanActivity">View scan activity</a>
+        <div class="alert alert-danger mb-4 d-flex justify-content-between align-items-center flex-wrap gap-2" data-testid="scan-issue-banner">
+            <span>
+                <i aria-hidden="true" class="bi bi-exclamation-triangle"></i> @_scanIssues.Count shared-drive scan(s) erroring, stale or never completed:
+                @foreach (var (issue, index) in _scanIssues.Take(3).Select((r, i) => (r, i)))
+                {
+                    @(index > 0 ? ", " : " ")<a href="/instances/@issue.InstanceId">@issue.InstanceName</a> <span class="small">(@ScannerStalenessClassifier.Describe(issue.Scanner.Freshness))</span>
+                }
+                @(_scanIssues.Count > 3 ? $" and {_scanIssues.Count - 3} more." : ".")
+                <span class="d-block small">This is scan health only. Backup health below is judged separately, and a scan problem never marks a backup as fine.</span>
+            </span>
+            <a class="btn btn-outline-secondary btn-sm" href="/reports?type=ScanActivity&scan=attention">View scan activity</a>
         </div>
     }
 
@@ -115,7 +124,7 @@ else
                 </tr>
             </thead>
             <tbody>
-                @foreach (var o in Sorted())
+                @foreach (var o in Sorted().Take(DashboardRowLimit))
                 {
                     <tr @onclick='() => Nav.NavigateTo($"/instances/{o.Id}")'>
                         <td>
@@ -135,12 +144,20 @@ else
                                 <i class="bi bi-cone-striped text-muted ms-1" role="img" aria-label="Under maintenance, alerts suppressed" title="Under maintenance, alerts suppressed"></i>
                             }
                         </td>
-                        <td>@(o.LastBackupUtc is null ? "Never" : o.LastBackupUtc.Value.ToLocalTime().ToString("MMM d, h:mm tt"))</td>
+                        <td><LocalTime Utc="o.LastBackupUtc" Format="MMM d, h:mm tt" ShowUtc="false" /></td>
                     </tr>
                 }
             </tbody>
         </table>
     </div>
+
+    @if (Sorted().Count() > DashboardRowLimit)
+    {
+        <p class="small text-muted mt-2" role="status" data-testid="dashboard-row-limit">
+            Showing the @DashboardRowLimit most at risk of @Sorted().Count() instance(s).
+            <a href="@($"/instances{(_filterHealth is null ? "" : $"?health={_filterHealth}")}")">See them all in Instances</a>
+        </p>
+    }
 
     @if (!Sorted().Any())
     {
@@ -158,7 +175,7 @@ else
     private List<InstanceListRow>? _rows;
     private List<Core.Entities.Incident> _openIncidents = new();
     private BackupHealth? _filterHealth;
-    private int _scanIssueCount;
+    private IReadOnlyList<ScanActivityRow> _scanIssues = [];
     private DateTime _lastUpdatedUtc;
     private string? _refreshError;
     private bool _refreshing;
@@ -185,11 +202,11 @@ else
             _refreshError = null;
 
             var scanRows = ScanActivityReportBuilder.Build(
-                _rows.Select(r => new ScanActivityInput(r.Name, r.BackupFileLocation, r.LastScanUtc, r.LastScanStatus, r.LastScanError)),
+                _rows.Select(r => new ScanActivityInput(r.Name, r.BackupFileLocation, r.LastScanUtc, r.LastScanStatus, r.LastScanError, r.LastScanSuccessUtc, r.Id)),
                 Configuration.GetValue("BackupScan:IntervalMinutes", 15),
                 Configuration.GetValue("BackupScan:StaleAfterMultiplier", 3),
                 DateTime.UtcNow);
-            _scanIssueCount = scanRows.Count(r => r.Scanner.Freshness is ScannerFreshness.Error or ScannerFreshness.NeverScanned or ScannerFreshness.Stale);
+            _scanIssues = ScanActivityReportBuilder.NeedingAttention(scanRows);
         }
         catch (Exception ex)
         {
@@ -231,10 +248,10 @@ else
 
     private void ToggleAutoRefresh() => _autoRefreshPaused = !_autoRefreshPaused;
 
-    private static string FormatAge(DateTime lastUpdatedUtc)
+    private string FormatAge(DateTime lastUpdatedUtc)
     {
         var age = DateTime.UtcNow - lastUpdatedUtc;
-        return age.TotalSeconds < 5 ? "just now" : $"{lastUpdatedUtc.ToLocalTime():h:mm:ss tt} ({(int)age.TotalSeconds}s ago)";
+        return age.TotalSeconds < 5 ? "just now" : $"{Viewer.Format(lastUpdatedUtc, "h:mm:ss tt")}, {(int)age.TotalSeconds}s ago";
     }
 
     private int Count(BackupHealth health) => _rows?.Count(r => r.Health == health) ?? 0;
@@ -248,6 +265,10 @@ else
         [BackupHealth.Overdue] = 2,
         [BackupHealth.OnTrack] = 3,
     };
+
+    // G28: rendering every instance here (about 1,000 rows, re-rendered on each 30s refresh) took ~8 s to be ready on a
+    // phone. The dashboard answers "what needs attention first"; the full, filterable list is on Instances.
+    private const int DashboardRowLimit = 25;
 
     private IEnumerable<InstanceListRow> Sorted()
     {

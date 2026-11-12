@@ -60,7 +60,11 @@ public class DatabaseInstance
 
     /// <summary>Semicolon/comma-separated glob patterns (e.g. "*.bak;*.trn") for files that count as evidence. Empty matches every file.</summary>
     public string BackupFileNamePatterns { get; set; } = string.Empty;
+    /// <summary>When the last scan ran, whatever its result.</summary>
     public DateTime? LastScanUtc { get; set; }
+
+    /// <summary>When a scan last succeeded. Kept apart from LastScanUtc so a failed scan doesn't hide how long monitoring has been broken. Null on rows scanned before it was stored.</summary>
+    public DateTime? LastScanSuccessUtc { get; set; }
     public ScanStatus LastScanStatus { get; set; } = ScanStatus.NeverScanned;
     public string LastScanError { get; set; } = string.Empty;
 

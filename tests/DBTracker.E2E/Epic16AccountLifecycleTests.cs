@@ -36,7 +36,7 @@ public class Epic16AccountLifecycleTests
 
         // The deactivated account can no longer sign in at all.
         await GotoAsync("/Account/Login");
-        await _page.FillAsync("input[autocomplete=username]", email);
+        await _page.FillAsync("input[autocomplete~=username]", email);
         await _page.FillAsync("input[autocomplete=current-password]", "Str0ngTempPass!");
         await _page.ClickAsync("button[type=submit]");
         await _page.WaitForTimeoutAsync(600);
@@ -133,6 +133,15 @@ public class Epic16AccountLifecycleTests
         await _page.WaitForURLAsync(url => url.Contains("/account/change-password"), new PageWaitForURLOptions { Timeout = 15000 });
         await _page.WaitForSelectorAsync("text=choose your own before continuing");
 
+        // G05: leaving the page doesn't skip the change, whether by a full load or by an in-app link.
+        await GotoAsync("/instances");
+        await _page.WaitForURLAsync(url => url.Contains("/account/change-password"), new PageWaitForURLOptions { Timeout = 15000 });
+        await WaitForCircuitAsync();
+        await _page.ClickAsync("a.app-nav-link[href='reports']");
+        await _page.WaitForTimeoutAsync(800);
+        Assert.That(_page.Url, Does.Contain("/account/change-password"), "In-app navigation must also return to the change-password page.");
+        await WaitForCircuitAsync();
+
         await FillByLabel("Current password", "Str0ngTempPass!");
         await FillByLabel("New password", "N3wOwnPassword!");
         await _page.ClickAsync("button[type=submit]:text('Change password')");
@@ -143,7 +152,7 @@ public class Epic16AccountLifecycleTests
         try
         {
             await fresh.GotoAsync(TestServerFixture.BaseUrl + "/Account/Login", new PageGotoOptions { WaitUntil = WaitUntilState.Load });
-            await fresh.FillAsync("input[autocomplete=username]", email);
+            await fresh.FillAsync("input[autocomplete~=username]", email);
             await fresh.FillAsync("input[autocomplete=current-password]", "N3wOwnPassword!");
             await fresh.ClickAsync("button[type=submit]");
             await fresh.WaitForURLAsync(url => !url.Contains("/Account/Login") && !url.Contains("/account/change-password"),
@@ -161,7 +170,7 @@ public class Epic16AccountLifecycleTests
     private async Task LoginAsync(string email, string password)
     {
         await GotoAsync("/Account/Login");
-        await _page.FillAsync("input[autocomplete=username]", email);
+        await _page.FillAsync("input[autocomplete~=username]", email);
         await _page.FillAsync("input[autocomplete=current-password]", password);
         await _page.ClickAsync("button[type=submit]");
         await _page.WaitForURLAsync(url => !url.Contains("/Account/Login"), new PageWaitForURLOptions { Timeout = 15000 });

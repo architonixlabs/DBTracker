@@ -1,4 +1,4 @@
-@page "/Account/Login"
+﻿@page "/Account/Login"
 @layout AuthLayout
 @using System.ComponentModel.DataAnnotations
 @using Microsoft.AspNetCore.Authentication
@@ -15,7 +15,7 @@
 
 <div class="auth-panel">
     <div class="auth-brand"><span class="brand-mark" aria-hidden="true"></span> DBTracker</div>
-    <h1>Log in</h1>
+    <h1 id="login-heading">Log in</h1>
     <p class="auth-lede">Backup, restore and lifecycle tracking for your database instances.</p>
 
     <StatusMessage Message="@errorMessage" />
@@ -26,12 +26,14 @@
 
         <div class="auth-field mb-3">
             <label class="form-label" for="login-email">Email</label>
-            <InputText id="login-email" @bind-Value="Input.Email" class="form-control" autocomplete="username" aria-required="true" placeholder="name@architonixlabs.com" />
+            @* "webauthn" lets the browser list saved passkeys in this field's autofill (G26). autofocus opens that list straight away on this dedicated sign-in page. *@
+            <InputText id="login-email" type="email" @bind-Value="Input.Email" class="form-control" autocomplete="username webauthn" spellcheck="false" required autofocus aria-describedby="login-heading" placeholder="name@architonixlabs.com" />
+            <div id="login-email-hint" class="form-text" hidden>Saved passkeys for this site also show up in this field's suggestions.</div>
             <ValidationMessage For="() => Input.Email" class="validation-message" />
         </div>
         <div class="auth-field mb-3">
             <label class="form-label" for="login-password">Password</label>
-            <InputText id="login-password" type="password" @bind-Value="Input.Password" class="form-control" autocomplete="current-password" aria-required="true" />
+            <InputText id="login-password" type="password" @bind-Value="Input.Password" class="form-control" autocomplete="current-password" required />
             <ValidationMessage For="() => Input.Password" class="validation-message" />
         </div>
         <div class="form-check mb-3">
@@ -43,6 +45,15 @@
             <a class="auth-secondary-link" href="/Account/ForgotPassword">Forgot your password?</a>
         </div>
     </EditForm>
+
+    @* Hidden until passkey-login.js confirms WebAuthn works here (a browser with PublicKeyCredential, on https or localhost). *@
+    <div class="passkey-login" id="passkey-signin" data-return-url="@ReturnUrl" hidden>
+        <button type="button" class="btn btn-outline-primary w-100" id="passkey-signin-button" data-testid="passkey-signin">
+            <i class="bi bi-fingerprint" aria-hidden="true"></i> Sign in with a passkey
+        </button>
+        <p class="passkey-status small mb-0 mt-2" id="passkey-status" role="status" aria-live="polite" data-testid="passkey-signin-status"></p>
+        <p class="passkey-error small mb-0" id="passkey-error" role="alert" data-testid="passkey-signin-error"></p>
+    </div>
 
     <div class="qr-login">
         <button type="button" class="qr-toggle" id="qr-toggle" aria-expanded="false" aria-controls="qr-panel">
@@ -56,7 +67,8 @@
     </div>
 </div>
 
-<script src="js/device-link-login.js"></script>
+<CspScript Src="js/device-link-login.js" />
+<CspScript Src="js/passkey-login.js" Type="module" />
 
 @code {
     private string? errorMessage;

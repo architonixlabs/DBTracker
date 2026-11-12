@@ -63,7 +63,7 @@ else
                         <span class="badge-health dot @ResolutionCssClass(_identity.ResolutionStatus)">@_identity.ResolutionStatus</span>
                         @if (_identity.IsAttested)
                         {
-                            <span class="small text-muted"><i class="bi bi-patch-check-fill" aria-hidden="true"></i> Attested by @_identity.AttestedBy on @_identity.AttestedAtUtc?.ToLocalTime().ToString("MMM d, yyyy")</span>
+                            <span class="small text-muted"><i class="bi bi-patch-check-fill" aria-hidden="true"></i> Attested by @_identity.AttestedBy on <LocalTime Utc="_identity.AttestedAtUtc" Format="MMM d, yyyy" ShowUtc="false" /></span>
                         }
                         else
                         {
@@ -88,7 +88,8 @@ else
                         <dt class="col-5">Hosting engine version</dt><dd class="col-7">@OrNotRecorded(_identity.HostingEngineVersion)</dd>
                         <dt class="col-5">DB compatibility level</dt><dd class="col-7">@OrNotRecorded(_identity.DatabaseCompatibilityLevel)</dd>
                         <dt class="col-5">Hosting provider</dt><dd class="col-7">@OrNotRecorded(_identity.HostingProvider)</dd>
-                        <dt class="col-5">Observed</dt><dd class="col-7">@_identity.ObservedAtUtc.ToLocalTime().ToString("MMM d, yyyy h:mm tt") (@_identity.ObservationSource)</dd>
+                        <dt class="col-5">Hosting context</dt><dd class="col-7" data-testid="identity-hosting-context">@OrNotRecorded(_identity.HostingContext)</dd>
+                        <dt class="col-5">Observed</dt><dd class="col-7"><LocalTime Utc="_identity.ObservedAtUtc" Format="MMM d, yyyy h:mm tt" ShowUtc="false" /> (@_identity.ObservationSource)</dd>
                     </dl>
 
                     @if (_clusterNodes.Count > 0)
@@ -120,6 +121,7 @@ else
                         <div class="col-6"><label class="form-label small mb-1" for="id-provider">Hosting provider</label><input id="id-provider" class="form-control form-control-sm" placeholder="Hosting provider" @bind="_hostingProvider" @bind:event="oninput" /></div>
                         <div class="col-6"><label class="form-label small mb-1" for="id-host-engine">Hosting engine version</label><input id="id-host-engine" class="form-control form-control-sm" placeholder="Hosting engine version" @bind="_hostingEngineVersion" @bind:event="oninput" /></div>
                         <div class="col-6"><label class="form-label small mb-1" for="id-compat">DB compatibility level</label><input id="id-compat" class="form-control form-control-sm" placeholder="DB compatibility level" @bind="_compatLevel" @bind:event="oninput" /></div>
+                        <div class="col-12"><label class="form-label small mb-1" for="id-hosting-context">Hosting context</label><input id="id-hosting-context" class="form-control form-control-sm" placeholder="e.g. Azure SQL Managed Instance, eu-west, General Purpose" maxlength="500" @bind="_hostingContext" @bind:event="oninput" data-testid="identity-hosting-context-input" /></div>
                     </div>
                     <div class="d-flex gap-2 mb-2">
                         <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="SaveMetadata" disabled="@(_identity is null)">Save metadata</button>
@@ -145,14 +147,21 @@ else
                 {
                     <div class="empty-state py-3"><i class="bi bi-hourglass" aria-hidden="true"></i> Not yet evaluated.</div>
                 }
+                else if (_runway.NeedsReview)
+                {
+                    <div class="small" style="color:var(--dbt-overdue);" data-testid="runway-status"><i class="bi bi-exclamation-diamond" aria-hidden="true"></i> Needs review: @_runway.UnknownReason</div>
+                    <p class="small text-muted mb-2">The facts exist but can't be relied on until someone reviews them. This is not treated as supported.</p>
+                }
                 else if (_runway.IsUnknown)
                 {
-                    <div class="small" style="color:var(--dbt-overdue);"><i class="bi bi-patch-question" aria-hidden="true"></i> Unknown, needs review: @_runway.UnknownReason</div>
+                    <div class="small" style="color:var(--dbt-overdue);" data-testid="runway-status"><i class="bi bi-patch-question" aria-hidden="true"></i> Unknown: @_runway.UnknownReason</div>
+                    <p class="small text-muted mb-2">There are no usable facts yet. Unknown is not treated as supported.</p>
                 }
                 else
                 {
+                    <p class="small text-muted mb-1">Vendor lifecycle@(_matchedEntry is null ? "" : $", from \"{_matchedEntry.ReleaseLabel}\"")@(_matchedEntry?.IsManualOverride == true ? " (dates set by an internal override)" : ""):</p>
                     <div class="d-flex align-items-center gap-2 mb-2">
-                        <span class="badge-health dot @PhaseCssClass(_runway.Phase)">@_runway.Phase</span>
+                        <span class="badge-health dot @PhaseCssClass(_runway.Phase)" data-testid="runway-status">@_runway.Phase</span>
                         <span class="small">@_runway.NextMilestoneLabel: @_runway.NextMilestoneUtc?.ToString("yyyy-MM-dd")</span>
                     </div>
                     <p class="small mb-2" data-testid="runway-days">
@@ -167,9 +176,18 @@ else
                     </p>
                 }
 
+                @if (_runway is not null)
+                {
+                    <p class="small mb-2" data-testid="runway-coverage">
+                        <span class="text-muted">Contract coverage:</span>
+                        @(string.IsNullOrEmpty(_runway.CoverageNote) ? "No Extended coverage contract affects this runway." : _runway.CoverageNote)
+                        <a href="/instances/@Id/entitlement">Contracts</a>
+                    </p>
+                }
+
                 @if (_latestDecision is not null)
                 {
-                    <p class="small text-muted mb-2">Last decision: <strong>@_latestDecision.ActionType</strong>, @_latestDecision.ActionReference (by @_latestDecision.DecidedBy, @_latestDecision.DecidedAtUtc.ToLocalTime().ToString("MMM d, yyyy"))</p>
+                    <p class="small text-muted mb-2">Last decision: <strong>@_latestDecision.ActionType</strong>, @_latestDecision.ActionReference (by @_latestDecision.DecidedBy, <LocalTime Utc="_latestDecision.DecidedAtUtc" Format="MMM d, yyyy" ShowUtc="false" />)</p>
                 }
 
                 <AuthorizeView Roles="@Roles.CanEditPolicy">
@@ -210,16 +228,49 @@ else
                 {
                     <dl class="row small mb-0">
                         <dt class="col-5">Installed</dt><dd class="col-7">@_patchBaseline.InstalledLabel</dd>
-                        <dt class="col-5">Latest applicable branch patch</dt>
-                        <dd class="col-7">@(_patchBaseline.LatestApplicableBranchPatch is { } p1 ? $"{p1.ReleaseLabel} ({p1.Build})" : "None catalogued")</dd>
-                        <dt class="col-5">Newest relevant GA</dt>
-                        <dd class="col-7">@(_patchBaseline.NewestRelevantGA is { } p2 ? p2.ReleaseLabel : "None catalogued")</dd>
-                        <dt class="col-5">Approved organizational target</dt>
+                        <dt class="col-5">Available: latest applicable branch patch</dt>
+                        <dd class="col-7" data-testid="patch-latest-branch">
+                            @(_patchBaseline.LatestApplicableBranchPatch is { } p1 ? $"{p1.ReleaseLabel} ({p1.Build})" : "None catalogued")
+                            @if (_patchBaseline.LatestApplicableBranchPatch is not null)
+                            {
+                                <span class="text-muted"> · installed is @PositionText(_patchBaseline.InstalledVsLatestPatch)</span>
+                                @ReleaseNotes(_patchBaseline.LatestApplicableBranchPatch!)
+                            }
+                        </dd>
+                        <dt class="col-5">Available: newest relevant GA</dt>
                         <dd class="col-7">
-                            @(_patchBaseline.ApprovedTarget is { } p3 ? p3.ReleaseLabel : "None approved")
+                            @(_patchBaseline.NewestRelevantGA is { } p2 ? p2.ReleaseLabel : "None catalogued")
+                            @if (_patchBaseline.NewestRelevantGA is not null)
+                            {
+                                @ReleaseNotes(_patchBaseline.NewestRelevantGA!)
+                            }
+                        </dd>
+                        <dt class="col-5">Approved organizational target</dt>
+                        <dd class="col-7" data-testid="patch-approved-target">
+                            @(_patchBaseline.ApprovedTarget is { } p3 ? $"{p3.ReleaseLabel}{(string.IsNullOrWhiteSpace(p3.Build) ? "" : $" ({p3.Build})")}" : "None approved")
+                            @if (_patchBaseline.ApprovedTarget is not null)
+                            {
+                                <span class="text-muted"> · installed is @PositionText(_patchBaseline.InstalledVsApproved)</span>
+                                @ReleaseNotes(_patchBaseline.ApprovedTarget!)
+                            }
                             @if (_patchBaseline.IsMajorUpgradeFromApproved)
                             {
                                 <span class="small text-muted"> (a major-version migration, not a same-branch patch)</span>
+                            }
+                        </dd>
+                        <dt class="col-5">Required by (internal policy)</dt>
+                        <dd class="col-7" data-testid="patch-required-by">
+                            @if (_patchBaseline.RequiredByUtc is { } due)
+                            {
+                                @due.ToString("yyyy-MM-dd")
+                                @if (_patchBaseline.IsPastRequiredBy(DateTime.UtcNow))
+                                {
+                                    <span style="color:var(--dbt-failed);"> · passed, and the instance isn't confirmed on the target</span>
+                                }
+                            }
+                            else
+                            {
+                                <span>No deadline set</span>
                             }
                         </dd>
                     </dl>
@@ -246,27 +297,82 @@ else
                 }
                 else
                 {
-                    @foreach (var a in _assessments)
+                    <p class="small text-muted mb-2">Highest priority first: severity, this service's criticality, its exposure and the applicability are weighed together. Unknown severity or criticality is weighed like High.</p>
+                    @foreach (var ranked in _assessments)
                     {
-                        <div class="mb-2 pb-2" style="border-bottom:1px solid var(--dbt-line);">
+                        var a = ranked.Assessment;
+                        <div class="mb-2 pb-2" style="border-bottom:1px solid var(--dbt-line);" data-testid="advisory-row">
                             <div class="d-flex justify-content-between">
                                 <strong class="small">@a.AdvisoryRecord?.VendorAdvisoryId: @a.AdvisoryRecord?.Title</strong>
                                 <span class="badge-health dot @AdvisoryCssClass(a.Classification)">@a.Classification</span>
                             </div>
+                            <p class="small text-muted mb-1" data-testid="advisory-priority">Priority @ranked.Score: @ranked.Rationale</p>
                             <p class="small text-muted mb-1">@a.ClassificationReasoning</p>
                             @if (a.IsReviewed)
                             {
-                                <p class="small mb-0">Reviewed by @a.ReviewedBy, verification: @a.VerificationStatus@(string.IsNullOrEmpty(a.Owner) ? "" : $", owner {a.Owner}")</p>
+                                <p class="small mb-0" data-testid="advisory-review-summary">
+                                    Reviewed by @a.ReviewedBy, verification: @a.VerificationStatus.
+                                    Owner: @OrNotRecorded(a.Owner). Deadline: @(a.RemediationDeadlineUtc?.ToString("yyyy-MM-dd") ?? "Not set").
+                                    Target patch: @OrNotRecorded(a.TargetPatch).
+                                </p>
+                                @if (!string.IsNullOrWhiteSpace(a.ReviewerEvidence))
+                                {
+                                    <p class="small text-muted mb-0">Evidence: @a.ReviewerEvidence</p>
+                                }
                             }
-                            else
-                            {
-                                <AuthorizeView Roles="@Roles.CanEditPolicy">
-                                    <div class="d-flex gap-1 mt-1">
-                                        <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="() => ReviewAssessment(a.Id, AdvisoryClassification.Confirmed)">Confirm</button>
-                                        <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="() => ReviewAssessment(a.Id, AdvisoryClassification.NotApplicable)">Mark not applicable</button>
+                            <AuthorizeView Roles="@Roles.CanEditPolicy">
+                                @if (_reviewingId == a.Id)
+                                {
+                                    <div class="mt-2 p-2" style="border:1px dashed var(--dbt-line);" data-testid="advisory-review-form">
+                                        <div class="row g-2 mb-1">
+                                            <div class="col-6">
+                                                <label class="form-label small mb-1" for="adv-class-@a.Id">Applicability</label>
+                                                <select id="adv-class-@a.Id" class="form-select form-select-sm" @bind="_reviewClassification">
+                                                    @foreach (var c in Enum.GetValues<AdvisoryClassification>())
+                                                    {
+                                                        <option value="@c">@c</option>
+                                                    }
+                                                </select>
+                                            </div>
+                                            <div class="col-6">
+                                                <label class="form-label small mb-1" for="adv-verify-@a.Id">Verification</label>
+                                                <select id="adv-verify-@a.Id" class="form-select form-select-sm" @bind="_reviewVerification">
+                                                    @foreach (var v in Enum.GetValues<AdvisoryVerificationStatus>())
+                                                    {
+                                                        <option value="@v">@v</option>
+                                                    }
+                                                </select>
+                                            </div>
+                                            <div class="col-12"><label class="form-label small mb-1" for="adv-evidence-@a.Id">Evidence (required)</label><input id="adv-evidence-@a.Id" class="form-control form-control-sm" maxlength="1000" @bind="_reviewEvidence" @bind:event="oninput" data-testid="advisory-review-evidence" /></div>
+                                            <div class="col-6"><label class="form-label small mb-1" for="adv-owner-@a.Id">Remediation owner</label><input id="adv-owner-@a.Id" class="form-control form-control-sm" maxlength="320" @bind="_reviewOwner" @bind:event="oninput" data-testid="advisory-review-owner" /></div>
+                                            <div class="col-6">
+                                                <label class="form-label small mb-1" for="adv-deadline-@a.Id">Remediation deadline</label>
+                                                <input id="adv-deadline-@a.Id" type="date" class="form-control form-control-sm" @bind="_reviewDeadline" data-testid="advisory-review-deadline" />
+                                            </div>
+                                            <div class="col-6"><label class="form-label small mb-1" for="adv-target-@a.Id">Target patch</label><input id="adv-target-@a.Id" class="form-control form-control-sm" maxlength="200" @bind="_reviewTargetPatch" @bind:event="oninput" data-testid="advisory-review-target" /></div>
+                                            <div class="col-6"><label class="form-label small mb-1" for="adv-vnotes-@a.Id">Verification notes</label><input id="adv-vnotes-@a.Id" class="form-control form-control-sm" maxlength="1000" @bind="_reviewVerificationNotes" @bind:event="oninput" /></div>
+                                        </div>
+                                        <p class="small text-muted mb-1">For a temporary exception instead of a fix, record it on the Exceptions page and set verification to Exception.</p>
+                                        @if (_reviewError is not null)
+                                        {
+                                            <p class="small mb-1" role="alert" style="color:var(--dbt-failed);">@_reviewError</p>
+                                        }
+                                        <button type="button" class="btn btn-primary btn-sm" @onclick="SaveReview" data-testid="advisory-review-save">Save review</button>
+                                        <button type="button" class="btn btn-link btn-sm" @onclick="() => _reviewingId = null">Cancel</button>
                                     </div>
-                                </AuthorizeView>
-                            }
+                                }
+                                else if (!a.IsReviewed)
+                                {
+                                    <div class="d-flex gap-1 mt-1">
+                                        <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="() => OpenReview(a, AdvisoryClassification.Confirmed)">Confirm</button>
+                                        <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="() => OpenReview(a, AdvisoryClassification.NotApplicable)">Mark not applicable</button>
+                                    </div>
+                                }
+                                else
+                                {
+                                    <button type="button" class="btn btn-link btn-sm p-0" @onclick="() => OpenReview(a, a.Classification)">Update review</button>
+                                }
+                            </AuthorizeView>
                         </div>
                     }
                 }
@@ -282,11 +388,36 @@ else
                 </p>
 
                 <AuthorizeView Roles="@Roles.CanEditPolicy">
-                    <div class="d-flex gap-2 mb-3">
-                        <label class="visually-hidden" for="observation-input">Observed or imported raw version text</label>
-                        <input id="observation-input" class="form-control form-control-sm" placeholder="Observed/imported raw version text" @bind="_observationInput" @bind:event="oninput" />
-                        <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="RecordObservation" disabled="@string.IsNullOrWhiteSpace(_observationInput)">Record observation</button>
+                    <div class="row g-2 mb-2 align-items-end">
+                        <div class="col-md-3">
+                            <label class="form-label small mb-1" for="observation-outcome">Outcome</label>
+                            <select id="observation-outcome" class="form-select form-select-sm" @bind="_observationOutcome" data-testid="observation-outcome">
+                                @foreach (var o in Enum.GetValues<ObservationOutcome>())
+                                {
+                                    <option value="@o">@o</option>
+                                }
+                            </select>
+                        </div>
+                        @if (_observationOutcome == ObservationOutcome.Success)
+                        {
+                            <div class="col-md-3">
+                                <label class="visually-hidden" for="observation-input">Observed or imported raw version text</label>
+                                <input id="observation-input" class="form-control form-control-sm" placeholder="Observed/imported raw version text" maxlength="200" @bind="_observationInput" @bind:event="oninput" />
+                            </div>
+                            <div class="col-md-3"><label class="form-label small mb-1" for="observation-edition">Observed edition</label><input id="observation-edition" class="form-control form-control-sm" maxlength="100" @bind="_observationEdition" @bind:event="oninput" /></div>
+                            <div class="col-md-3"><label class="form-label small mb-1" for="observation-compat">Observed compatibility level</label><input id="observation-compat" class="form-control form-control-sm" maxlength="100" @bind="_observationCompat" @bind:event="oninput" /></div>
+                        }
+                        else
+                        {
+                            <div class="col-md-9"><label class="form-label small mb-1" for="observation-failure">What failed (required)</label><input id="observation-failure" class="form-control form-control-sm" placeholder="e.g. VIEW SERVER STATE denied for the inventory login" maxlength="500" @bind="_observationFailure" @bind:event="oninput" data-testid="observation-failure" /></div>
+                        }
                     </div>
+                    <div class="d-flex gap-2 mb-3">
+                        <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="RecordObservation"
+                                disabled="@(_observationOutcome == ObservationOutcome.Success ? string.IsNullOrWhiteSpace(_observationInput) : string.IsNullOrWhiteSpace(_observationFailure))">Record observation</button>
+                        <a class="btn btn-link btn-sm" href="/lifecycle/import">Import observations from CSV</a>
+                    </div>
+                    <p class="small text-muted">A failed read is recorded as evidence of where metadata couldn't be collected. It never changes the declared identity.</p>
                 </AuthorizeView>
 
                 @if (_observations.Count == 0)
@@ -300,11 +431,17 @@ else
                         <tbody>
                             @foreach (var o in _observations)
                             {
-                                <tr>
-                                    <td class="small">@o.ObservedAtUtc.ToLocalTime().ToString("MMM d, h:mm tt")</td>
+                                <tr data-testid="observation-row">
+                                    <td class="small"><LocalTime Utc="o.ObservedAtUtc" Format="MMM d, h:mm tt" ShowUtc="false" /></td>
                                     <td class="small">@o.Source</td>
-                                    <td class="small">@o.RawVersionText</td>
-                                    <td class="small">@o.Outcome</td>
+                                    <td class="small">
+                                        @o.RawVersionText
+                                        @if (!string.IsNullOrWhiteSpace(o.ObservedEdition) || !string.IsNullOrWhiteSpace(o.ObservedCompatibilityLevel))
+                                        {
+                                            <span class="text-muted">(@string.Join(", ", new[] { o.ObservedEdition, string.IsNullOrWhiteSpace(o.ObservedCompatibilityLevel) ? "" : $"compat {o.ObservedCompatibilityLevel}" }.Where(s => !string.IsNullOrWhiteSpace(s))))</span>
+                                        }
+                                    </td>
+                                    <td class="small">@o.Outcome@(string.IsNullOrWhiteSpace(o.FailureDetail) ? "" : $": {o.FailureDetail}")</td>
                                     <td class="small">@o.DriftStatus @(string.IsNullOrEmpty(o.DriftDetail) ? "" : $"({o.DriftDetail})")</td>
                                 </tr>
                             }
@@ -325,17 +462,27 @@ else
     private SupportRunwayResult? _runway;
     private SupportRunwayDecision? _latestDecision;
     private PatchBaselineResult? _patchBaseline;
-    private List<AdvisoryInstanceAssessment> _assessments = new();
+    private IReadOnlyList<RankedAdvisoryAssessment> _assessments = [];
     private List<VersionObservation> _observations = new();
+    private ReleaseCatalogEntry? _matchedEntry;
     private bool _loaded, _loadFailed;
     private string? _userName;
 
     private string _rawVersionInput = "";
-    private string _edition = "", _distribution = "", _patchTrain = "", _hostingProvider = "", _hostingEngineVersion = "", _compatLevel = "";
+    private string _edition = "", _distribution = "", _patchTrain = "", _hostingProvider = "", _hostingContext = "", _hostingEngineVersion = "", _compatLevel = "";
     private string _newNodeName = "", _newNodeVersion = "";
     private SupportActionType _decisionActionType = SupportActionType.Patch;
     private string _decisionReference = "", _decisionNotes = "";
-    private string _observationInput = "";
+    private string _observationInput = "", _observationEdition = "", _observationCompat = "", _observationFailure = "";
+    private ObservationOutcome _observationOutcome = ObservationOutcome.Success;
+
+    // Advisory review form.
+    private int? _reviewingId;
+    private AdvisoryClassification _reviewClassification;
+    private AdvisoryVerificationStatus _reviewVerification = AdvisoryVerificationStatus.Unverified;
+    private string _reviewEvidence = "", _reviewOwner = "", _reviewTargetPatch = "", _reviewVerificationNotes = "";
+    private DateTime? _reviewDeadline;
+    private string? _reviewError;
 
     protected override async Task OnInitializedAsync()
     {
@@ -373,9 +520,10 @@ else
         var runwayView = await RunwayService.GetForInstanceAsync(Id);
         _runway = runwayView?.Runway;
         _latestDecision = runwayView?.LatestDecision;
+        _matchedEntry = runwayView?.MatchedCatalogEntry;
 
         _patchBaseline = await PatchService.ComputeForInstanceAsync(Id);
-        _assessments = await Advisories.ListAssessmentsForInstanceAsync(Id);
+        _assessments = await Advisories.ListRankedAssessmentsForInstanceAsync(Id);
         _observations = await Observations.ListForInstanceAsync(Id);
 
         if (_identity is not null)
@@ -384,6 +532,7 @@ else
             _distribution = _identity.Distribution;
             _patchTrain = _identity.PatchTrain;
             _hostingProvider = _identity.HostingProvider;
+            _hostingContext = _identity.HostingContext;
             _hostingEngineVersion = _identity.HostingEngineVersion;
             _compatLevel = _identity.DatabaseCompatibilityLevel;
             _rawVersionInput = _identity.RawVersionText;
@@ -403,7 +552,7 @@ else
 
     private async Task SaveMetadata()
     {
-        await IdentityService.SetStructuredFieldsAsync(Id, _edition, _distribution, _patchTrain, _hostingProvider, "", _hostingEngineVersion, _compatLevel, _userName ?? "unknown");
+        await IdentityService.SetStructuredFieldsAsync(Id, _edition, _distribution, _patchTrain, _hostingProvider, _hostingContext.Trim(), _hostingEngineVersion, _compatLevel, _userName ?? "unknown");
         Toasts.Success("Version metadata saved.");
         await Load();
     }
@@ -445,21 +594,81 @@ else
         await Load();
     }
 
-    private async Task ReviewAssessment(int assessmentId, AdvisoryClassification classification)
+    private void OpenReview(AdvisoryInstanceAssessment a, AdvisoryClassification classification)
     {
-        await Advisories.ReviewAssessmentAsync(assessmentId, classification, $"Reviewed from instance lifecycle page by {_userName}.",
-            "", null, "", AdvisoryVerificationStatus.Verified, _userName ?? "unknown");
+        _reviewingId = a.Id;
+        _reviewClassification = classification;
+        _reviewVerification = a.IsReviewed ? a.VerificationStatus : AdvisoryVerificationStatus.Unverified;
+        _reviewEvidence = a.ReviewerEvidence;
+        _reviewOwner = string.IsNullOrWhiteSpace(a.Owner) ? (_instance?.ContactName ?? "") : a.Owner;
+        _reviewDeadline = a.RemediationDeadlineUtc;
+        _reviewTargetPatch = string.IsNullOrWhiteSpace(a.TargetPatch) ? (a.AdvisoryRecord?.FixedBuild ?? "") : a.TargetPatch;
+        _reviewVerificationNotes = a.VerificationNotes;
+        _reviewError = null;
+    }
+
+    private async Task SaveReview()
+    {
+        if (_reviewingId is not { } id || !await CanEditAsync())
+        {
+            return;
+        }
+
+        var deadline = _reviewDeadline is { } d ? DateTime.SpecifyKind(d.Date, DateTimeKind.Utc) : (DateTime?)null;
+        var (ok, error) = await Advisories.ReviewAssessmentAsync(id, _reviewClassification, _reviewEvidence.Trim(), _reviewOwner.Trim(), deadline,
+            _reviewTargetPatch.Trim(), _reviewVerification, _userName ?? "unknown", _reviewVerificationNotes.Trim());
+        if (!ok)
+        {
+            _reviewError = error;
+            return;
+        }
+
         Toasts.Success("Advisory assessment reviewed.");
+        _reviewingId = null;
         await Load();
     }
 
     private async Task RecordObservation()
     {
-        var observation = await Observations.RecordObservationAsync(Id, _observationInput, VersionObservationSource.ManualEntry, _userName ?? "unknown");
-        Toasts.Success(observation.DriftStatus == DriftStatus.Drift ? "Observation recorded. It differs from the declared version identity." : "Observation recorded.");
-        _observationInput = "";
+        if (!await CanEditAsync())
+        {
+            return;
+        }
+
+        if (_observationOutcome == ObservationOutcome.Success)
+        {
+            var observation = await Observations.RecordObservationAsync(Id, _observationInput.Trim(), VersionObservationSource.ManualEntry, _userName ?? "unknown",
+                observedEdition: _observationEdition.Trim(), observedCompatibilityLevel: _observationCompat.Trim());
+            Toasts.Success(observation.DriftStatus == DriftStatus.Drift ? "Observation recorded. It differs from the declared version identity." : "Observation recorded.");
+        }
+        else
+        {
+            await Observations.RecordFailureAsync(Id, _observationOutcome, _observationFailure.Trim(), _userName ?? "unknown", VersionObservationSource.ManualEntry);
+            Toasts.Success($"Failed read recorded ({_observationOutcome}). The declared identity is unchanged.");
+        }
+        _observationInput = _observationEdition = _observationCompat = _observationFailure = "";
+        _observationOutcome = ObservationOutcome.Success;
         await Load();
     }
+
+    private async Task<bool> CanEditAsync()
+    {
+        var state = await AuthProvider.GetAuthenticationStateAsync();
+        return Roles.CanEditPolicy.Split(',').Any(state.User.IsInRole);
+    }
+
+    private static string PositionText(BuildPosition position) => position switch
+    {
+        BuildPosition.Behind => "behind it",
+        BuildPosition.Same => "on it",
+        BuildPosition.Ahead => "ahead of it",
+        _ => "not comparable (build not recorded on one side)"
+    };
+
+    private RenderFragment ReleaseNotes(ReleaseCatalogEntry entry) => @<text>@if (!string.IsNullOrWhiteSpace(entry.ReleaseNotesUrl))
+    {
+        <span> · <a href="@entry.ReleaseNotesUrl" target="_blank" rel="noopener noreferrer">release notes</a></span>
+    }</text>;
 
     private static string OrNotRecorded(string? value) => string.IsNullOrWhiteSpace(value) ? "Not recorded" : value;
 

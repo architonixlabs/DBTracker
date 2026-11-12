@@ -2,6 +2,111 @@
 
 All notable changes to DBTracker are recorded here. Versions follow [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+## [1.1.0] - 2026-11-12
+
+This is still a pre-release: the installers aren't code-signed yet.
+
+### Added
+
+- **Passkey sign-in.** Users can register passkeys on their account page and sign in with them. The
+  password still works as a fallback. Registration and removal are audited, and a deactivated account
+  can't sign in with a passkey.
+- **Bulk import.**
+  - The instance template has an example row, a list of allowed values, and 12 more columns: region,
+    cluster, replica set, criticality, owner team, backup contact, file name patterns, connectivity
+    host and port, and restore-test interval.
+  - Re-importing a file updates existing instances and leaves alone any fields the file doesn't contain.
+  - Past backup and restore history can be imported. It is labelled Imported, with who imported it
+    and when, and never counts as verified.
+  - Catalogue, advisory, metadata and maintenance-result imports were added for lifecycle and assurance.
+- **Monitoring and alerts.**
+  - The scanner can be shown as Disabled, and the last successful scan is kept after a failed one.
+  - Evidence levels show in alerts, report exports and compliance rows.
+  - Notifications can be subscribed to by team, honour their channel, and have quiet hours.
+  - Every email and webhook send is stored as a delivery attempt, and **Setup** shows the history.
+  - Incident actions are audited, whether a user or the alert worker took them.
+- **Reports and evidence.**
+  - Saved views can be renamed, and the Reports date range is part of the URL.
+  - Times are shown in the viewer's time zone, with the zone named.
+  - Restores take an evidence reference, and restore corrections count.
+  - Trends show policy changes and link to the rows behind each figure.
+- **Editing and audit.**
+  - An edit conflict shows the other person's change.
+  - Unarchiving asks for a reason.
+  - Policies can be edited, with versions and an impact preview.
+  - The audit trail records before and after values, filters by date, and exports every matching row.
+- **DBA lifecycle.** Fuller catalogue facts:
+  - Build, patch train, edition, the ESU and GA dates, and the source of each fact.
+  - Revision history.
+  - Support notices that fire again after a date is revised.
+  Migration planning has milestones, blockers, effort, cost and risk, and approvals that gate the
+  plan. Change windows add runbook steps, change freezes and role-checked sign-offs. Certificates add
+  renewal history and owner notices.
+- **Start-up resilience.** An installed DBTracker that starts before SQL Server is ready now waits and
+  retries every 15 seconds. Meanwhile it shows a "waiting for its database" page, and `/healthz`
+  reports degraded so the tray light turns amber. Before, it answered HTTP 500 until the site was
+  restarted.
+- **Quality tooling.**
+  - A CI build and test workflow, with a CycloneDX SBOM.
+  - A SonarQube scan script.
+  - IIS log shipping for central log analytics.
+
+### Changed
+
+- **Security headers.** Every response carries a Content Security Policy with a per-request nonce,
+  plus `X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy` and frame protection.
+  Signing out also clears the browser's site data.
+- **Faster pages.**
+  - Fonts are served by DBTracker itself instead of Google Fonts, and the unused Bootstrap script was removed.
+  - Large lists, reports and the inbox page through the database instead of loading everything. At
+    1,000 instances and 100,000 backups, list pages take about 50-65 ms and the heaviest reports
+    150-240 ms on the server.
+  - The dashboard shows the first 25 rows. Backup activity loads 200 rows at a time.
+  - On a phone, instance detail no longer jumps as icons load.
+- **Accessibility.**
+  - Confirmations use native dialogs: focus stays inside, Esc cancels, and focus returns afterwards.
+  - The notification menu and help tips use popovers, which work by touch and keyboard.
+  - Cards and stat cells adjust to their own width.
+
+### Fixed
+
+- **Archive and retirement.** A plain archive now asks whether the record is a duplicate or being
+  decommissioned. It is refused while a retirement checklist is open, so a decommission can't skip
+  the checklist. Opening the retirement page no longer starts a checklist, and a checklist can be
+  cancelled with a reason. The rollback gate no longer passes when a change was validated without a
+  rollback deadline.
+- **Notifications.** A new user's first alerts no longer arrive already marked read.
+- **Change windows.** A window can only be completed or rolled back after it was in progress, and
+  needs at least one required approval.
+- **Bulk edit.** Bulk edit is all or nothing:
+  - It checks the values and saves nothing if any instance would end up invalid.
+  - It skips instances changed since the preview.
+  - It rechecks the user's role, and applies exactly the previewed values.
+  - Audit entries share a batch id and are saved with the changes.
+- **Accounts.**
+  - Invitations email a link to set a password and no longer contain the temporary password.
+  - A user with a temporary password is returned to the change-password page from every page.
+  - Any role change ends the old role's sessions and pending device links.
+  - Creating a user is always audited.
+- **Cost figures.** Cost estimate amounts no longer appear in the audit trail or its export, or
+  through its search, for roles that can't see them. DBAs can record support contracts, which carry
+  no amounts.
+- **Installer.**
+  - On a first install, the port check also refuses a port another program is already listening on.
+  - Setup no longer reinstalls an older Hosting Bundle (and restarts IIS) on a server with a newer
+    .NET 10 patch.
+  - The SQL Server Express option says that ticking it accepts Microsoft's license terms.
+- **Backup scanning.** A backup file rewritten under the same name and size is recorded as a new
+  backup. Log backups (`.trn`, or a `log` part in the name) and differentials are recorded as such
+  instead of as full backups, and the scan preview shows the type.
+- **Documentation.**
+  - The 1.0.0 notes below list a tray site restart, which was missing; **Admin > Restart the site**
+    now exists.
+  - `installer\build.ps1` now writes `SHA256SUMS.txt`, which the setup guide refers to.
+  - DEPLOYMENT.md explains that tray access tokens survive uninstall and how to revoke them.
+
 ## [1.0.0] - 2026-11-11
 
 First public release (pre-release). DBTracker keeps an inventory of your database instances and shows,

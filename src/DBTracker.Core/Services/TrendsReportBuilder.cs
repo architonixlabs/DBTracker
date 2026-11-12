@@ -10,6 +10,15 @@ public record TrendOutstandingRisk(string InstanceName, DateTime OpenedAtUtc, Ba
 
 public record RepeatedFailureRow(string InstanceName, int FailureCount);
 
+/// <summary>A backup policy edit recorded in the audit trail, shown against the period it happened in.</summary>
+public record TrendPolicyChange(DateTime ChangedAtUtc, string PolicyName, string ChangedBy, string Summary);
+
+/// <summary>A saved snapshot that could serve as a period's evidence.</summary>
+public record TrendSnapshotCandidate(int Id, DateTime EffectiveAsOfUtc);
+
+/// <summary>The snapshot chosen for a period, or why none could be used.</summary>
+public record TrendSnapshotChoice(int? SnapshotId, string? MissingReason);
+
 /// <summary>Inputs for one side of a trend comparison. Snapshot rows come from the nearest snapshot at or before ToUtc; null is reported as missing evidence, never filled from today's live inventory.</summary>
 public record TrendPeriodInput(
     DateTime FromUtc,
@@ -18,7 +27,9 @@ public record TrendPeriodInput(
     DateTime? SnapshotGeneratedAtUtc,
     IReadOnlyList<TrendBackupEvent> BackupEvents,
     IReadOnlyList<DateTime> RestoreTestTimestamps,
-    IReadOnlyList<TrendOutstandingRisk> OutstandingRisks);
+    IReadOnlyList<TrendOutstandingRisk> OutstandingRisks,
+    IReadOnlyList<TrendPolicyChange>? PolicyChanges = null,
+    string? MissingEvidenceReason = null);
 
 public record TrendPeriodResult(
     DateTime FromUtc,
@@ -39,7 +50,16 @@ public record TrendPeriodResult(
     double? AvgBackupSizeMb,
     double? AverageOutstandingRiskAgeHours,
     IReadOnlyList<TrendOutstandingRisk> OutstandingRiskRows,
-    int RestoreTestsPerformed);
+    int RestoreTestsPerformed)
+{
+    /// <summary>Restore-test recency frozen in the snapshot. Null when there is no snapshot or it predates recency being recorded.</summary>
+    public int? RestoreCurrentCount { get; init; }
+    public int? RestoreOverdueCount { get; init; }
+    public int? RestoreNeverTestedCount { get; init; }
+    public IReadOnlyList<ComplianceSnapshotRow> RestoreOverdueRows { get; init; } = [];
+    public IReadOnlyList<TrendPolicyChange> PolicyChanges { get; init; } = [];
+    public string? MissingEvidenceReason { get; init; }
+}
 
 public record TrendComparisonResult(TrendPeriodResult PeriodA, TrendPeriodResult PeriodB);
 
@@ -52,7 +72,58 @@ public static class TrendsReportBuilder
     public static TrendComparisonResult Compare(TrendPeriodInput periodA, TrendPeriodInput periodB) =>
         new(BuildPeriod(periodA), BuildPeriod(periodB));
 
+    /// <summary>Picks the latest snapshot taken within the period (start and end inclusive). A snapshot from before the period
+    /// started describes an earlier time, so it is not used; the reason says so instead.</summary>
+    public static TrendSnapshotChoice SelectSnapshot(IEnumerable<TrendSnapshotCandidate> candidates, DateTime fromUtc, DateTime toUtc)
+    {
+        var list = candidates.ToList();
+        var inPeriod = list
+            .Where(c => c.EffectiveAsOfUtc >= fromUtc && c.EffectiveAsOfUtc <= toUtc)
+            .OrderByDescending(c => c.EffectiveAsOfUtc).ThenByDescending(c => c.Id)
+            .FirstOrDefault();
+        if (inPeriod is not null)
+        {
+            return new TrendSnapshotChoice(inPeriod.Id, null);
+        }
+
+        var earlier = list.Where(c => c.EffectiveAsOfUtc < fromUtc).OrderByDescending(c => c.EffectiveAsOfUtc).FirstOrDefault();
+        return new TrendSnapshotChoice(null, earlier is null
+            ? "No Compliance snapshot was saved during this period."
+            : $"The latest snapshot before this period ends was taken {earlier.EffectiveAsOfUtc:yyyy-MM-dd HH:mm} UTC, before the period started, so it isn't used.");
+    }
+
     public static TrendPeriodResult BuildPeriod(TrendPeriodInput input)
+    {
+        var result = BuildCore(input);
+        var policyChanges = (input.PolicyChanges ?? [])
+            .Where(c => c.ChangedAtUtc >= input.FromUtc && c.ChangedAtUtc <= input.ToUtc)
+            .OrderBy(c => c.ChangedAtUtc)
+            .ToList();
+
+        if (input.SnapshotRows is not { } rows)
+        {
+            return result with
+            {
+                PolicyChanges = policyChanges,
+                MissingEvidenceReason = input.MissingEvidenceReason ?? "No Compliance snapshot was saved during this period."
+            };
+        }
+
+        // Older snapshots didn't record recency; their counts stay null instead of being worked out from today's data.
+        var recorded = rows.All(r => r.RestoreRecency is not null);
+        return result with
+        {
+            PolicyChanges = policyChanges,
+            RestoreCurrentCount = recorded ? rows.Count(r => r.RestoreRecency == RestoreTestRecency.Current) : null,
+            RestoreOverdueCount = recorded ? rows.Count(r => r.RestoreRecency == RestoreTestRecency.Overdue) : null,
+            RestoreNeverTestedCount = recorded ? rows.Count(r => r.RestoreRecency == RestoreTestRecency.NeverTested) : null,
+            RestoreOverdueRows = recorded
+                ? rows.Where(r => r.RestoreRecency == RestoreTestRecency.Overdue).OrderBy(r => r.InstanceName, StringComparer.OrdinalIgnoreCase).ToList()
+                : []
+        };
+    }
+
+    private static TrendPeriodResult BuildCore(TrendPeriodInput input)
     {
         var repeatedFailures = input.BackupEvents
             .Where(e => e.Status == BackupStatus.Failed)

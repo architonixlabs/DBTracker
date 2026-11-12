@@ -11,7 +11,9 @@ public record RetirementChecklistEvaluation(
     IReadOnlyList<string> BlockingReasons);
 
 /// <summary>Retirement gates computed from evidence the caller gathers (dependencies, chain coverage, copies, certificates, rollback deadline, cost review) plus the checklist's manual facts.</summary>
-/// <remarks>Unknown and NotApplicable count as unsatisfied, like Blocked, so proceeding past them needs a scoped exception.</remarks>
+/// <remarks>Blocked and Unknown are unsatisfied, so proceeding past them needs a scoped exception. NotApplicable counts as
+/// satisfied, so a gate returns it only when the absence is proven (the rollback gate: no change was ever validated on
+/// this instance), never as a stand-in for "nothing recorded".</remarks>
 public static class RetirementChecklistGateEvaluator
 {
     private static RetirementGateStatus Worse(RetirementGateStatus a, RetirementGateStatus b)
@@ -36,14 +38,15 @@ public static class RetirementChecklistGateEvaluator
         bool hasAnyCopyLocationsRecorded,
         bool? certificateAccessVerified,
         DateTime? rollbackRetentionDeadlineUtc,
-        DateTime nowUtc)
+        DateTime nowUtc,
+        bool hasChangeValidationHistory = false)
     {
         var gates = new List<RetirementGateResult>
         {
             ConsumersResolvedGate(dependencies),
             JobsReplicasResolvedGate(dependencies),
             FinalRecoverableEvidenceGate(chainCoverageStatus, hasAccessibleVerifiedCopy, hasAnyCopyLocationsRecorded, certificateAccessVerified),
-            RollbackWindowClosedGate(rollbackRetentionDeadlineUtc, nowUtc),
+            RollbackWindowClosedGate(rollbackRetentionDeadlineUtc, hasChangeValidationHistory, nowUtc),
             LegalHoldReviewedGate(checklist),
             SignoffGate(checklist),
             CostContractReviewGate(checklist)
@@ -60,17 +63,22 @@ public static class RetirementChecklistGateEvaluator
 
     private static RetirementGateResult ConsumersResolvedGate(IReadOnlyCollection<InstanceDependency> dependencies)
     {
-        var consumers = dependencies.Where(d => d.Direction == DependencyDirection.Downstream).ToList();
+        // A database hosted on this instance goes with it, whichever direction it was recorded in, so it must be moved or resolved too.
+        var consumers = dependencies.Where(d => d.Direction == DependencyDirection.Downstream || d.Kind == DependencyKind.HostedDatabase).ToList();
         if (consumers.Count == 0)
         {
             return new RetirementGateResult("ConsumersResolved", "Downstream consumers moved/confirmed resolved", RetirementGateStatus.Unknown,
                 "No downstream-consumer dependencies recorded. Confirm none exist before retiring.");
         }
 
-        var unresolved = consumers.Where(d => !d.IsResolved).Select(d => d.Name).ToList();
+        var unresolved = consumers.Where(d => !d.IsResolved)
+            .Select(d => d.Kind == DependencyKind.HostedDatabase ? $"hosted database {d.Name}" : d.Name).ToList();
+        var hostedCount = consumers.Count(d => d.Kind == DependencyKind.HostedDatabase);
         return unresolved.Count == 0
             ? new RetirementGateResult("ConsumersResolved", "Downstream consumers moved/confirmed resolved", RetirementGateStatus.Passed,
-                $"All {consumers.Count} recorded downstream consumer(s) resolved.")
+                hostedCount == 0
+                    ? $"All {consumers.Count} recorded downstream consumer(s) resolved."
+                    : $"All {consumers.Count} recorded downstream consumer(s) resolved, including {hostedCount} hosted database(s).")
             : new RetirementGateResult("ConsumersResolved", "Downstream consumers moved/confirmed resolved", RetirementGateStatus.Blocked,
                 $"Unresolved downstream consumer(s): {string.Join(", ", unresolved)}.");
     }
@@ -131,12 +139,15 @@ public static class RetirementChecklistGateEvaluator
         return new RetirementGateResult("FinalRecoverableEvidence", "Final recoverable backup/key-access evidence retained", status, string.Join(" ", details));
     }
 
-    private static RetirementGateResult RollbackWindowClosedGate(DateTime? rollbackRetentionDeadlineUtc, DateTime nowUtc)
+    private static RetirementGateResult RollbackWindowClosedGate(DateTime? rollbackRetentionDeadlineUtc, bool hasChangeValidationHistory, DateTime nowUtc)
     {
         if (rollbackRetentionDeadlineUtc is null)
         {
-            return new RetirementGateResult("RollbackWindowClosed", "Change rollback window closed", RetirementGateStatus.NotApplicable,
-                "No rollback-retention deadline recorded for this instance, so there's no active change to close out.");
+            return hasChangeValidationHistory
+                ? new RetirementGateResult("RollbackWindowClosed", "Change rollback window closed", RetirementGateStatus.Unknown,
+                    "A change was validated on this instance but no rollback-retention deadline was recorded. Record it on the campaign's validation page.")
+                : new RetirementGateResult("RollbackWindowClosed", "Change rollback window closed", RetirementGateStatus.NotApplicable,
+                    "No change has been validated on this instance, so there's no rollback window to close.");
         }
 
         return nowUtc >= rollbackRetentionDeadlineUtc

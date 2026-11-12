@@ -53,7 +53,7 @@
             <Editbox Name="SitePort" X="11" Y="170" Width="80" Height="21" TabStop="yes" FontId="3" />
             <Label X="100" Y="172" Width="-11" Height="34" FontId="3" DisablePrefix="yes">#(loc.OptionsPortHint)</Label>
             <Checkbox Name="InstallSqlExpress" X="11" Y="212" Width="-11" Height="17" TabStop="yes" FontId="3" VisibleCondition="NOT SqlInstancesExist">#(loc.OptionsSqlExpressCheckbox)</Checkbox>
-            <Label X="30" Y="232" Width="-11" Height="60" FontId="3" DisablePrefix="yes" VisibleCondition="NOT SqlInstancesExist">#(loc.OptionsSqlExpressHint)</Label>
+            <Label X="30" Y="232" Width="-11" Height="88" FontId="3" DisablePrefix="yes" VisibleCondition="NOT SqlInstancesExist">#(loc.OptionsSqlExpressHint)</Label>
             <Label X="11" Y="212" Width="-11" Height="34" FontId="3" DisablePrefix="yes" VisibleCondition="SqlInstancesExist">#(loc.OptionsSqlLoginLabel)</Label>
             <Editbox Name="SqlLoginServer" X="11" Y="248" Width="200" Height="21" TabStop="yes" FontId="3" VisibleCondition="SqlInstancesExist" />
             <Label X="220" Y="250" Width="-11" Height="40" FontId="3" DisablePrefix="yes" VisibleCondition="SqlInstancesExist">#(loc.OptionsSqlLoginHint)</Label>

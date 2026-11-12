@@ -1,3 +1,4 @@
+﻿using DBTracker.Web.Services;
 using DBTracker.Infrastructure;
 using DBTracker.Infrastructure.Audit;
 using DBTracker.Infrastructure.Install;
@@ -41,7 +42,10 @@ builder.Services.AddHostedService<BackupScanHostedService>();
 
 builder.Services.AddScoped<NotificationService>();
 builder.Services.AddScoped<NotificationSubscriptionService>();
+builder.Services.AddScoped<DBTracker.Infrastructure.Notifications.OwnerNoticeSender>();
 builder.Services.AddScoped<IncidentService>();
+builder.Services.AddScoped<NotificationPreferenceService>();
+builder.Services.AddScoped<DeliveryAttemptService>();
 builder.Services.AddHostedService<AlertCheckHostedService>();
 builder.Services.AddScoped<ComplianceReportService>();
 builder.Services.AddHostedService<ReportHostedService>();
@@ -53,9 +57,12 @@ builder.Services.AddScoped<InstanceArchiveService>();
 builder.Services.AddScoped<InstanceBulkEditService>();
 builder.Services.AddScoped<AccountLifecycleService>();
 builder.Services.AddScoped<PersonalAccessTokenService>();
+builder.Services.AddScoped<PasskeyService>();
 
 builder.Services.AddScoped<TeamService>();
 builder.Services.AddScoped<BackupPolicyService>();
+builder.Services.AddScoped<DBTracker.Infrastructure.Import.EvidenceHistoryImportService>();
+builder.Services.AddScoped<DBTracker.Web.Services.ViewerTimeZone>();
 builder.Services.AddScoped<ContactCorrectionService>();
 
 builder.Services.AddScoped<VersionIdentityService>();
@@ -148,6 +155,8 @@ builder.Services.AddIdentityCore<ApplicationUser>(options =>
     {
         options.SignIn.RequireConfirmedAccount = false;
         options.Password.RequireNonAlphanumeric = false;
+        // G26: version 3 adds the AspNetUserPasskeys table used by Identity's passkey store.
+        options.Stores.SchemaVersion = IdentitySchemaVersions.Version3;
     })
     .AddRoles<IdentityRole>()
     .AddEntityFrameworkStores<DBTrackerDbContext>()
@@ -155,6 +164,21 @@ builder.Services.AddIdentityCore<ApplicationUser>(options =>
     .AddDefaultTokenProviders();
 
 builder.Services.AddHttpContextAccessor();
+
+// G26 passkeys. ServerDomain is the WebAuthn RP ID; left empty, Identity uses the request's host. Passkeys only work over HTTPS
+// (or http://localhost), and changing the domain later strands every passkey registered under the old one. See DEPLOYMENT.md.
+builder.Services.Configure<IdentityPasskeyOptions>(options =>
+{
+    var serverDomain = builder.Configuration["Passkeys:ServerDomain"];
+    if (!string.IsNullOrWhiteSpace(serverDomain))
+    {
+        options.ServerDomain = serverDomain.Trim();
+    }
+    // Discoverable credentials, so a user can pick their passkey without typing an email first.
+    options.ResidentKeyRequirement = "required";
+    // A PIN, fingerprint or face check on every use, so a passkey stands in for the password rather than weakening it.
+    options.UserVerificationRequirement = "required";
+});
 
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
@@ -174,10 +198,17 @@ if (app.Environment.IsProduction())
 {
     app.UseHsts();
 }
+// CSP with a per-request script nonce, plus the companion headers (SecurityHeaderPolicy). First, so error pages get them too.
+app.UseSecurityHeaders();
 app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
-app.UseHttpsRedirection();
+// The tray polls these over loopback http and doesn't follow redirects; see HttpsRedirectExemption.
+app.UseWhen(
+    ctx => !DBTracker.Core.Services.HttpsRedirectExemption.Applies(ctx.Request.Path.Value,
+        ctx.Connection.RemoteIpAddress is { } ip && System.Net.IPAddress.IsLoopback(ip)),
+    branch => branch.UseHttpsRedirection());
 
 app.UseInstallGate(installState);
+app.UseDatabaseReadinessGate(installState, app.Services.GetRequiredService<DBTracker.Web.Install.DatabaseReadiness>());
 
 app.UseAuthentication();
 app.UseAuthorization();
@@ -190,7 +221,9 @@ app.MapRazorComponents<App>()
 
 app.MapIdentityLogoutEndpoint();
 app.MapDeviceLinkEndpoints();
+app.MapPasskeyEndpoints();
 app.MapTrayApi();
+app.MapCspReports();
 
 app.Run();
 
