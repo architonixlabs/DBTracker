@@ -22,7 +22,10 @@ namespace DBTracker.Tray
                         key.GetValue("SitePort") as string,
                         key.GetValue("InstallFolder") as string,
                         key.GetValue("SiteName") as string,
-                        key.GetValue("AppPoolName") as string);
+                        key.GetValue("AppPoolName") as string,
+                        key.GetValue("SiteScheme") as string,
+                        key.GetValue("HttpsPort") as string,
+                        key.GetValue("CertHost") as string);
                 }
             }
             catch (Exception ex) when (ex is System.Security.SecurityException || ex is UnauthorizedAccessException)

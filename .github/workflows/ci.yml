@@ -28,6 +28,9 @@ jobs:
       - name: Tray logic tests
         run: dotnet test tests/DBTracker.Tray.Tests -c Release --nologo --logger "trx;LogFileName=tray.trx"
 
+      - name: Custom action check tests
+        run: dotnet test tests/DBTracker.CustomActions.Tests -c Release --nologo --logger "trx;LogFileName=customactions.trx"
+
       - name: SBOM (CycloneDX)
         run: |
           dotnet tool install --global CycloneDX --version 6.3.1

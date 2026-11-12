@@ -50,6 +50,9 @@ if (Test-Path $tray) { Remove-Item $tray -Recurse -Force }
 Invoke-Step "Test the tray app logic" {
     dotnet test (Join-Path $root "tests\DBTracker.Tray.Tests\DBTracker.Tray.Tests.csproj") -c $Configuration --nologo
 }
+Invoke-Step "Test the custom action checks" {
+    dotnet test (Join-Path $root "tests\DBTracker.CustomActions.Tests\DBTracker.CustomActions.Tests.csproj") -c $Configuration --nologo
+}
 Invoke-Step "Build DBTracker Tray $Version ($Configuration)" {
     dotnet build (Join-Path $root "src\DBTracker.Tray\DBTracker.Tray.csproj") -c $Configuration -o $tray -p:Version=$Version -p:DebugType=none --nologo
 }
