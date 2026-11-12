@@ -1,4 +1,4 @@
-﻿<!-- Copyright (c) .NET Foundation and contributors. All rights reserved. Licensed under the Microsoft Reciprocal License. See LICENSE.TXT file in the project root for full license information. -->
+<!-- Copyright (c) .NET Foundation and contributors. All rights reserved. Licensed under the Microsoft Reciprocal License. See LICENSE.TXT file in the project root for full license information. -->
 <!-- Modified from WiX Toolset v5.0.2 src/ext/Bal/stdbas/Resources/HyperlinkTheme.wxl for DBTracker Setup. -->
 
 
@@ -32,6 +32,9 @@
   <String Id="OptionsSqlExpressHint" Value="Downloads SQL Server Express from Microsoft and installs a local SQLEXPRESS instance (takes several minutes). Ticking this accepts the Microsoft SQL Server Express license terms (aka.ms/useterms). Leave this off to use an existing SQL Server; you'll enter its name in the setup wizard." />
   <String Id="OptionsSqlLoginLabel" Value="SQL Server is already installed here, so SQL Server Express isn't offered. To let the DBTracker app pool sign in with Windows authentication, enter the server to give it a login on:" />
   <String Id="OptionsSqlLoginHint" Value="For example . for the default instance or .\NAME for a named one. Leave blank to set it up yourself." />
+  <String Id="OptionsCertLabel" Value="HTTPS certificate thumbprint (optional, from Local Computer &gt; Personal):" />
+  <String Id="OptionsHttpsPortLabel" Value="HTTPS port:" />
+  <String Id="OptionsCertHint" Value="Leave the thumbprint blank for HTTP only. The certificate needs its private key. A blank port means 443. The HTTP port stays and sends browsers on to HTTPS." />
   <String Id="OptionsBrowseButton" Value="&amp;Browse" />
   <String Id="OptionsOkButton" Value="&amp;OK" />
   <String Id="OptionsCancelButton" Value="&amp;Cancel" />
@@ -41,7 +44,9 @@
   <String Id="ProgressCancelButton" Value="&amp;Cancel" />
   <String Id="ProgressDownloadNote" Value="Downloads come from Microsoft and are checked against pinned SHA-512 hashes before they run. The SQL Server Express installer then downloads its own media from Microsoft." />
   <String Id="ModifyHeader" Value="Modify Setup" />
-  <String Id="ModifyNote" Value="Uninstall removes the DBTracker site, app pool and program files. Your settings and keys in App_Data, IIS, the .NET Hosting Bundle and SQL Server stay installed." />
+  <String Id="ModifyNote" Value="Uninstall removes the DBTracker site, its app pool and the program files. IIS, the .NET Hosting Bundle and SQL Server stay installed." />
+  <String Id="ModifyRemoveDataCheckbox" Value="Also &amp;delete DBTracker's data in App_Data (settings, setup key, keys)" />
+  <String Id="ModifyRemoveDataHint" Value="Leave this off to keep them for a reinstall. Ticked, Uninstall deletes the App_Data folder in the site folder: the saved configuration (database connection and mail settings), the setup key and the encryption keys. This can't be undone, and a reinstall starts the setup wizard again. The SQL Server database and its data are not deleted either way, and neither is the SQL login." />
   <String Id="ModifyRepairButton" Value="&amp;Repair" />
   <String Id="ModifyUninstallButton" Value="&amp;Uninstall" />
   <String Id="ModifyCancelButton" Value="&amp;Cancel" />
@@ -54,6 +59,7 @@
   <String Id="SuccessUninstallHeader" Value="Uninstall Successfully Completed" />
   <String Id="SuccessUnsafeUninstallHeader" Value="Uninstall Successfully Completed" />
   <String Id="SuccessNextSteps" Value="DBTracker is running at http://localhost:[SitePort]/ and the setup wizard should be open in your browser.&#xA;&#xA;The wizard asks for a one-time setup key. It's in App_Data\setup-key.txt inside the site folder." />
+  <String Id="SuccessNextStepsHttps" Value="DBTracker is running with HTTPS, and the setup wizard should be open in your browser. Its address is https:// followed by the name on your certificate (and :port if the HTTPS port isn't 443). http://localhost:[SitePort]/ sends you on to HTTPS.&#xA;&#xA;The wizard asks for a one-time setup key. It's in App_Data\setup-key.txt inside the site folder." />
   <String Id="SuccessLaunchButton" Value="&amp;Open setup wizard" />
   <String Id="SuccessRestartText" Value="You must restart your computer before you can use the software." />
   <String Id="SuccessUninstallRestartText" Value="You must restart your computer to complete the removal of the software." />

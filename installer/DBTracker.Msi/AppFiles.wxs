@@ -22,6 +22,12 @@
         <RegistryValue Name="SiteName" Type="string" Value="[SITE_NAME]" />
         <RegistryValue Name="AppPoolName" Type="string" Value="[APPPOOL_NAME]" />
         <RegistryValue Name="SitePort" Type="string" Value="[SITE_PORT]" />
+        <!-- The tray reads these to reach the site over https://localhost:<HttpsPort> and to open
+             https://<CertHost> in the browser. SiteScheme is "http" when no certificate was given. -->
+        <RegistryValue Name="SiteScheme" Type="string" Value="[DBT_SITE_SCHEME]" />
+        <RegistryValue Name="HttpsPort" Type="string" Value="[DBT_HTTPS_PORT]" />
+        <RegistryValue Name="CertThumbprint" Type="string" Value="[DBT_CERT_THUMBPRINT]" />
+        <RegistryValue Name="CertHost" Type="string" Value="[DBT_CERT_HOST]" />
       </RegistryKey>
     </Component>
   </Fragment>

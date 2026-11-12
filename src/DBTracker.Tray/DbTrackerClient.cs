@@ -2,6 +2,9 @@ using System;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
+using System.Net.Security;
+using System.Security.Cryptography;
+using System.Security.Cryptography.X509Certificates;
 using System.Threading.Tasks;
 using DBTracker.Tray.Core;
 
@@ -23,10 +26,33 @@ namespace DBTracker.Tray
         public DbTrackerClient(TraySettings settings)
         {
             _settings = settings;
-            _http = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false, UseProxy = false })
+            // WebRequestHandler, because .NET Framework 4.6.2's HttpClientHandler has no certificate callback.
+            var handler = new WebRequestHandler { AllowAutoRedirect = false, UseProxy = false };
+            if (settings.UsesHttps)
+            {
+                handler.ServerCertificateValidationCallback = (sender, certificate, chain, errors) =>
+                    TrayTls.Accept(errors == SslPolicyErrors.None, certificate?.GetCertHashString(), IsInMachineStore);
+            }
+            _http = new HttpClient(handler)
             {
                 Timeout = TimeSpan.FromSeconds(8),
             };
+        }
+
+        private static bool IsInMachineStore(string thumbprint)
+        {
+            try
+            {
+                using (var store = new X509Store(StoreName.My, StoreLocation.LocalMachine))
+                {
+                    store.Open(OpenFlags.ReadOnly | OpenFlags.OpenExistingOnly);
+                    return store.Certificates.Find(X509FindType.FindByThumbprint, thumbprint, false).Count > 0;
+                }
+            }
+            catch (CryptographicException)
+            {
+                return false;
+            }
         }
 
         public async Task<HealthProbe> GetHealthAsync()

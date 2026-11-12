@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Copyright (c) .NET Foundation and contributors. All rights reserved. Licensed under the Microsoft Reciprocal License. See LICENSE.TXT file in the project root for full license information. -->
 <!-- Modified from WiX Toolset v5.0.2 src/ext/Bal/stdbas/Resources/HyperlinkTheme.xml for DBTracker Setup:
-     no logo image, a summary of what Setup installs, and port + SQL Server Express options. -->
+     no logo image, a summary of what Setup installs, port, SQL Server Express and HTTPS options, and a
+     keep-data choice on the Modify page. -->
 
 
 <Theme xmlns="http://wixtoolset.org/schemas/v4/thmutil">
@@ -10,7 +11,7 @@
     <Font Id="2" Height="-22" Weight="500" Foreground="graytext">Segoe UI</Font>
     <Font Id="3" Height="-12" Weight="500" Foreground="windowtext" Background="window">Segoe UI</Font>
 
-    <Window Width="520" Height="380" HexStyle="100a0000" FontId="0" Caption="#(loc.Caption)">
+    <Window Width="520" Height="460" HexStyle="100a0000" FontId="0" Caption="#(loc.Caption)">
         <Label X="11" Y="11" Width="-11" Height="40" FontId="1" Visible="yes" DisablePrefix="yes">#(loc.Title)</Label>
 
         <Page Name="Help">
@@ -57,6 +58,11 @@
             <Label X="11" Y="212" Width="-11" Height="34" FontId="3" DisablePrefix="yes" VisibleCondition="SqlInstancesExist">#(loc.OptionsSqlLoginLabel)</Label>
             <Editbox Name="SqlLoginServer" X="11" Y="248" Width="200" Height="21" TabStop="yes" FontId="3" VisibleCondition="SqlInstancesExist" />
             <Label X="220" Y="250" Width="-11" Height="40" FontId="3" DisablePrefix="yes" VisibleCondition="SqlInstancesExist">#(loc.OptionsSqlLoginHint)</Label>
+            <Label X="11" Y="328" Width="-11" Height="17" FontId="3" DisablePrefix="yes">#(loc.OptionsCertLabel)</Label>
+            <Editbox Name="CertThumbprint" X="11" Y="348" Width="330" Height="21" TabStop="yes" FontId="3" />
+            <Label X="350" Y="351" Width="80" Height="17" FontId="3" DisablePrefix="yes">#(loc.OptionsHttpsPortLabel)</Label>
+            <Editbox Name="HttpsPort" X="-11" Y="348" Width="70" Height="21" TabStop="yes" FontId="3" />
+            <Label X="11" Y="374" Width="-11" Height="34" FontId="3" DisablePrefix="yes">#(loc.OptionsCertHint)</Label>
             <Button Name="OptionsOkButton" X="-91" Y="-11" Width="75" Height="23" TabStop="yes" FontId="0">
                 <Text>#(loc.OptionsOkButton)</Text>
                 <ChangePageAction Page="Install" />
@@ -76,7 +82,9 @@
         </Page>
         <Page Name="Modify">
             <Label X="11" Y="60" Width="-11" Height="30" FontId="2" DisablePrefix="yes">#(loc.ModifyHeader)</Label>
-            <Label X="11" Y="98" Width="-11" Height="60" FontId="3" DisablePrefix="yes">#(loc.ModifyNote)</Label>
+            <Label X="11" Y="98" Width="-11" Height="44" FontId="3" DisablePrefix="yes">#(loc.ModifyNote)</Label>
+            <Checkbox Name="RemoveData" X="11" Y="150" Width="-11" Height="17" TabStop="yes" FontId="3">#(loc.ModifyRemoveDataCheckbox)</Checkbox>
+            <Label X="30" Y="172" Width="-11" Height="90" FontId="3" DisablePrefix="yes">#(loc.ModifyRemoveDataHint)</Label>
             <Button Name="ModifyUpdateButton" X="11" Y="-11" Width="200" Height="23" TabStop="yes" FontId="0" EnableCondition="WixStdBAUpdateAvailable" HideWhenDisabled="yes">#(loc.UpdateButton)</Button>
             <Button Name="RepairButton" X="-171" Y="-11" Width="75" Height="23" TabStop="yes" FontId="0" HideWhenDisabled="yes">#(loc.ModifyRepairButton)</Button>
             <Button Name="UninstallButton" X="-91" Y="-11" Width="75" Height="23" TabStop="yes" FontId="0">#(loc.ModifyUninstallButton)</Button>
@@ -96,7 +104,8 @@
                 <Text Condition="WixBundleAction = 7">#(loc.SuccessModifyHeader)</Text>
                 <Text Condition="WixBundleAction = 8">#(loc.SuccessRepairHeader)</Text>
             </Label>
-            <Label X="11" Y="98" Width="-11" Height="80" FontId="3" DisablePrefix="yes" VisibleCondition="WixBundleAction = 6">#(loc.SuccessNextSteps)</Label>
+            <Label X="11" Y="98" Width="-11" Height="80" FontId="3" DisablePrefix="yes" VisibleCondition="WixBundleAction = 6 AND (NOT CertThumbprint OR CertThumbprint ~= &quot;none&quot;)">#(loc.SuccessNextSteps)</Label>
+            <Label X="11" Y="98" Width="-11" Height="96" FontId="3" DisablePrefix="yes" VisibleCondition="WixBundleAction = 6 AND CertThumbprint AND CertThumbprint ~&lt;&gt; &quot;none&quot;">#(loc.SuccessNextStepsHttps)</Label>
             <Button Name="LaunchButton" X="-91" Y="-11" Width="140" Height="23" TabStop="yes" FontId="0" HideWhenDisabled="yes">#(loc.SuccessLaunchButton)</Button>
             <Label X="-11" Y="-51" Width="400" Height="34" FontId="3" DisablePrefix="yes" VisibleCondition="WixStdBARestartRequired">
                 <Text>#(loc.SuccessRestartText)</Text>

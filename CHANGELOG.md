@@ -4,6 +4,15 @@ All notable changes to DBTracker are recorded here. Versions follow [Semantic Ve
 
 ## [Unreleased]
 
+### Added
+
+- **Installer: optional HTTPS and a keep-data choice on uninstall.** `CertThumbprint` / `CERT_THUMBPRINT`
+  (with `HttpsPort` / `HTTPS_PORT`, default 443), also on the Setup.exe Options page, adds an HTTPS
+  binding with a certificate from `LocalMachine\My` after checking that it exists, has its private key
+  and is valid, and the tray then uses the recorded HTTPS port. The Setup.exe uninstall page has an
+  **Also delete DBTracker's data in App_Data** checkbox, off by default. Quiet uninstalls still keep
+  the data unless `RemoveData=1` is passed, and the SQL database is never dropped.
+
 ### Fixed
 
 - **Password changes.** Changing your own password no longer signs you out of this browser; other

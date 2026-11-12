@@ -32,6 +32,19 @@
     <Property Id="LAUNCH_TRAY" Value="1" Secure="yes" />
     <Property Id="OPEN_SETUP_KEY" Value="1" Secure="yes" />
     <Property Id="REMOVE_DATA" Secure="yes" />
+    <!-- Optional HTTPS: a certificate thumbprint from LocalMachine\My (with its private key) adds an https binding
+         on HTTPS_PORT (443 if not given). An upgrade or repair keeps the previous install's choice, read into the
+         DBT_PREVIOUS_* properties below; CERT_THUMBPRINT=none turns it off. -->
+    <Property Id="CERT_THUMBPRINT" Secure="yes" />
+    <Property Id="HTTPS_PORT" Secure="yes" />
+    <Property Id="DBT_PREVIOUS_CERT_THUMBPRINT">
+      <RegistrySearch Id="RememberCertThumbprint" Root="HKLM" Key="SOFTWARE\Architonix Labs\DBTracker" Name="CertThumbprint" Type="raw" Bitness="always64" />
+    </Property>
+    <Property Id="DBT_PREVIOUS_HTTPS_PORT">
+      <RegistrySearch Id="RememberHttpsPort" Root="HKLM" Key="SOFTWARE\Architonix Labs\DBTracker" Name="HttpsPort" Type="raw" Bitness="always64" />
+    </Property>
+    <!-- Set by ValidateSettingsExecute from the two above. -->
+    <Property Id="DBT_SITE_SCHEME" Value="http" />
 
     <!-- Prerequisite detection. DWORD values come back as "#<n>". The ASP.NET Core 10 runtime has no
          reliable registry marker across install methods, so the custom action checks the folders. -->
@@ -82,11 +95,15 @@
     <CustomAction Id="LaunchWizard" BinaryRef="DBTrackerCA" DllEntry="LaunchWizard" Execute="immediate" Return="ignore" />
     <CustomAction Id="LaunchTray" BinaryRef="DBTrackerCA" DllEntry="LaunchTray" Execute="immediate" Return="ignore" />
     <CustomAction Id="EndTrayProcesses" BinaryRef="DBTrackerCA" DllEntry="EndTrayProcesses" Execute="deferred" Impersonate="no" Return="ignore" />
+    <CustomAction Id="ConfigureHttps" BinaryRef="DBTrackerCA" DllEntry="ConfigureHttps" Execute="deferred" Impersonate="no" Return="check" />
+    <CustomAction Id="RemoveHttpsBinding" BinaryRef="DBTrackerCA" DllEntry="RemoveHttpsBinding" Execute="deferred" Impersonate="no" Return="ignore" />
 
     <SetProperty Id="StopAppPool" Value="Pool=[APPPOOL_NAME]" Before="StopAppPool" Sequence="execute" />
     <SetProperty Id="ConfigureAppPoolAndData" Value="Pool=[APPPOOL_NAME];AppData=[APPDATAFOLDER]" Before="ConfigureAppPoolAndData" Sequence="execute" />
     <SetProperty Id="GrantSqlLogin" Value="Server=[SQL_SERVER];Pool=[APPPOOL_NAME]" Before="GrantSqlLogin" Sequence="execute" />
     <SetProperty Id="RemoveAppData" Value="AppData=[APPDATAFOLDER]" Before="RemoveAppData" Sequence="execute" />
+    <SetProperty Id="ConfigureHttps" Value="Site=[SITE_NAME];Port=[DBT_HTTPS_PORT];Thumbprint=[DBT_CERT_THUMBPRINT]" Before="ConfigureHttps" Sequence="execute" />
+    <SetProperty Id="RemoveHttpsBinding" Value="Site=[SITE_NAME];Port=[DBT_PREVIOUS_HTTPS_PORT]" Before="RemoveHttpsBinding" Sequence="execute" />
 
     <InstallUISequence>
       <Custom Action="DetectPrerequisites" After="AppSearch" />
@@ -101,6 +118,10 @@
       <Custom Action="ConfigureAppPoolAndData" After="RegisterUser" Condition="NOT (REMOVE~=&quot;ALL&quot;)" />
       <Custom Action="GrantSqlLogin" After="ConfigureAppPoolAndData" Condition="NOT (REMOVE~=&quot;ALL&quot;) AND SQL_GRANT_LOGIN=&quot;1&quot; AND SQL_SERVER" />
       <Custom Action="RemoveAppData" After="RegisterUser" Condition="REMOVE~=&quot;ALL&quot; AND REMOVE_DATA=&quot;1&quot; AND NOT UPGRADINGPRODUCTCODE" />
+      <!-- The previous https binding goes on a real uninstall, or when this run turns HTTPS off or moves its port.
+           A major upgrade's removal of the old version leaves it for the new version to replace. -->
+      <Custom Action="RemoveHttpsBinding" After="EndTrayProcesses" Condition="DBT_PREVIOUS_CERT_THUMBPRINT AND DBT_PREVIOUS_HTTPS_PORT AND ((REMOVE~=&quot;ALL&quot; AND NOT UPGRADINGPRODUCTCODE) OR (NOT (REMOVE~=&quot;ALL&quot;) AND (NOT DBT_CERT_THUMBPRINT OR DBT_HTTPS_PORT &lt;&gt; DBT_PREVIOUS_HTTPS_PORT)))" />
+      <Custom Action="ConfigureHttps" After="GrantSqlLogin" Condition="NOT (REMOVE~=&quot;ALL&quot;) AND DBT_CERT_THUMBPRINT" />
       <!-- Started for the installing user right away; other users get it at their next sign-in. -->
       <Custom Action="LaunchTray" After="InstallFinalize" Condition="LAUNCH_TRAY=&quot;1&quot; AND NOT (REMOVE~=&quot;ALL&quot;)" />
       <!-- Full UI opens the wizard from the exit dialog instead, which runs unelevated. -->

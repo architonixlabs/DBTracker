@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- The custom actions build for .NET Framework 4.6.2 inside an MSI; their pure checks have no installer
+       dependencies, so they are compiled in here from source and tested on .NET 10. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <!-- Matches the custom action project, which is not nullable-annotated. -->
+    <Nullable>disable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\..\installer\CustomActions\InstallerChecks.cs" Link="Linked\InstallerChecks.cs" />
+    <Compile Include="..\..\installer\CustomActions\HttpsChecks.cs" Link="Linked\HttpsChecks.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+</Project>

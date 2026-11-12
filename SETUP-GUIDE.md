@@ -39,14 +39,21 @@ lists `DBTracker-Setup.exe` and `DBTracker.msi`.
      with Windows authentication.
    - No SQL Server found: tick **Also install SQL Server Express on this computer**, or leave it off
      and enter an existing server in the wizard later.
+
+   For HTTPS (optional), import your certificate with its private key into **Local Computer >
+   Personal** first, then paste its **Thumbprint** (certificate Details tab) into **HTTPS certificate
+   thumbprint** and set the **HTTPS port** (blank means 443). Setup checks the certificate and stops
+   with a message if it isn't there, has no private key or has expired.
 4. Choose **Install**. Setup turns on IIS features, installs the .NET Hosting Bundle (and SQL Server
    Express if ticked), then DBTracker. If it asks to restart at the end, restart.
 
-Unattended alternative: `DBTracker-Setup.exe /quiet SitePort=8150 SqlLoginServer=.`
+Unattended alternative: `DBTracker-Setup.exe /quiet SitePort=8150 SqlLoginServer=.`, with
+`CertThumbprint=<thumbprint> HttpsPort=443` added for HTTPS.
 
 ## 4. Finish the setup wizard
 
-When Setup finishes, your browser opens `http://localhost:8150/install`.
+When Setup finishes, your browser opens `http://localhost:8150/install`, or with HTTPS
+`https://<name on the certificate>/install` (plus `:<port>` if the HTTPS port isn't 443).
 
 1. **Enter the setup key.** Paste the key from `C:\inetpub\DBTracker\App_Data\setup-key.txt` (Setup
    opens it in Notepad). It works once and is deleted when setup is done.
@@ -70,25 +77,34 @@ DBTracker Tray starts with Windows and sits next to the clock. Its icon is green
 healthy, amber when it's degraded or setup is pending, red when the site isn't responding.
 
 To see backup counts in the tray, sign in to DBTracker, open **Access tokens** from the user menu,
-create a token, then in the tray choose **Connect to DBTracker** and paste it.
+create a token, then in the tray choose **Connect to DBTracker** and paste it. With HTTPS, the tray
+talks to the site over `https://localhost:<HTTPS port>`, so the token is always encrypted.
 
 ## 6. Next steps
 
 - Add instances (Instances, then Add instance, or import a CSV), and set each one's backup file
   location so scans can find backup files.
 - Add users under **Users** and give each the right role.
-- For HTTPS, add an HTTPS binding for the site in IIS Manager.
+- For HTTPS later, run `DBTracker-Setup.exe /repair CertThumbprint=<thumbprint>` (see
+  [DEPLOYMENT.md](DEPLOYMENT.md), "HTTPS"), or add an HTTPS binding for the site in IIS Manager.
 
 ## Upgrade
 
 Run the newer DBTracker-Setup.exe. It replaces the program files and keeps your configuration in
-`App_Data`; database changes apply on the next start.
+`App_Data`; database changes apply on the next start. It also keeps the HTTPS certificate and port
+from the last install unless you give new ones.
 
 ## Uninstall
 
-Settings > Apps > **DBTracker Setup** > Uninstall. Your configuration in `App_Data`, the database, the
-SQL login and the prerequisites stay. To remove `App_Data` too:
-`DBTracker-Setup.exe /uninstall /quiet RemoveData=1`.
+Settings > Apps > **DBTracker Setup** > Uninstall. By default your data in `App_Data` (saved settings,
+setup key and encryption keys), the database, the SQL login and the prerequisites all stay, so a
+reinstall picks up where you left off.
+
+To delete `App_Data` as well, tick **Also delete DBTracker's data in App_Data** on the uninstall page
+before choosing **Uninstall**. This can't be undone, and a reinstall then starts the setup wizard
+again. The SQL Server database and its data are never deleted, either way. Unattended:
+`DBTracker-Setup.exe /uninstall /quiet RemoveData=1` (without `RemoveData=1`, a quiet uninstall keeps
+the data).
 
 ## Help
 

@@ -2131,6 +2131,17 @@ remaining scope of each original item.*
     polls, and the first state is never shown.
   - Fix the I04 wording, DEPLOYMENT.md and the installer text to match the hash behavior; the
     CHANGELOG wording is already correct.
+  - **2026-11-12 progress: keep-data choice in Setup.exe.**
+    - Built: the bundle's Modify page (also what Settings > Apps > Uninstall shows) has an **Also
+      delete DBTracker's data in App_Data** checkbox, off by default, bound to the existing
+      `RemoveData` variable, so ticking it passes `REMOVE_DATA=1` to the MSI. The text says what goes
+      (saved configuration, setup key, encryption keys), that it can't be undone and the wizard runs
+      again, and that the SQL database and login are not deleted (checked against `RemoveAppData`:
+      it deletes only `<site folder>\App_Data` and the then-empty site folder).
+    - Kept: `/uninstall /quiet` without `RemoveData=1` still keeps the data (Sam). Deleting is only an
+      explicit tick or `RemoveData=1` (Angela, Priya).
+    - Still open: clicking through the page in the Hyper-V VM (G18). The MSI's own maintenance
+      dialogs still have no checkbox; `REMOVE_DATA=1` stays command-line only there.
 
 ### Epic 26 - Release hardening and engineering standards
 
@@ -2161,6 +2172,29 @@ verifiable downloads.*
   SETUP-GUIDE.md recommend adding an HTTPS binding and the app calls `UseHttpsRedirection`.
   **Acceptance:** optional certificate and HTTPS binding in the MSI. The tray reads the scheme and
   port the MSI records. `/healthz` answers the tray on loopback without a redirect. Document it.
+  - **2026-11-12 progress: HTTPS in the installer.**
+    - Built: optional `CERT_THUMBPRINT` and `HTTPS_PORT` (default 443) MSI properties, and
+      `CertThumbprint` / `HttpsPort` in Setup.exe, which also has the two fields on its Options page.
+      `ValidateSettingsExecute` checks, before anything changes, that the thumbprint names a
+      certificate in `LocalMachine\My` with a private key, valid dates and Server Authentication, and
+      that the port is free and not the HTTP port; otherwise it stops with a message saying which.
+      The new `ConfigureHttps` custom action adds the `https` binding with appcmd (the existing
+      pattern) and binds the certificate in http.sys with netsh. Uninstall, or `CERT_THUMBPRINT=none`,
+      removes both.
+    - Recorded: `SiteScheme`, `HttpsPort`, `CertThumbprint` and `CertHost` under
+      `HKLM\SOFTWARE\Architonix Labs\DBTracker`. Upgrades and repairs reuse them and check the
+      certificate again, so a missing certificate stops the upgrade instead of quietly going back
+      to HTTP (Angela).
+    - Tray: polls `https://localhost:<HttpsPort>` when `SiteScheme` is `https`, accepting the
+      certificate when it is in the machine's own `LocalMachine\My` (the name won't match
+      `localhost`), and opens browser links at the certificate's name. Nothing recorded means
+      `http://localhost:<SitePort>` as before (Sam).
+    - Tests: thumbprint normalisation and validation, port choice and the commands in a new
+      `tests/DBTracker.CustomActions.Tests` (32), and tray URL and TLS choice in the tray tests (62
+      in total). `installer/build.ps1` and CI run both.
+    - Docs: DEPLOYMENT.md has an HTTPS section; SETUP-GUIDE.md covers the Options fields.
+    - Still open: a Hyper-V run with a real certificate (install, upgrade with and without a new
+      thumbprint, `none`, uninstall), as part of G18.
 
 - [ ] **2026-11-11 | G21 | NEW | P2 | M - Org quality and log standards.**
   - Add SonarQube analysis against `:7001`; tokens come from `scan.env`, never the repo.

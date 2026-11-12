@@ -27,7 +27,8 @@ There are two installer files:
   Module V2 version 20 or later).
 
 Both need administrator rights. When the install finishes, the browser opens
-`http://localhost:<port>/install` and the setup key file (`App_Data\setup-key.txt`) opens in your
+`http://localhost:<port>/install` (with HTTPS, `https://<certificate name>[:<HTTPS port>]/install`)
+and the setup key file (`App_Data\setup-key.txt`) opens in your
 default text editor, so you can paste the key straight into the wizard (section 6). On an upgrade the
 site's home page opens instead.
 
@@ -37,7 +38,9 @@ Both installers also install **DBTracker Tray** to `C:\Program Files\Architonix 
 (outside the site folder), add a "DBTracker Tray" Start menu shortcut, and start it for every user
 at sign-in. It starts for the installing user as soon as the install finishes. It runs as the signed-in
 user, needs nothing beyond the .NET Framework 4.6.2 that ships with Windows Server 2016 and later, and
-reads the site's port and folders from `HKLM\SOFTWARE\Architonix Labs\DBTracker`.
+reads the site's port and folders from `HKLM\SOFTWARE\Architonix Labs\DBTracker`. When the installer
+set up HTTPS (`SiteScheme` is `https` there), the tray polls `https://localhost:<HttpsPort>` and opens
+browser links at `https://<CertHost>`; otherwise it uses `http://localhost:<SitePort>`.
 
 The tray icon is green when DBTracker answers its health check, amber when it is running but needs
 attention (setup not finished, or the database unreachable) and red when it does not answer. The
@@ -61,14 +64,21 @@ Control on, the installer and tray app are not code-signed; sign them before dis
 
 ### Setup.exe options
 
-The Options page has the install folder, the port, the SQL Server for the login, and **Install SQL
-Server Express**, which only appears when no local SQL Server instance exists. From the command line:
+The Options page has the install folder, the port, the SQL Server for the login, **Install SQL
+Server Express** (only when no local SQL Server instance exists), and an optional **HTTPS
+certificate thumbprint** and **HTTPS port** (see [HTTPS](#https) below). From the command line:
 
 ```powershell
 DBTracker-Setup.exe /quiet SitePort=8200 InstallFolder="D:\Sites\DBTracker" SqlLoginServer=. LaunchWizard=0
 DBTracker-Setup.exe /quiet InstallSqlExpress=1
+DBTracker-Setup.exe /quiet CertThumbprint=0123456789ABCDEF0123456789ABCDEF01234567 HttpsPort=443
 DBTracker-Setup.exe /uninstall /quiet RemoveData=1
 ```
+
+The uninstall page (Settings > Apps > DBTracker Setup > Uninstall, or running Setup.exe again) has
+**Also delete DBTracker's data in App_Data**, off by default. Ticking it is the same as
+`RemoveData=1`; see **Uninstall** below for exactly what it deletes. A `/quiet` uninstall without
+`RemoveData=1` keeps the data, as before.
 
 When a local SQL Server already exists, Setup doesn't create the app pool's SQL login unless you name
 the server with `SqlLoginServer` (or fill in the field on the Options page).
@@ -91,12 +101,15 @@ offers it at the end and never forces it. Logs: `%TEMP%\DBTracker-Setup_*.log` f
 | `LAUNCH_WIZARD` | `1` | `0` skips opening the browser at the end. |
 | `LAUNCH_TRAY` | `1` | `0` skips starting DBTracker Tray for the installing user at the end. Setup.exe variable: `LaunchTray`. |
 | `OPEN_SETUP_KEY` | `1` | `0` skips opening the setup key file. |
-| `REMOVE_DATA` | empty | On uninstall only: `1` also deletes `App_Data`. |
+| `REMOVE_DATA` | empty | On uninstall only: `1` also deletes `App_Data`. Setup.exe variable: `RemoveData`, or the checkbox on its uninstall page. |
+| `CERT_THUMBPRINT` | empty | Thumbprint of a certificate in `LocalMachine\My` with its private key. Adds an HTTPS binding (see [HTTPS](#https)). `none` turns HTTPS off on an upgrade or repair. Setup.exe variable: `CertThumbprint`. |
+| `HTTPS_PORT` | `443` | HTTPS port, used only with a certificate. Must differ from `SITE_PORT`. Setup.exe variable: `HttpsPort`. |
 
 Names may use letters, digits, spaces, dots, hyphens and underscores. The installer remembers the
 folder, site, pool and port (in `HKLM\SOFTWARE\Architonix Labs\DBTracker`), so repairs, upgrades and
 uninstall act on the same ones; to move the site to another port later, change the binding in IIS
-Manager.
+Manager. It also records `SiteScheme` (`http` or `https`), `HttpsPort`, `CertThumbprint` and
+`CertHost` there, for the tray and for the next upgrade.
 
 ```powershell
 # Interactive, with a verbose log
@@ -111,6 +124,43 @@ DBTracker-Setup.exe /uninstall /quiet
 # Uninstall and delete App_Data (saved configuration, encryption keys, setup key)
 DBTracker-Setup.exe /uninstall /quiet RemoveData=1
 ```
+
+### HTTPS
+
+Give the installer a certificate thumbprint and it serves DBTracker over HTTPS as well as HTTP:
+
+1. Import the certificate, with its private key, into **Local Computer > Personal**
+   (`Cert:\LocalMachine\My`). Copy its **Thumbprint** from the certificate's Details tab; spaces,
+   colons and the invisible character the Windows dialog adds when copying are ignored.
+2. Install with `CertThumbprint=<thumbprint>` (Setup.exe, or the Options page field) or
+   `CERT_THUMBPRINT=<thumbprint>` (MSI). Add `HttpsPort=<port>` or `HTTPS_PORT=<port>` for a port
+   other than 443.
+
+Before anything changes, the installer checks that the certificate is in `LocalMachine\My`, has a
+private key, is within its validity dates and allows Server Authentication, and that the HTTPS port
+is free and differs from the HTTP port. If a check fails, it stops with a message saying which,
+before DBTracker itself is installed or changed (prerequisites Setup.exe already added stay). Otherwise it adds an `https` binding on `*:<port>` to the site and binds the
+certificate to `0.0.0.0:<port>` in http.sys (`netsh http add sslcert`).
+
+- **The HTTP binding stays.** Browsers that reach it are redirected to HTTPS. Don't open the HTTP port
+  in the firewall if other machines should only use HTTPS.
+- **The tray switches to HTTPS.** It polls `https://localhost:<HTTPS port>`. The certificate is
+  usually issued to the server's real name, not `localhost`, so the tray accepts a certificate that is
+  in this computer's own `LocalMachine\My` store; any other certificate must pass the normal Windows
+  checks. Browser links from the tray use the certificate's DNS name (`CertHost`), or `localhost` for
+  a wildcard certificate.
+- **Upgrades and repairs keep it.** Without `CertThumbprint` they reuse the recorded certificate and
+  port, and check them again. After renewing the certificate, pass the new thumbprint on the next
+  upgrade, or run `DBTracker-Setup.exe /repair CertThumbprint=<new thumbprint>`. If the old
+  certificate is gone, the upgrade stops and says so; it never falls back to HTTP on its own.
+  `CertThumbprint=none` turns HTTPS off and removes the binding.
+- **Uninstall removes it.** The site goes with its bindings, and the installer deletes the http.sys
+  certificate binding for the HTTPS port. The certificate stays in the store.
+
+You can still add the binding yourself in IIS Manager instead (section 3). The tray then keeps
+polling `http://localhost:<port>`, which the app answers over HTTP only from the same machine.
+
+### Uninstalling with Setup.exe
 
 If you installed with `DBTracker-Setup.exe`, uninstall with it too (or from Settings > Apps, where it
 appears as "DBTracker Setup"). Running `msiexec /x` on the hidden MSI underneath works, but leaves a
@@ -127,9 +177,15 @@ the install anyway; create the login by hand with the statements in section 5.
 the program files, keeps `App_Data`, and starts the pool again; pending database migrations apply on
 the next request. Installing an older version over a newer one is blocked.
 
-**Uninstall** (Settings > Apps, or `DBTracker-Setup.exe /uninstall`) removes the site, the app pool
-and the program files. `App_Data` stays unless you pass `RemoveData=1`, in which case the install
-folder goes too. The database is never touched, and neither is the SQL login the installer created for
+**Uninstall** (Settings > Apps, or `DBTracker-Setup.exe /uninstall`) removes the site, the app pool,
+the HTTPS certificate binding if the installer made one, and the program files. `App_Data` stays
+unless you tick **Also delete DBTracker's data in App_Data** on the uninstall page or pass
+`RemoveData=1`. Then the installer deletes the `App_Data` folder inside the site folder, and the
+site folder once it is empty. `App_Data` holds the saved configuration `dbtracker.config.json`
+(database connection, mail and other settings, with secrets encrypted), the setup key
+`setup-key.txt`, and the Data Protection keys in `keys\` that decrypt those secrets and sign-in
+cookies. A reinstall afterwards gets a new setup key and starts the setup wizard again. A data folder
+set with `DBTRACKER_DATA_DIR` outside the site folder is not deleted. The database is never touched, and neither is the SQL login the installer created for
 the app pool: a DBTracker database may still have a user mapped to it. To remove it when you are done
 with DBTracker for good, run `DROP LOGIN [IIS APPPOOL\DBTracker];` on that SQL Server. Prerequisites
 that Setup.exe installed (IIS features, the Hosting Bundle, SQL Server Express) also stay installed.
@@ -209,8 +265,9 @@ In IIS Manager:
    certificate for anything beyond a test box: the app handles sign-in cookies and, once configured,
    database and mail credentials.
 
-   The MSI creates an HTTP binding only. To add HTTPS after installing, add an `https` binding with
-   your certificate to the `DBTracker` site in IIS Manager.
+   The MSI creates an HTTP binding, and an HTTPS one too when you give it a certificate thumbprint
+   (see [HTTPS](#https)). To add HTTPS by hand instead, add an `https` binding with your certificate
+   to the `DBTracker` site in IIS Manager.
    - **Keep the HTTP binding.** Browsers that reach it are redirected to HTTPS.
    - **The tray keeps working.** It polls `http://localhost:<port>`, and the app answers its
      `/healthz` and `/api/tray` requests over HTTP only when they come from the same machine, so its

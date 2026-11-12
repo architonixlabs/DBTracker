@@ -6,8 +6,11 @@ using System.Linq;
 using System.Net;
 using System.Runtime.InteropServices;
 using System.Security.AccessControl;
+using System.Security.Cryptography;
+using System.Security.Cryptography.X509Certificates;
 using System.Security.Principal;
 using System.Threading;
+using Microsoft.Win32;
 using WixToolset.Dtf.WindowsInstaller;
 
 namespace DBTracker.CustomActions
@@ -38,9 +41,16 @@ namespace DBTracker.CustomActions
         [CustomAction]
         public static ActionResult ValidateSettingsExecute(Session session)
         {
-            var error = Validate(session);
+            var error = Validate(session, out var https);
             if (error == null)
             {
+                // Recorded under HKLM\SOFTWARE\Architonix Labs\DBTracker (RememberSettings) for the tray and the
+                // next upgrade, and passed to ConfigureHttps / RemoveHttpsBinding.
+                session["DBT_SITE_SCHEME"] = https.Scheme;
+                session["DBT_CERT_THUMBPRINT"] = https.Thumbprint;
+                session["DBT_HTTPS_PORT"] = https.Enabled ? https.Port.ToString() : "";
+                session["DBT_CERT_HOST"] = https.Enabled ? https.BrowserHost : "";
+                session.Log("DBTracker: " + (https.Enabled ? "HTTPS on port " + https.Port + " with certificate " + https.Thumbprint + " (" + https.BrowserHost + ")" : "HTTP only"));
                 return ActionResult.Success;
             }
             session.Log("DBTracker: settings rejected: " + error);
@@ -52,8 +62,11 @@ namespace DBTracker.CustomActions
             return ActionResult.Failure;
         }
 
-        private static string Validate(Session session)
+        private static string Validate(Session session) => Validate(session, out _);
+
+        private static string Validate(Session session, out HttpsChoice https)
         {
+            https = new HttpsChoice();
             var error = InstallerChecks.ValidateName("Site name", session["SITE_NAME"])
                 ?? InstallerChecks.ValidateName("App pool name", session["APPPOOL_NAME"]);
             if (error != null)
@@ -75,7 +88,145 @@ namespace DBTracker.CustomActions
             }
             var config = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), ApplicationHostConfig);
             var isUpgradeOrRepair = !string.IsNullOrEmpty(session["Installed"]) || !string.IsNullOrEmpty(session["WIX_UPGRADE_DETECTED"]);
-            return InstallerChecks.FindPortConflict(port, session["SITE_NAME"], config, isUpgradeOrRepair);
+            error = InstallerChecks.FindPortConflict(port, session["SITE_NAME"], config, isUpgradeOrRepair);
+            if (error != null)
+            {
+                return error;
+            }
+            return ValidateHttps(session, port, config, isUpgradeOrRepair, out https);
+        }
+
+        // CERT_THUMBPRINT (or the one the previous install recorded) must name a usable certificate in
+        // LocalMachine\My. Nothing given and nothing recorded keeps the site HTTP only.
+        private static string ValidateHttps(Session session, int httpPort, string config, bool isUpgradeOrRepair, out HttpsChoice https)
+        {
+            https = new HttpsChoice();
+            var thumbprint = HttpsChecks.ChooseThumbprint(session["CERT_THUMBPRINT"], session["DBT_PREVIOUS_CERT_THUMBPRINT"], out var fromPrevious);
+            if (thumbprint.Length == 0)
+            {
+                return null;
+            }
+            var error = HttpsChecks.ValidateThumbprintFormat(thumbprint);
+            if (error != null)
+            {
+                return error;
+            }
+            error = HttpsChecks.ValidateHttpsPort(session["HTTPS_PORT"], session["DBT_PREVIOUS_HTTPS_PORT"], httpPort, out var httpsPort);
+            if (error != null)
+            {
+                return error;
+            }
+            error = InstallerChecks.FindPortConflict(httpsPort, session["SITE_NAME"], config, isUpgradeOrRepair);
+            if (error != null)
+            {
+                return "HTTPS: " + error;
+            }
+            CertificateInfo certificate;
+            try
+            {
+                certificate = FindCertificate(thumbprint);
+            }
+            catch (CryptographicException ex)
+            {
+                return "Could not open the Local Computer > Personal certificate store to check certificate " + thumbprint + ": " + ex.Message;
+            }
+            error = HttpsChecks.CheckCertificate(thumbprint, certificate, DateTime.UtcNow, fromPrevious);
+            if (error != null)
+            {
+                return error;
+            }
+            https = new HttpsChoice { Thumbprint = thumbprint, Port = httpsPort, BrowserHost = HttpsChecks.BrowserHost(certificate.DnsName) };
+            return null;
+        }
+
+        private static CertificateInfo FindCertificate(string thumbprint)
+        {
+            using (var store = new X509Store(StoreName.My, StoreLocation.LocalMachine))
+            {
+                store.Open(OpenFlags.ReadOnly | OpenFlags.OpenExistingOnly);
+                var found = store.Certificates.Find(X509FindType.FindByThumbprint, thumbprint, false);
+                if (found.Count == 0)
+                {
+                    return null;
+                }
+                var certificate = found[0];
+                var usage = certificate.Extensions.OfType<X509EnhancedKeyUsageExtension>().FirstOrDefault();
+                return new CertificateInfo
+                {
+                    Thumbprint = certificate.Thumbprint,
+                    HasPrivateKey = certificate.HasPrivateKey,
+                    NotBefore = certificate.NotBefore,
+                    NotAfter = certificate.NotAfter,
+                    AllowsServerAuthentication = HttpsChecks.AllowsServerAuthentication(
+                        usage?.EnhancedKeyUsages.Cast<Oid>().Select(o => o.Value).ToArray()),
+                    DnsName = certificate.GetNameInfo(X509NameType.DnsName, false),
+                };
+            }
+        }
+
+        // Deferred, as LocalSystem, after the IIS extension has written the site: adds the https binding if it's
+        // missing and binds the certificate to the port in http.sys, which is where IIS looks it up.
+        [CustomAction]
+        public static ActionResult ConfigureHttps(Session session)
+        {
+            var site = session.CustomActionData["Site"];
+            var thumbprint = session.CustomActionData["Thumbprint"];
+            if (!int.TryParse(session.CustomActionData["Port"], out var port))
+            {
+                return Fail(session, "HTTPS port \"" + session.CustomActionData["Port"] + "\" is not a number.");
+            }
+            var system = Environment.GetFolderPath(Environment.SpecialFolder.System);
+            var appcmd = Path.Combine(system, @"inetsrv\appcmd.exe");
+            var netsh = Path.Combine(system, "netsh.exe");
+
+            var hasBinding = false;
+            try
+            {
+                hasBinding = InstallerChecks.ReadIisBindings(Path.Combine(system, ApplicationHostConfig))
+                    .Any(b => b.SiteName.Equals(site, StringComparison.OrdinalIgnoreCase) && b.Protocol.Equals("https", StringComparison.OrdinalIgnoreCase) && b.Port == port);
+            }
+            catch (Exception ex) when (ex is UnauthorizedAccessException || ex is IOException || ex is System.Xml.XmlException)
+            {
+                session.Log("DBTracker: could not read the IIS bindings, adding the https binding anyway: " + ex.Message);
+            }
+            if (!hasBinding)
+            {
+                var exit = Run(session, appcmd, HttpsChecks.AppCmdBindingArguments(site, port, add: true));
+                if (exit != 0)
+                {
+                    return Fail(session, "Could not add an https binding on port " + port + " to the IIS site \"" + site + "\" (appcmd exit code " + exit + "). See the install log for details.");
+                }
+            }
+
+            // Replace whatever was bound to the port before (a repair, upgrade or renewed certificate).
+            Run(session, netsh, HttpsChecks.NetshDeleteSslCertArguments(port));
+            var bound = Run(session, netsh, HttpsChecks.NetshAddSslCertArguments(port, thumbprint));
+            if (bound != 0)
+            {
+                return Fail(session, "Could not bind certificate " + thumbprint + " to HTTPS port " + port + " (netsh exit code " + bound + "). Check that the certificate is in LocalMachine\\My with its private key, then see the install log.");
+            }
+            session.Log("DBTracker: HTTPS on port " + port + " uses certificate " + thumbprint);
+            return ActionResult.Success;
+        }
+
+        // Deferred, as LocalSystem. Removes the https binding and its http.sys certificate binding on uninstall, or
+        // when an upgrade or repair turns HTTPS off or moves it to another port. Never fails the run.
+        [CustomAction]
+        public static ActionResult RemoveHttpsBinding(Session session)
+        {
+            var site = session.CustomActionData["Site"];
+            if (!int.TryParse(session.CustomActionData["Port"], out var port))
+            {
+                return ActionResult.Success;
+            }
+            var system = Environment.GetFolderPath(Environment.SpecialFolder.System);
+            var appcmd = Path.Combine(system, @"inetsrv\appcmd.exe");
+            if (File.Exists(appcmd))
+            {
+                Run(session, appcmd, HttpsChecks.AppCmdBindingArguments(site, port, add: false));
+            }
+            Run(session, Path.Combine(system, "netsh.exe"), HttpsChecks.NetshDeleteSslCertArguments(port));
+            return ActionResult.Success;
         }
 
         // Deferred, runs as LocalSystem after the IIS extension has written the pool and site.
@@ -257,10 +408,13 @@ namespace DBTracker.CustomActions
                     dataDir = Path.Combine(session["INSTALLFOLDER"], "App_Data");
                 }
                 var configured = File.Exists(Path.Combine(dataDir, "dbtracker.config.json"));
-                var url = "http://localhost:" + port + (configured ? "/" : "/install");
+                var path = configured ? "/" : "/install";
+                // Read back from the registry: the exit dialog's session never sees what the execute sequence set.
+                var url = HttpsChecks.BrowserBaseUrl(ReadRecorded("SiteScheme"), ReadRecorded("HttpsPort"), ReadRecorded("CertHost"), port) + path;
 
-                // The first request starts the app, which writes the setup key on first start.
-                WarmUp(session, url, TimeSpan.FromSeconds(30));
+                // The first request starts the app, which writes the setup key on first start. Loopback http
+                // answers (with a redirect once HTTPS is on), so it needs no certificate checks.
+                WarmUp(session, "http://localhost:" + port + path, TimeSpan.FromSeconds(30));
                 var keyFile = Path.Combine(dataDir, "setup-key.txt");
                 if (!configured)
                 {
@@ -377,6 +531,22 @@ namespace DBTracker.CustomActions
                     session.Log("DBTracker: waiting for the site to answer: " + ex.Message);
                     Thread.Sleep(2000);
                 }
+            }
+        }
+
+        private static string ReadRecorded(string name)
+        {
+            try
+            {
+                using (var hklm = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry64))
+                using (var key = hklm.OpenSubKey(@"SOFTWARE\Architonix Labs\DBTracker"))
+                {
+                    return key?.GetValue(name) as string;
+                }
+            }
+            catch (Exception ex) when (ex is System.Security.SecurityException || ex is UnauthorizedAccessException || ex is IOException)
+            {
+                return null;
             }
         }
 
