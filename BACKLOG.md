@@ -173,9 +173,10 @@ authenticated role already, same as the rest of the app, so no separate "my apps
       text tokens meet WCAG AA; visible amber focus outline on every control. Motion: toast slide-in,
       loading indicators, the Failed pulse; all of it stops under `prefers-reduced-motion`.
 - [x] Toast notifications on create/update/log-backup/archive actions
-- [ ] Further polish: empty/zero-state illustrations, a light-theme toggle (dark is currently the
+- [x] Further polish: empty/zero-state illustrations, a light-theme toggle (dark is currently the
       only theme, by design — not a gap, but a toggle isn't built), responsive mobile pass beyond
-      the basic sidebar collapse
+      the basic sidebar collapse. Done 2026-11-12, see UPDATE-034: System / Dark / Light theme
+      (dark stays the default) and a shared plain empty state; illustrations were dropped on purpose.
 
 ## Progress log
 - 2026-11-09 — Repo initialized; solution scaffolded (Web/Core/Infrastructure/UnitTests/E2E); domain
@@ -2028,6 +2029,27 @@ tests were updated for the archive choice and the explicit checklist start.
   - **Assurance:** the retirement gate counts hosted databases, and maintenance results can be backdated.
   - **CSV:** one CSV reader (`CsvRecordSplitter` removed).
   - **Checks:** no migration needed; 1053 unit tests pass. New findings are in G34.
+- 2026-11-12 | UPDATE-034 | Closes the Design "Further polish" item (see UPDATE-006, UPDATE-015 dated 2026-11-11, and
+  UPDATE-023), track I. No migration: the theme lives in the `dbt-theme` cookie.
+  - **Theme:** System / Dark / Light radio group (`ThemeSwitch.razor`) in the sidebar footer; 44px stacked icons in the
+    phone rail. App.razor writes `<html data-theme>` from the cookie, so the first paint is right with no inline script
+    (the CSP is unchanged); `dbtracker.js` applies a change at once. Missing or unknown values read as Dark. Logout's
+    Clear-Site-Data wipes the cookie, so the sign-in redirect carries `?theme=` and `ThemeCookie` re-issues it.
+  - **Tokens:** every colour in app.css is now a token, with a light block for `[data-theme=light]` and the same block
+    for `system` under `prefers-color-scheme: light`. Light ratios (contrast checker): text 12.57, strong 17.64,
+    label 8.89, muted 5.85, placeholder 4.89 (4.51 on alt), sidebar text 6.41, links 5.82, accent/Overdue 5.70
+    (focus ring 5.26 on alt), Healthy 5.39 (4.97 on alt), Failed 5.79, Unknown 5.85, field border 3.31 to 3.78,
+    white on accent 6.11, white on Failed badge 6.20, alert-danger text 6.52 on its tint. Status words stay beside
+    every light.
+  - **Empty states:** one `EmptyState.razor` (`data-testid="empty-state"`; older test ids kept on the sentence) in
+    72 places: inventory, dashboard, backup/restore/change history, reports, inbox, bell, subscriptions, audit,
+    campaigns, change windows, rehearsals, freezes, exceptions, certificates, tokens, passkeys, saved views, scan
+    paths, teams, policies, lifecycle catalogues, archive. Actions sit in AuthorizeView with the page's existing roles.
+  - **Personas:** Priya: dark by default, compact switch. Noor: light at 360px, no sideways scroll, 44px targets
+    (E2E). Alex: native radio group with legend, arrow keys tested, focus ring in both themes. Angela: wording states
+    what is missing, never that something is fine (restore, advisory and scan texts reworded). Sam: actions open
+    real pages or the form on the same page. Dev (Viewer): no action shown that a Viewer can't take.
+  - **Checks:** 1077 unit tests; E2E `ThemeAndEmptyStateTests` (5) plus 41 tests touching the changed pages pass.
 - 2026-11-11 | UPDATE-025 | Clarifies the Progress log's D22 entry (see UPDATE-022): after G01, "NotApplicable is not treated as passing" is replaced by "NotApplicable only when proven" and "no second archive path" holds for retirements. The D21 entry's "a DBA can record a contract" is true after G06. Earlier wording is kept as history.
 
 ### Epic 25 - Finish partly built features

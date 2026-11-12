@@ -4,6 +4,14 @@ All notable changes to DBTracker are recorded here. Versions follow [Semantic Ve
 
 ## [Unreleased]
 
+### Added
+
+- **Light theme.** A System / Dark / Light switch in the sidebar footer. Dark stays the default; the choice is kept
+  in a cookie, applies before the first paint on every page including sign-in, and survives sign-out. Every light-theme
+  text and status colour meets WCAG AA.
+- **Empty states.** Lists and pages with nothing to show now say what would appear there and why it's empty, and offer
+  the next step only when your role allows it.
+
 ## [1.1.0] - 2026-11-12
 
 This is still a pre-release: the installers aren't code-signed yet.

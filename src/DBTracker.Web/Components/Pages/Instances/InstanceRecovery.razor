@@ -171,7 +171,7 @@ else
                 }
                 else
                 {
-                    <div class="empty-state py-2"><i class="bi bi-link" aria-hidden="true"></i> No chain members recorded. Coverage stays Unknown until at least one is added.</div>
+                    <EmptyState Icon="link" Compact="true">No chain members recorded. Coverage stays Unknown until at least one is added.</EmptyState>
                 }
 
                 <AuthorizeView Roles="@Roles.CanEditPolicy">
@@ -279,7 +279,7 @@ else
                 }
                 else
                 {
-                    <div class="empty-state py-2"><i class="bi bi-hdd-network" aria-hidden="true"></i> No copy locations recorded yet.</div>
+                    <EmptyState Icon="hdd-network" Compact="true">No copy locations recorded yet.</EmptyState>
                 }
 
                 <AuthorizeView Roles="@Roles.CanEditPolicy">

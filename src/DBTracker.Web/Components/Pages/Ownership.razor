@@ -57,7 +57,10 @@
             <div class="col-md-7">
                 @if (_teams.Count == 0)
                 {
-                    <div class="empty-state"><i aria-hidden="true" class="bi bi-people"></i>No teams yet.</div>
+                    <EmptyState Icon="people">
+                        <ChildContent>No owner teams yet. A team gives its instances a primary and a backup contact, and people can subscribe to its alerts.</ChildContent>
+                        <Action><a href="#team-name">Create a team</a></Action>
+                    </EmptyState>
                 }
                 else
                 {
@@ -124,7 +127,10 @@
             <div class="col-md-7">
                 @if (_policies.Count == 0)
                 {
-                    <div class="empty-state"><i aria-hidden="true" class="bi bi-shield"></i>No reusable policies yet.</div>
+                    <EmptyState Icon="shield">
+                        <ChildContent>No reusable backup policies yet. A policy holds backup and restore-test intervals that you can apply to many instances at once.</ChildContent>
+                        <Action><a href="#policy-name">Create a policy</a></Action>
+                    </EmptyState>
                 }
                 else
                 {
@@ -238,7 +244,7 @@
     {
         @if (_pendingCorrections.Count == 0)
         {
-            <div class="empty-state"><i aria-hidden="true" class="bi bi-check-circle"></i>No pending contact-correction requests.</div>
+            <EmptyState Icon="inbox">No pending contact-correction requests. When someone proposes a new contact on an instance page, the request waits here for review.</EmptyState>
         }
         else
         {

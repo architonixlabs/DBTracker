@@ -59,7 +59,7 @@
             <div class="dbt-card" role="menu" aria-label="Saved views" style="position:absolute;z-index:20;min-width:260px;margin-top:4px;">
                 @if (_savedViews.Count == 0)
                 {
-                    <div class="text-muted small mb-2">No saved views yet.</div>
+                    <EmptyState Compact="true" Class="small pt-0">No saved views yet. Set the filters and sort you want, then use Save current view below to reopen them in one click.</EmptyState>
                 }
                 else
                 {
@@ -344,20 +344,30 @@ else
 
     @if (_result.Items.Count == 0)
     {
-        <div class="empty-state">
-            <i class="bi bi-inbox" aria-hidden="true"></i>
-            @if (HasFilters)
-            {
-                <span>No instances match these filters. <button type="button" class="btn btn-link btn-sm p-0 align-baseline" @onclick="ClearFilters">Clear filters</button> to see the full inventory.</span>
-            }
-            else
-            {
-                <span>No instances in the inventory yet.</span>
-                <AuthorizeView Roles="@Roles.CanEditPolicy">
-                    <span><a href="/instances/new">Add an instance</a> or <a href="/instances/import">import a CSV</a>.</span>
-                </AuthorizeView>
-            }
-        </div>
+        @if (HasFilters)
+        {
+            <EmptyState Icon="funnel" Role="status">
+                <ChildContent>No instances match these filters. The inventory may still hold instances that the filters hide.</ChildContent>
+                <Action><button type="button" class="btn btn-outline-secondary btn-sm" @onclick="ClearFilters">Clear filters</button></Action>
+            </EmptyState>
+        }
+        else
+        {
+            <EmptyState Icon="hdd-stack">
+                <ChildContent>No instances in the inventory yet. Each database instance you track appears here with its backup health.</ChildContent>
+                <Action>
+                    <AuthorizeView Roles="@Roles.CanEditPolicy">
+                        <Authorized>
+                            <a class="btn btn-primary btn-sm" href="/instances/new">Add instance</a>
+                            <a class="btn btn-outline-secondary btn-sm" href="/instances/import">Import CSV</a>
+                        </Authorized>
+                        <NotAuthorized>
+                            <span class="small">Your role can view the inventory; a DBA or admin adds instances.</span>
+                        </NotAuthorized>
+                    </AuthorizeView>
+                </Action>
+            </EmptyState>
+        }
     }
     else
     {

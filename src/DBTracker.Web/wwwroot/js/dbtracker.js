@@ -94,6 +94,21 @@ window.dbtracker = {
     }
 };
 
+// Theme switch (Components/Shared/ThemeSwitch.razor): apply the choice at once and keep it in the dbt-theme cookie,
+// which App.razor reads on the next page load to set data-theme before first paint. A delegated listener, so it
+// works on every page and while the Blazor circuit is reconnecting.
+(function () {
+    const allowed = ["system", "dark", "light"];
+    document.addEventListener("change", function (e) {
+        const input = e.target;
+        if (!(input instanceof HTMLInputElement) || input.name !== "dbt-theme" || !input.checked) return;
+        const value = allowed.indexOf(input.value) >= 0 ? input.value : "dark";
+        document.documentElement.setAttribute("data-theme", value);
+        document.cookie = "dbt-theme=" + value + "; Path=/; Max-Age=31536000; SameSite=Lax" +
+            (location.protocol === "https:" ? "; Secure" : "");
+    });
+})();
+
 // G30: shared behavior for anchored popovers (the notification menu and toggletips).
 (function () {
     const root = document.documentElement;

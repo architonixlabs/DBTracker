@@ -192,7 +192,7 @@ else
                 }
                 @if (_validations.Count == 0)
                 {
-                    <div class="empty-state py-3"><i aria-hidden="true" class="bi bi-clipboard-check"></i> None recorded yet.</div>
+                    <EmptyState Icon="clipboard-check" Compact="true">No validations or sign-offs recorded for this campaign yet. Each one recorded appears here with who signed it.</EmptyState>
                 }
                 else
                 {

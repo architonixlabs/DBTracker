@@ -28,7 +28,7 @@
     padding: 1.75rem;
     border: 1px solid var(--dbt-border-bright, #343a42);
     border-radius: 6px;
-    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55);
+    box-shadow: 0 12px 32px var(--dbt-shadow, rgba(0, 0, 0, 0.55));
     font-size: 14px;
     opacity: 0;
     transition: display 0.3s allow-discrete, overlay 0.3s allow-discrete;
@@ -40,7 +40,7 @@
 }
 
 #components-reconnect-modal::backdrop {
-    background-color: rgba(0, 0, 0, 0.6);
+    background-color: var(--dbt-backdrop, rgba(0, 0, 0, 0.6));
     animation: components-reconnect-modal-fadeInOpacity 0.3s ease-in-out;
     opacity: 1;
 }
@@ -71,7 +71,7 @@
     min-height: 40px;
     border: 1px solid var(--dbt-accent, #E8A33D);
     background-color: var(--dbt-accent, #E8A33D);
-    color: #1A1203;
+    color: var(--dbt-on-accent, #1A1203);
     font-weight: 500;
     padding: 6px 24px;
     border-radius: 3px;
@@ -84,7 +84,7 @@
 }
 
 #components-reconnect-modal button:active {
-    background-color: #D9942F;
+    background-color: var(--dbt-accent-active, #D9942F);
 }
 
 /* Loading indicator while the connection is being re-established; it stops as soon as it resolves. */

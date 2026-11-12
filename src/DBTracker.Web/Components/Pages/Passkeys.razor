@@ -67,7 +67,7 @@
         }
         else if (_passkeys.Count == 0)
         {
-            <div class="empty-state py-3" data-testid="passkey-empty"><i aria-hidden="true" class="bi bi-fingerprint"></i>You have no passkeys yet. Until you add one, sign in with your password.</div>
+            <EmptyState Icon="fingerprint" Compact="true" TestId="passkey-empty">You have no passkeys yet. Until you add one, sign in with your password.</EmptyState>
         }
         else
         {

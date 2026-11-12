@@ -21,7 +21,9 @@ internal static class IdentityComponentsEndpointRouteBuilderExtensions
             // On a shared or borrowed device, leave nothing of the session behind: cookies, storage and cached pages.
             context.Response.Headers["Clear-Site-Data"] = "\"cache\", \"cookies\", \"storage\"";
             // returnUrl already starts with "/"; prefixing "~/" gave "~//Account/Login", which IsLocalUrl rejects as protocol-relative.
-            return TypedResults.LocalRedirect(returnUrl.StartsWith('/') ? $"~{returnUrl}" : $"~/{returnUrl}");
+            // The theme cookie goes too; the sign-in page puts it back from ?theme= (see ThemeCookie).
+            var target = DBTracker.Web.Services.ThemeCookie.CarryOver(context, returnUrl.StartsWith('/') ? returnUrl : $"/{returnUrl}");
+            return TypedResults.LocalRedirect($"~{target}");
         }).RequireAuthorization();
 
         return accountGroup;
