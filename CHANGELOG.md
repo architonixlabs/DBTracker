@@ -4,6 +4,72 @@ All notable changes to DBTracker are recorded here. Versions follow [Semantic Ve
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-11-12
+
+This is still a pre-release: the installers aren't code-signed yet.
+
+### Added
+
+- **Passkey sign-in.** Users can register passkeys on their account page and sign in with them. The
+  password still works as a fallback. Registration and removal are audited, and a deactivated account
+  can't sign in with a passkey.
+- **Bulk import.**
+  - The instance template has an example row, a list of allowed values, and 12 more columns: region,
+    cluster, replica set, criticality, owner team, backup contact, file name patterns, connectivity
+    host and port, and restore-test interval.
+  - Re-importing a file updates existing instances and leaves alone any fields the file doesn't contain.
+  - Past backup and restore history can be imported. It is labelled Imported, with who imported it
+    and when, and never counts as verified.
+  - Catalogue, advisory, metadata and maintenance-result imports were added for lifecycle and assurance.
+- **Monitoring and alerts.**
+  - The scanner can be shown as Disabled, and the last successful scan is kept after a failed one.
+  - Evidence levels show in alerts, report exports and compliance rows.
+  - Notifications can be subscribed to by team, honour their channel, and have quiet hours.
+  - Every email and webhook send is stored as a delivery attempt, and **Setup** shows the history.
+  - Incident actions are audited, whether a user or the alert worker took them.
+- **Reports and evidence.**
+  - Saved views can be renamed, and the Reports date range is part of the URL.
+  - Times are shown in the viewer's time zone, with the zone named.
+  - Restores take an evidence reference, and restore corrections count.
+  - Trends show policy changes and link to the rows behind each figure.
+- **Editing and audit.**
+  - An edit conflict shows the other person's change.
+  - Unarchiving asks for a reason.
+  - Policies can be edited, with versions and an impact preview.
+  - The audit trail records before and after values, filters by date, and exports every matching row.
+- **DBA lifecycle.** Fuller catalogue facts:
+  - Build, patch train, edition, the ESU and GA dates, and the source of each fact.
+  - Revision history.
+  - Support notices that fire again after a date is revised.
+  Migration planning has milestones, blockers, effort, cost and risk, and approvals that gate the
+  plan. Change windows add runbook steps, change freezes and role-checked sign-offs. Certificates add
+  renewal history and owner notices.
+- **Start-up resilience.** An installed DBTracker that starts before SQL Server is ready now waits and
+  retries every 15 seconds. Meanwhile it shows a "waiting for its database" page, and `/healthz`
+  reports degraded so the tray light turns amber. Before, it answered HTTP 500 until the site was
+  restarted.
+- **Quality tooling.**
+  - A CI build and test workflow, with a CycloneDX SBOM.
+  - A SonarQube scan script.
+  - IIS log shipping for central log analytics.
+
+### Changed
+
+- **Security headers.** Every response carries a Content Security Policy with a per-request nonce,
+  plus `X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy` and frame protection.
+  Signing out also clears the browser's site data.
+- **Faster pages.**
+  - Fonts are served by DBTracker itself instead of Google Fonts, and the unused Bootstrap script was removed.
+  - Large lists, reports and the inbox page through the database instead of loading everything. At
+    1,000 instances and 100,000 backups, list pages take about 50-65 ms and the heaviest reports
+    150-240 ms on the server.
+  - The dashboard shows the first 25 rows. Backup activity loads 200 rows at a time.
+  - On a phone, instance detail no longer jumps as icons load.
+- **Accessibility.**
+  - Confirmations use native dialogs: focus stays inside, Esc cancels, and focus returns afterwards.
+  - The notification menu and help tips use popovers, which work by touch and keyboard.
+  - Cards and stat cells adjust to their own width.
+
 ### Fixed
 
 - **Archive and retirement.** A plain archive now asks whether the record is a duplicate or being

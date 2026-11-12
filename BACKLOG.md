@@ -2294,7 +2294,7 @@ fallback.
     100,607 backups) gave medians of 48-65 ms for a list page and 144-240 ms for the heaviest
     report loads. Suggested targets: 250 ms for a list page and 500 ms for a report, at this size.
 
-- [ ] **2026-11-12 | G33 | NEW | P3 | S - Layout shift on instance detail (phone).**
+- [x] **2026-11-12 | G33 | NEW | P3 | S - Layout shift on instance detail (phone).**
   Found by G28. On the 360 px, 4x CPU profile, instance detail scores CLS 0.110, just over the 0.1 "good" limit (desktop
   0.008). Noor sees the page jump as later sections load.
   **Acceptance:** find the shifting element with the Layout Shift API or DevTools, reserve its space, and re-measure with
