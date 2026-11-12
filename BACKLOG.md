@@ -1871,6 +1871,22 @@ tests were updated for the archive choice and the explicit checklist start.
       GoAccess, and DEPLOYMENT.md explains scheduling it.
     - README has a "Quality checks" section.
     - Still open: the first scan itself, because Docker Desktop was not running on this machine.
+    - **2026-11-12: first scans run.**
+      - `tools/scan.sh` (shared platform): SonarQube upload succeeded, but its generic scanner analyses only CSS, JS and
+        XML. Dependency-Track (API port 7002 not answering) and DefectDojo (HTTP 000) uploads failed on the platform side.
+        Trivy and Syft couldn't fetch their databases, because this machine's TLS inspection breaks their certificate check.
+        Gitleaks found 2 hits, both deliberate fake secrets in `SecretLeakGuardTests`, now listed in `.gitleaksignore`.
+      - C# analysis needs the SonarScanner for .NET (`begin`, build, `end`). Run that way: 26,702 lines (24,135 C#),
+        reliability C (1 bug), security C (1 vulnerability), maintainability A, 416 code smells, 0.7% duplication.
+        - Bug fixed: S1244 float equality in `WorkloadComparisonEvaluator`.
+        - Vulnerability accepted: S2068 "hard-coded password" in `IdentitySeedData`, the opt-in sample-data accounts.
+          The wizard warns that this password is published; already a known issue.
+      - Quality gate: ERROR. The first full analysis counts all 252 existing findings, mostly cognitive complexity, as
+        "new", and the 16 hotspots need review in the SonarQube UI. The scan token can't review hotspots.
+      - Still open:
+        - Add the .NET scanner steps to `tools/scan.sh` and CI.
+        - Review the hotspots and set the new-code baseline in SonarQube (owner).
+        - Repair the platform's Dependency-Track and DefectDojo endpoints.
   - **G22 (partial).**
     - Verified: `dotnet publish src/DBTracker.Web -p:PublishProfile=FolderProfile` succeeds and the
       output has `web.config` and no Development or Testing settings.

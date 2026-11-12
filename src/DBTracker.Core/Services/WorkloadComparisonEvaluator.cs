@@ -80,7 +80,8 @@ public static class WorkloadComparisonEvaluator
         }
 
         var change = post.Value - pre.Value;
-        double? percent = pre.Value == 0 ? null : change / Math.Abs(pre.Value) * 100;
+        // A percentage of a (near-)zero baseline is meaningless, so it is left out rather than shown as a huge number.
+        double? percent = Math.Abs(pre.Value) < 1e-9 ? null : change / Math.Abs(pre.Value) * 100;
         var summary = $"{pre.Value:N1} to {post.Value:N1} {post.Unit.Trim()} ({(change >= 0 ? "+" : "")}{change:N1}" +
                       (percent is { } p ? $", {(p >= 0 ? "+" : "")}{p:N1}%" : "") + ").";
         return new(true, change, percent, warnings, summary);
