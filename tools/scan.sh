@@ -29,3 +29,22 @@ export VERSION="${VERSION:-1.0.0}"
 export EXCLUDE_DIRS="${EXCLUDE_DIRS:-bin obj out publish TestResults .git .vs .vscode .claude .scan-reports node_modules}"
 
 bash "$SCRIPT" "$REPO"
+
+# The platform's generic SonarQube scanner analyses only CSS, JS and XML here. C# needs the SonarScanner for .NET wrapped
+# around a build, published to the same project key. It is installed into .tools/ (git-ignored), not globally.
+if [ "${SKIP_DOTNET_SONAR:-0}" != "1" ] && command -v dotnet >/dev/null 2>&1; then
+  echo "[+] SonarQube C# analysis (SonarScanner for .NET)"
+  TOOLS="$REPO/.tools"
+  [ -x "$TOOLS/dotnet-sonarscanner" ] || [ -x "$TOOLS/dotnet-sonarscanner.exe" ] || dotnet tool install dotnet-sonarscanner --tool-path "$TOOLS" >/dev/null
+  SCANNER="$TOOLS/dotnet-sonarscanner"; [ -x "$SCANNER.exe" ] && SCANNER="$SCANNER.exe"
+  (
+    # shellcheck disable=SC1091
+    source "$CODE_PLATFORM_DIR/scan.env" >/dev/null 2>&1
+    cd "$REPO"
+    export MSYS_NO_PATHCONV=1
+    "$SCANNER" begin /k:"$PROJECT_KEY" /v:"$VERSION" /d:sonar.host.url="$SONAR_URL" /d:sonar.token="$SONAR_TOKEN" \
+      "/d:sonar.exclusions=**/Migrations/**,**/wwwroot/lib/**,**/bin/**,**/obj/**,installer/out/**" >/dev/null &&
+    dotnet build DBTracker.slnx --no-incremental -nologo -v q >/dev/null &&
+    "$SCANNER" end /d:sonar.token="$SONAR_TOKEN" | grep -E "ANALYSIS SUCCESSFUL|ERROR" || echo "  ! C# analysis failed; rerun without the redirects to see why." >&2
+  )
+fi
