@@ -6,5 +6,6 @@ public enum DeliveryKind
     ComplianceReport,
     Alert,
     Recovery,
-    TestEmail
+    TestEmail,
+    SupportRunwayNotice
 }

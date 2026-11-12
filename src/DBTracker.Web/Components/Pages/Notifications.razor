@@ -37,11 +37,11 @@ else
 
                 @if (_page.Items.Count == 0 && _page.InboxOptedOut)
                 {
-                    <div class="empty-state py-3" data-testid="inbox-opted-out"><i aria-hidden="true" class="bi bi-envelope"></i>Your subscriptions are all email only, so nothing is shown here. Change one to "In-app + email" to see alerts in this inbox too.</div>
+                    <EmptyState Icon="envelope" Compact="true" TestId="inbox-opted-out">Your subscriptions are all email only, so nothing is shown here. Change one to "In-app + email" under Subscriptions to see alerts in this inbox too.</EmptyState>
                 }
                 else if (_page.Items.Count == 0)
                 {
-                    <div class="empty-state py-3"><i aria-hidden="true" class="bi bi-inbox"></i>No notifications yet.</div>
+                    <EmptyState Icon="inbox" Compact="true">No notifications yet. Alerts for the instances you can see land here as they are raised, newest first.</EmptyState>
                 }
                 else
                 {
@@ -74,7 +74,7 @@ else
 
                 @if (_subscriptions.Count == 0)
                 {
-                    <div class="text-muted small mb-3">No subscriptions. You see every alert.</div>
+                    <EmptyState Compact="true" Class="small pt-0 mb-2">No subscriptions, so every alert for instances you can see shows in your inbox and none are emailed to you. Add one below to narrow that.</EmptyState>
                 }
                 else
                 {

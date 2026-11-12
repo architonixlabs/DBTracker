@@ -53,18 +53,27 @@ public class ChangeValidationService(IDbContextFactory<DBTrackerDbContext> facto
             .FirstOrDefaultAsync();
     }
 
-    /// <summary>Successful backups and restores for the instance since the change started, newest first, for the evidence pickers.</summary>
+    /// <summary>Successful backups and restores for the instance since the change started, newest first, for the evidence pickers.
+    /// Corrections apply (a restore corrected to Failed is not offered) and imported history is left out, matching ValidateLinkedEvidence.</summary>
     public async Task<PostChangeEvidenceCandidates> ListEvidenceCandidatesAsync(int campaignId, int instanceId)
     {
         using var db = await factory.CreateDbContextAsync();
         var started = await ChangeStartedAsync(db, campaignId);
         var backups = await db.BackupRecords.AsNoTracking()
-            .Where(b => b.DatabaseInstanceId == instanceId && b.Status == BackupStatus.Success && (started == null || b.TimestampUtc >= started))
+            .Include(b => b.Corrections)
+            .Where(b => b.DatabaseInstanceId == instanceId && b.Source != BackupSource.Imported && (started == null || b.TimestampUtc >= started))
+            .Where(b => (b.Corrections
+                .Where(c => c.NewStatus != null)
+                .OrderByDescending(c => c.CorrectedAtUtc).ThenByDescending(c => c.Id)
+                .Select(c => c.NewStatus)
+                .FirstOrDefault() ?? b.Status) == BackupStatus.Success)
             .OrderByDescending(b => b.TimestampUtc)
             .Take(20)
             .ToListAsync();
         var restores = await db.RestoreEvents.AsNoTracking()
-            .Where(r => r.DatabaseInstanceId == instanceId && r.Outcome == RestoreOutcome.Success && (started == null || r.TimestampUtc >= started))
+            .Include(r => r.Corrections)
+            .Where(r => r.DatabaseInstanceId == instanceId && (started == null || r.TimestampUtc >= started))
+            .Where(RestoreEvidence.IsVerified)
             .OrderByDescending(r => r.TimestampUtc)
             .Take(20)
             .ToListAsync();
@@ -88,8 +97,8 @@ public class ChangeValidationService(IDbContextFactory<DBTrackerDbContext> facto
             return (false, "That instance isn't part of this campaign.", null);
         }
 
-        var backup = validation.LinkedBackupRecordId is { } backupId ? await db.BackupRecords.AsNoTracking().FirstOrDefaultAsync(b => b.Id == backupId) : null;
-        var restore = validation.LinkedRestoreEventId is { } restoreId ? await db.RestoreEvents.AsNoTracking().FirstOrDefaultAsync(r => r.Id == restoreId) : null;
+        var backup = validation.LinkedBackupRecordId is { } backupId ? await db.BackupRecords.AsNoTracking().Include(b => b.Corrections).FirstOrDefaultAsync(b => b.Id == backupId) : null;
+        var restore = validation.LinkedRestoreEventId is { } restoreId ? await db.RestoreEvents.AsNoTracking().Include(r => r.Corrections).FirstOrDefaultAsync(r => r.Id == restoreId) : null;
         if ((validation.LinkedBackupRecordId is not null && backup is null) || (validation.LinkedRestoreEventId is not null && restore is null))
         {
             return (false, "The linked backup or restore record no longer exists.", null);

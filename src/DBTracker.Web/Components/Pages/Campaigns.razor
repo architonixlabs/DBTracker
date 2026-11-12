@@ -99,7 +99,10 @@
     <div class="col-lg-7">
         @if (_campaigns.Count == 0)
         {
-            <div class="empty-state"><i aria-hidden="true" class="bi bi-signpost-2"></i> No migration campaigns yet.</div>
+            <EmptyState Icon="signpost-2">
+                <ChildContent>No migration campaigns yet. A campaign groups the instances moving from one platform or version to another, with their rehearsals, change windows and sign-offs.</ChildContent>
+                <Action><a href="#campaigns-campaign-name">Start a campaign</a></Action>
+            </EmptyState>
         }
         else
         {

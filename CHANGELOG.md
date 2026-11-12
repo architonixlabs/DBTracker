@@ -4,6 +4,36 @@ All notable changes to DBTracker are recorded here. Versions follow [Semantic Ve
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-11-12
+
+Still a pre-release: the installers aren't code-signed yet.
+
+### Added
+
+- **Installer: optional HTTPS and a keep-data choice on uninstall.** `CertThumbprint` / `CERT_THUMBPRINT`
+  (with `HttpsPort` / `HTTPS_PORT`, default 443), also on the Setup.exe Options page, adds an HTTPS
+  binding with a certificate from `LocalMachine\My` after checking that it exists, has its private key
+  and is valid, and the tray then uses the recorded HTTPS port. The Setup.exe uninstall page has an
+  **Also delete DBTracker's data in App_Data** checkbox, off by default. Quiet uninstalls still keep
+  the data unless `RemoveData=1` is passed, and the SQL database is never dropped.
+- **Light theme.** A System / Dark / Light switch in the sidebar footer. Dark stays the default; the choice is kept
+  in a cookie, applies before the first paint on every page including sign-in, and survives sign-out. Every light-theme
+  text and status colour meets WCAG AA.
+- **Empty states.** Lists and pages with nothing to show now say what would appear there and why it's empty, and offer
+  the next step only when your role allows it.
+
+### Fixed
+
+- **Password changes.** Changing your own password no longer signs you out of this browser; other
+  sessions still end.
+- **Change evidence.** A backup or restore corrected after the fact is judged by its corrected result
+  when linked as post-change evidence, and imported history can't be linked.
+- **Capacity times.** Capacity measurements are entered and shown in your own time zone or UTC, named
+  on the page, and a future time is refused.
+- **Delivery history.** Support-runway notice emails now appear in the delivery history on **Setup**.
+- **Workload comparisons.** A before-and-after comparison against a zero or near-zero baseline no longer
+  shows a meaningless percentage.
+
 ## [1.1.0] - 2026-11-12
 
 This is still a pre-release: the installers aren't code-signed yet.

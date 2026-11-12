@@ -200,6 +200,8 @@ if (app.Environment.IsProduction())
 }
 // CSP with a per-request script nonce, plus the companion headers (SecurityHeaderPolicy). First, so error pages get them too.
 app.UseSecurityHeaders();
+// Puts the theme back after sign-out wiped it (see ThemeCookie).
+app.UseThemeCookieCarryOver();
 app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
 // The tray polls these over loopback http and doesn't follow redirects; see HttpsRedirectExemption.
 app.UseWhen(
@@ -222,6 +224,7 @@ app.MapRazorComponents<App>()
 app.MapIdentityLogoutEndpoint();
 app.MapDeviceLinkEndpoints();
 app.MapPasskeyEndpoints();
+app.MapSignInRefreshEndpoint();
 app.MapTrayApi();
 app.MapCspReports();
 

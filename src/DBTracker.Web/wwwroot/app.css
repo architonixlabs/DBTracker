@@ -1,7 +1,10 @@
 /*
   DBTracker visual system.
-  Dark-only theme: an operations console that stays open on a second monitor through long monitoring
-  sessions. Identity motif: square status lights (green / amber / red / grey) that mean backup health
+  Dark by default: an operations console that stays open on a second monitor through long monitoring
+  sessions. A light theme exists for daylight and phone use: System / Dark / Light in the sidebar footer,
+  kept in the dbt-theme cookie, which App.razor turns into <html data-theme> so the first paint is right.
+  Every colour is a token below; a new colour gets a value in both themes, never a literal in a rule.
+  Identity motif: square status lights (green / amber / red / grey) that mean backup health
   everywhere they appear. One accent (amber) marks the primary action, the active nav item and focus.
   Inter for interface text (legible at 12-14px in dense tables and forms); IBM Plex Mono only for data
   values (IPs, versions, IDs, sizes, timestamps) where fixed-width columns help scanning.
@@ -38,12 +41,123 @@
     --dbt-never: #8A919C;
     --dbt-never-bg: rgba(138, 145, 156, 0.12);
 
+    /* Text on the accent and failed fills, tinted alert borders, shadows and overlays. */
+    --dbt-on-accent: #1A1203;
+    --dbt-accent-active: #D9942F;
+    --dbt-on-failed: #0B0D10;
+    --dbt-failed-text: #F7A2A5;
+    --dbt-failed-border: #7A3236;
+    --dbt-failed-glow: rgba(240, 85, 91, 0.55);
+    --dbt-ontrack-border: #1F5A40;
+    --dbt-overdue-border: #6B4C1E;
+    --dbt-error-bar-bg: #3A1B1D;
+    --dbt-shadow: rgba(0, 0, 0, 0.5);
+    --dbt-shadow-strong: rgba(0, 0, 0, 0.6);
+    --dbt-backdrop: rgba(5, 6, 8, 0.72);
+
     --dbt-serif: 'Inter', system-ui, sans-serif;
     --dbt-mono: 'IBM Plex Mono', 'Cascadia Code', ui-monospace, Menlo, Consolas, monospace;
     --dbt-sans: 'Inter', system-ui, sans-serif;
     --dbt-radius: 3px;
     --dbt-radius-panel: 6px;
     --dbt-ease: cubic-bezier(0.22, 1, 0.36, 1);
+
+    color-scheme: dark;
+}
+
+/* Light theme: the console's hues, darkened until every text and status token passes WCAG AA (4.5:1)
+   on bg, raised, alt and the sidebar, and the accent passes 3:1 as a focus ring (ratios in BACKLOG.md,
+   UPDATE-034). It applies on an explicit "light" choice, and on "system" when the OS asks for light;
+   an explicit "dark" (and no cookie at all) keeps the :root values above. The two blocks are the same
+   values: change both together. */
+:root[data-theme="light"] {
+    --dbt-bg: #F6F7F9;
+    --dbt-bg-raised: #FFFFFF;
+    --dbt-bg-alt: #ECEEF1;
+    --dbt-sidebar-bg: #EEF0F3;
+    --dbt-sidebar-bg-2: #EEF0F3;
+    --dbt-sidebar-fg: #4F5761;
+    --dbt-sidebar-fg-active: #0E1116;
+    --dbt-accent: #8F5400;
+    --dbt-accent-hover: #7A4700;
+    --dbt-accent-2: #1D6B6B;
+    --dbt-accent-soft: rgba(143, 84, 0, 0.12);
+    --dbt-border: #D9DDE2;
+    --dbt-line: #D9DDE2;
+    --dbt-border-bright: #C3C9D0;
+    --dbt-field-border: #7C848F;
+    --dbt-text: #2A2F36;
+    --dbt-text-strong: #0E1116;
+    --dbt-label: #3F4650;
+    --dbt-muted: #59616C;
+    --dbt-placeholder: #656D77;
+    --dbt-ontrack: #17744B;
+    --dbt-ontrack-bg: rgba(23, 116, 75, 0.10);
+    --dbt-overdue: #8F5400;
+    --dbt-overdue-bg: rgba(143, 84, 0, 0.10);
+    --dbt-failed: #BB2329;
+    --dbt-failed-bg: rgba(187, 35, 41, 0.10);
+    --dbt-never: #59616C;
+    --dbt-never-bg: rgba(89, 97, 108, 0.10);
+    --dbt-on-accent: #FFFFFF;
+    --dbt-accent-active: #6E4000;
+    --dbt-on-failed: #FFFFFF;
+    --dbt-failed-text: #9E1C22;
+    --dbt-failed-border: #D99396;
+    --dbt-failed-glow: rgba(187, 35, 41, 0.35);
+    --dbt-ontrack-border: #8CC7A9;
+    --dbt-overdue-border: #D6B27A;
+    --dbt-error-bar-bg: #FBE9EA;
+    --dbt-shadow: rgba(15, 20, 30, 0.14);
+    --dbt-shadow-strong: rgba(15, 20, 30, 0.2);
+    --dbt-backdrop: rgba(20, 24, 30, 0.45);
+    color-scheme: light;
+}
+
+@media (prefers-color-scheme: light) {
+    :root[data-theme="system"] {
+        --dbt-bg: #F6F7F9;
+        --dbt-bg-raised: #FFFFFF;
+        --dbt-bg-alt: #ECEEF1;
+        --dbt-sidebar-bg: #EEF0F3;
+        --dbt-sidebar-bg-2: #EEF0F3;
+        --dbt-sidebar-fg: #4F5761;
+        --dbt-sidebar-fg-active: #0E1116;
+        --dbt-accent: #8F5400;
+        --dbt-accent-hover: #7A4700;
+        --dbt-accent-2: #1D6B6B;
+        --dbt-accent-soft: rgba(143, 84, 0, 0.12);
+        --dbt-border: #D9DDE2;
+        --dbt-line: #D9DDE2;
+        --dbt-border-bright: #C3C9D0;
+        --dbt-field-border: #7C848F;
+        --dbt-text: #2A2F36;
+        --dbt-text-strong: #0E1116;
+        --dbt-label: #3F4650;
+        --dbt-muted: #59616C;
+        --dbt-placeholder: #656D77;
+        --dbt-ontrack: #17744B;
+        --dbt-ontrack-bg: rgba(23, 116, 75, 0.10);
+        --dbt-overdue: #8F5400;
+        --dbt-overdue-bg: rgba(143, 84, 0, 0.10);
+        --dbt-failed: #BB2329;
+        --dbt-failed-bg: rgba(187, 35, 41, 0.10);
+        --dbt-never: #59616C;
+        --dbt-never-bg: rgba(89, 97, 108, 0.10);
+        --dbt-on-accent: #FFFFFF;
+        --dbt-accent-active: #6E4000;
+        --dbt-on-failed: #FFFFFF;
+        --dbt-failed-text: #9E1C22;
+        --dbt-failed-border: #D99396;
+        --dbt-failed-glow: rgba(187, 35, 41, 0.35);
+        --dbt-ontrack-border: #8CC7A9;
+        --dbt-overdue-border: #D6B27A;
+        --dbt-error-bar-bg: #FBE9EA;
+        --dbt-shadow: rgba(15, 20, 30, 0.14);
+        --dbt-shadow-strong: rgba(15, 20, 30, 0.2);
+        --dbt-backdrop: rgba(20, 24, 30, 0.45);
+        color-scheme: light;
+    }
 }
 
 html, body {
@@ -94,7 +208,7 @@ table {
 
 ::selection {
     background: var(--dbt-accent);
-    color: #0B0D10;
+    color: var(--dbt-on-accent);
 }
 
 * {
@@ -145,9 +259,9 @@ button:disabled, input:disabled, select:disabled, textarea:disabled {
 }
 
 @keyframes pulseDot {
-    0% { box-shadow: 0 0 0 0 rgba(240, 85, 91, 0.5); }
-    70% { box-shadow: 0 0 0 6px rgba(240, 85, 91, 0); }
-    100% { box-shadow: 0 0 0 0 rgba(240, 85, 91, 0); }
+    0% { box-shadow: 0 0 0 0 var(--dbt-failed-glow); }
+    70% { box-shadow: 0 0 0 6px transparent; }
+    100% { box-shadow: 0 0 0 0 transparent; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -404,19 +518,19 @@ summary:focus-visible,
 .btn-primary {
     background: var(--dbt-accent);
     border: 1px solid var(--dbt-accent);
-    color: #1A1203 !important;
+    color: var(--dbt-on-accent) !important;
     box-shadow: none;
 }
 
 .btn-primary:hover, .btn-primary:focus-visible {
     background: var(--dbt-accent-hover);
     border-color: var(--dbt-accent-hover);
-    color: #1A1203 !important;
+    color: var(--dbt-on-accent) !important;
 }
 
 .btn-primary:active {
-    background: #D9942F;
-    border-color: #D9942F;
+    background: var(--dbt-accent-active);
+    border-color: var(--dbt-accent-active);
 }
 
 .btn-primary:disabled, .btn-primary:disabled:hover {
@@ -448,12 +562,12 @@ summary:focus-visible,
 
 .btn-outline-danger {
     background: transparent;
-    border: 1px solid #7A3236;
+    border: 1px solid var(--dbt-failed-border);
     color: var(--dbt-failed);
 }
 
 .btn-outline-danger:hover {
-    background: rgba(240,85,91,0.1);
+    background: var(--dbt-failed-bg);
     border-color: var(--dbt-failed);
     color: var(--dbt-failed);
 }
@@ -693,7 +807,7 @@ dl.row > dd {
 
 .stat-dot.OnTrack { background: var(--dbt-ontrack); }
 .stat-dot.Overdue { background: var(--dbt-overdue); }
-.stat-dot.Failed { background: var(--dbt-failed); box-shadow: 0 0 6px rgba(240,85,91,0.55); }
+.stat-dot.Failed { background: var(--dbt-failed); box-shadow: 0 0 6px var(--dbt-failed-glow); }
 .stat-dot.NeverBackedUp { background: var(--dbt-never); }
 
 /* ---------- Filter bar ---------- */
@@ -742,7 +856,6 @@ dl.row > dd {
 }
 
 .form-select {
-    color-scheme: dark;
     padding-right: 2.25rem;
 }
 
@@ -952,6 +1065,62 @@ dl.row > dd {
     margin-top: 0.75rem;
 }
 
+.empty-state .empty-state-action .btn,
+.empty-state .empty-state-action a,
+.empty-state .empty-state-message a,
+.empty-state .empty-state-message .btn {
+    margin-top: 0;
+}
+
+/* Components/Shared/EmptyState.razor: what would be listed here and why it's empty, then (when the
+   viewer's role allows it) the one action that fills it. */
+.empty-state-message {
+    margin: 0;
+    color: var(--dbt-muted);
+}
+
+.empty-state-action {
+    margin-top: 0.75rem;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 8px 16px;
+}
+
+/* An action wrapped in an AuthorizeView the viewer fails renders nothing; drop the gap with it. */
+.empty-state-action:not(:has(*)) {
+    display: none;
+}
+
+.empty-state-action a:not(.btn) {
+    min-height: 24px;
+    display: inline-flex;
+    align-items: center;
+}
+
+/* Inside a card section the empty state sits at the start, like the content it stands in for. */
+.empty-state.is-compact {
+    text-align: left;
+    padding: 0.75rem 0;
+    max-width: none;
+    margin: 0;
+}
+
+.empty-state.is-compact > i.bi {
+    display: inline;
+    font-size: 1rem;
+    margin: 0 0.5rem 0 0;
+}
+
+.empty-state.is-compact .empty-state-message {
+    display: inline;
+}
+
+.empty-state.is-compact .empty-state-action {
+    justify-content: flex-start;
+    margin-top: 0.5rem;
+}
+
 /* ---------- Loading ---------- */
 .skeleton {
     border-radius: var(--dbt-radius);
@@ -1016,7 +1185,7 @@ dl.row > dd {
 
 /* Failed is the one state that needs the eye first: a glow, and two pulses when it renders, then still. */
 .badge-health.Failed.dot::before {
-    box-shadow: 0 0 6px rgba(240,85,91,0.55);
+    box-shadow: 0 0 6px var(--dbt-failed-glow);
     animation: pulseDot 1.6s ease-out 2;
 }
 
@@ -1044,7 +1213,7 @@ dl.row > dd {
     padding: 0.7rem 1rem;
     min-width: 260px;
     max-width: 380px;
-    box-shadow: 0 12px 32px rgba(0,0,0,0.5);
+    box-shadow: 0 12px 32px var(--dbt-shadow);
     display: flex;
     align-items: center;
     gap: 0.6rem;
@@ -1106,7 +1275,7 @@ dl.row > dd {
     align-items: center;
     gap: 12px;
     padding: 0.7rem 3rem 0.7rem 1.25rem;
-    background: #3A1B1D;
+    background: var(--dbt-error-bar-bg);
     color: var(--dbt-text-strong);
     border-top: 1px solid var(--dbt-failed);
     font-size: 13.5px;
@@ -1140,7 +1309,7 @@ dl.row > dd {
     text-align: start;
 }
 
-/* ---------- Bootstrap utility overrides for the dark theme ---------- */
+/* ---------- Bootstrap utility overrides (both themes read the tokens) ---------- */
 .text-muted { color: var(--dbt-muted) !important; }
 .text-danger { color: var(--dbt-failed) !important; }
 .text-success { color: var(--dbt-ontrack) !important; }
@@ -1159,20 +1328,20 @@ dl.row > dd {
 }
 
 .alert-danger {
-    border-color: #7A3236;
-    background: rgba(240,85,91,0.08);
-    color: #F7A2A5;
+    border-color: var(--dbt-failed-border);
+    background: var(--dbt-failed-bg);
+    color: var(--dbt-failed-text);
 }
 
 .alert-success {
-    border-color: #1F5A40;
-    background: rgba(62,207,142,0.08);
+    border-color: var(--dbt-ontrack-border);
+    background: var(--dbt-ontrack-bg);
     color: var(--dbt-ontrack);
 }
 
 .alert-warning {
-    border-color: #6B4C1E;
-    background: rgba(232,163,61,0.08);
+    border-color: var(--dbt-overdue-border);
+    background: var(--dbt-overdue-bg);
     color: var(--dbt-overdue);
 }
 
@@ -1570,6 +1739,83 @@ dl.row > dd {
     margin: 0;
 }
 
+/* ---------- Theme switch (sidebar footer) ---------- */
+/* A segmented radio group. The checked segment is marked three ways (raised fill, bold label, the accent
+   bar along its foot) so it never rests on colour alone. */
+.theme-switch {
+    border: 0;
+    margin: 12px 0 0;
+    padding: 0;
+    min-width: 0;
+}
+
+.theme-switch-legend {
+    float: none;
+    width: auto;
+    margin: 0 0 6px;
+    padding: 0;
+    font-family: var(--dbt-sans);
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--dbt-muted);
+}
+
+.theme-switch-options {
+    display: flex;
+    border: 1px solid var(--dbt-field-border);
+    border-radius: var(--dbt-radius);
+}
+
+.theme-option {
+    position: relative;
+    flex: 1 1 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    min-height: 30px;
+    padding: 4px 6px;
+    margin: 0;
+    border-right: 1px solid var(--dbt-field-border);
+    font-family: var(--dbt-sans);
+    font-size: 12px;
+    color: var(--dbt-sidebar-fg);
+    transition: background 0.15s ease, color 0.15s ease;
+}
+
+.theme-option:last-child {
+    border-right: none;
+}
+
+/* The radio stays in the accessibility tree and takes focus; its label draws the state. */
+.theme-option input {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    opacity: 0;
+    cursor: pointer;
+}
+
+.theme-option:hover {
+    background: var(--dbt-bg-alt);
+    color: var(--dbt-text-strong);
+}
+
+.theme-option:has(input:checked) {
+    background: var(--dbt-bg-raised);
+    color: var(--dbt-text-strong);
+    font-weight: 600;
+    box-shadow: inset 0 -2px 0 var(--dbt-accent);
+}
+
+.theme-option:has(input:focus-visible) {
+    outline: 2px solid var(--dbt-accent);
+    outline-offset: 1px;
+    z-index: 1;
+}
+
 /* ---------- Notification bell ---------- */
 .notif-bell-wrap {
     position: relative;
@@ -1603,7 +1849,7 @@ dl.row > dd {
     top: 1px;
     right: 0;
     background: var(--dbt-failed);
-    color: #0B0D10;
+    color: var(--dbt-on-failed);
     font-family: var(--dbt-sans);
     font-size: 0.62rem;
     font-weight: 700;
@@ -1627,7 +1873,7 @@ dl.row > dd {
     color: var(--dbt-text);
     border: 1px solid var(--dbt-border-bright);
     border-radius: var(--dbt-radius-panel);
-    box-shadow: 0 12px 32px rgba(0,0,0,0.55);
+    box-shadow: 0 12px 32px var(--dbt-shadow);
 }
 
 /* The list renders a moment after the popover opens; don't flash an empty frame. */
@@ -1702,7 +1948,7 @@ html.no-popover .notif-dropdown:not(.is-open) {
     color: var(--dbt-text);
     border: 1px solid var(--dbt-border-bright);
     border-radius: var(--dbt-radius-panel);
-    box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+    box-shadow: 0 8px 24px var(--dbt-shadow);
     /* It can sit in a table header or a heading row: don't inherit their type treatment. */
     font-family: var(--dbt-sans);
     font-size: 12.5px;
@@ -1758,7 +2004,7 @@ html.no-popover .toggletip {
     color: var(--dbt-text);
     border: 1px solid var(--dbt-border-bright);
     border-radius: var(--dbt-radius-panel);
-    box-shadow: 0 16px 48px rgba(0,0,0,0.6);
+    box-shadow: 0 16px 48px var(--dbt-shadow-strong);
 }
 
 .dbt-dialog.is-danger {
@@ -1771,7 +2017,7 @@ html.no-popover .toggletip {
 }
 
 .dbt-dialog::backdrop {
-    background: rgba(5, 6, 8, 0.72);
+    background: var(--dbt-backdrop);
     overflow: hidden;
     overscroll-behavior: contain;
 }
@@ -1923,7 +2169,9 @@ button.notif-item:active {
     .app-nav-link span,
     .user-chip .name,
     .user-chip .role,
-    .user-chip-actions .label {
+    .user-chip-actions .label,
+    .theme-switch-legend,
+    .theme-option .label {
         position: absolute;
         width: 1px;
         height: 1px;
@@ -1965,6 +2213,26 @@ button.notif-item:active {
         min-width: 44px;
         min-height: 44px;
         font-size: 1rem;
+    }
+    /* In the rail the three choices stack as 44px icon targets; legend and labels stay for screen readers. */
+    .theme-switch {
+        margin-top: 6px;
+    }
+    .theme-switch-options {
+        flex-direction: column;
+        gap: 2px;
+        border: none;
+    }
+    .theme-option {
+        flex: none;
+        min-width: 44px;
+        min-height: 44px;
+        border-right: none;
+        border-radius: var(--dbt-radius);
+        font-size: 1rem;
+    }
+    .theme-option:has(input:checked) {
+        box-shadow: inset 0 0 0 1px var(--dbt-field-border), inset 0 -2px 0 var(--dbt-accent);
     }
     .app-main {
         padding: 28px 24px 48px;

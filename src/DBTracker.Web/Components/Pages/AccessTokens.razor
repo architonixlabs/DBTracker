@@ -68,7 +68,10 @@
         }
         else if (_tokens.Count == 0)
         {
-            <div class="empty-state py-3"><i aria-hidden="true" class="bi bi-key"></i>You have no tokens yet. Create one for the DBTracker tray app.</div>
+            <EmptyState Icon="key" Compact="true">
+                <ChildContent>You have no access tokens yet. A token lets the DBTracker tray app sign in as you; each one you create is listed here until it expires or you revoke it.</ChildContent>
+                <Action><a href="#token-name">Create a token</a></Action>
+            </EmptyState>
         }
         else
         {

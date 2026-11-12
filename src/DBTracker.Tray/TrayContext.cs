@@ -166,7 +166,7 @@ namespace DBTracker.Tray
             try
             {
                 var probe = await _client.GetHealthAsync();
-                _health = HealthClassifier.Classify(probe, _settings.Port);
+                _health = HealthClassifier.Classify(probe, _settings.ActivePort);
                 _notifyIcon.Icon = _icons.For(_health.Light);
                 _notifyIcon.Text = TrayText.Tooltip(_health);
 

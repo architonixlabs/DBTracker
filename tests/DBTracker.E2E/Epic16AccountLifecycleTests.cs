@@ -144,9 +144,16 @@ public class Epic16AccountLifecycleTests
 
         await FillByLabel("Current password", "Str0ngTempPass!");
         await FillByLabel("New password", "N3wOwnPassword!");
+        var cookieBefore = await AuthCookieAsync();
         await _page.ClickAsync("button[type=submit]:text('Change password')");
-        await Assertions.Expect(_page.Locator(".dbt-toast")).ToContainTextAsync("Password changed");
-        await _page.WaitForURLAsync(url => !url.Contains("/account/change-password"), new PageWaitForURLOptions { Timeout = 15000 });
+        await Assertions.Expect(_page.Locator("[data-testid=password-changed]")).ToBeVisibleAsync();
+
+        // Known issue in 1.0.0 and 1.1.0: the change rotated the security stamp but this browser kept its old cookie, so it was
+        // signed out at the next stamp check. The cookie is now re-issued, and the user stays signed in.
+        Assert.That(await AuthCookieAsync(), Is.Not.EqualTo(cookieBefore), "Changing the password must re-issue this browser's sign-in cookie.");
+        await GotoAsync("/instances");
+        Assert.That(_page.Url, Does.Not.Contain("/Account/Login"));
+        await _page.WaitForSelectorAsync(".notif-bell-btn", new PageWaitForSelectorOptions { Timeout = 15000 });
 
         var fresh = await GlobalSetup.Server.Browser.NewPageAsync();
         try
@@ -164,6 +171,11 @@ public class Epic16AccountLifecycleTests
             await fresh.CloseAsync();
         }
     }
+
+    private async Task<string?> AuthCookieAsync() =>
+        string.Concat((await _page.Context.CookiesAsync())
+            .Where(c => c.Name.StartsWith(".AspNetCore.Identity.Application", StringComparison.Ordinal)) // may be chunked (…C1, …C2)
+            .OrderBy(c => c.Name).Select(c => c.Value));
 
     private Task LoginAsync(string email) => LoginAsync(email, "ArxDemo#2026!");
 

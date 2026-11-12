@@ -1,0 +1,33 @@
+@* System / Dark / Light. A native radio group, so arrow keys move the choice and screen readers announce
+   "Theme, Dark, radio button, 2 of 3, checked". dbtracker.js applies a change at once (data-theme on <html>)
+   and stores it in the dbt-theme cookie; App.razor reads that cookie on the next full page load. It works
+   without the Blazor circuit, so it still answers while the app is reconnecting. *@
+<fieldset class="theme-switch" data-testid="theme-switch">
+    <legend class="theme-switch-legend">Theme</legend>
+    <div class="theme-switch-options">
+        @foreach (var option in Options)
+        {
+            <label class="theme-option" title="@option.Hint">
+                <input type="radio" name="dbt-theme" value="@option.Value" checked="@(Current == option.Value)"
+                       data-testid="@($"theme-{option.Value}")" />
+                <i class="bi bi-@option.Icon" aria-hidden="true"></i>
+                <span class="label">@option.Label</span>
+            </label>
+        }
+    </div>
+</fieldset>
+
+@code {
+    [CascadingParameter(Name = "UiTheme")] private string? Theme { get; set; }
+
+    private string Current => ThemePreference.Normalize(Theme);
+
+    private sealed record Option(string Value, string Label, string Icon, string Hint);
+
+    private static readonly Option[] Options =
+    [
+        new(ThemePreference.System, "System", "circle-half", "Follow this device's light or dark setting"),
+        new(ThemePreference.Dark, "Dark", "moon", "Dark console (the default)"),
+        new(ThemePreference.Light, "Light", "sun", "Light, for daylight and bright rooms"),
+    ];
+}

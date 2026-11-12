@@ -79,7 +79,7 @@ else
                 }
                 else
                 {
-                    <div class="empty-state py-2"><i class="bi bi-file-earmark-x" aria-hidden="true"></i> No support contract linked yet.</div>
+                    <EmptyState Icon="file-earmark-x" Compact="true">No support contract linked yet.</EmptyState>
                 }
 
                 <AuthorizeView Roles="@Roles.ContractEvidencePolicy">
@@ -144,7 +144,7 @@ else
                 }
                 else
                 {
-                    <div class="empty-state py-2"><i class="bi bi-cash-stack" aria-hidden="true"></i> No cost estimate recorded yet.</div>
+                    <EmptyState Icon="cash-stack" Compact="true">No cost estimate recorded yet.</EmptyState>
                 }
 
                 <AuthorizeView Roles="@Roles.CommercialEvidencePolicy">

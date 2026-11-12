@@ -153,7 +153,10 @@
             <div class="col-lg-7">
                 @if (_entries.Count == 0)
                 {
-                    <div class="empty-state"><i aria-hidden="true" class="bi bi-journal"></i>No release/support facts catalogued yet.</div>
+                    <EmptyState Icon="journal">
+                        <ChildContent>No release or support facts catalogued yet, so support status can't be worked out for any instance.</ChildContent>
+                        <Action><a href="#lifecycle-new-engine">Add a release/support fact</a></Action>
+                    </EmptyState>
                 }
                 else
                 {
@@ -322,7 +325,10 @@
             <div class="col-lg-7">
                 @if (_baselinesList.Count == 0)
                 {
-                    <div class="empty-state"><i aria-hidden="true" class="bi bi-flag"></i>No approved baselines yet. Until one is set, no upgrade target is recommended automatically.</div>
+                    <EmptyState Icon="flag">
+                        <ChildContent>No approved baselines yet. Until one is set, no upgrade target is recommended automatically.</ChildContent>
+                        <Action><a href="#lifecycle-baseline-engine">Set an approved patch baseline</a></Action>
+                    </EmptyState>
                 }
                 else
                 {
@@ -390,7 +396,10 @@
             <div class="col-lg-7">
                 @if (_advisoriesList.Count == 0)
                 {
-                    <div class="empty-state"><i aria-hidden="true" class="bi bi-shield-exclamation"></i>No advisories imported yet.</div>
+                    <EmptyState Icon="shield-exclamation">
+                        <ChildContent>No advisories imported yet, so no instance has been checked against one. That is not the same as no advisory applying.</ChildContent>
+                        <Action><a href="#lifecycle-adv-engine">Import an advisory</a></Action>
+                    </EmptyState>
                 }
                 else
                 {
@@ -493,7 +502,10 @@
             <div class="col-lg-7">
                 @if (_pathRulesList.Count == 0)
                 {
-                    <div class="empty-state"><i aria-hidden="true" class="bi bi-signpost-2"></i>No path rules reviewed yet. Every pairing evaluates as Unknown until one is added.</div>
+                    <EmptyState Icon="signpost-2">
+                        <ChildContent>No path rules reviewed yet. Every pairing evaluates as Unknown until one is added.</ChildContent>
+                        <Action><a href="#lifecycle-rule-engine">Add a reviewed path rule</a></Action>
+                    </EmptyState>
                 }
                 else
                 {

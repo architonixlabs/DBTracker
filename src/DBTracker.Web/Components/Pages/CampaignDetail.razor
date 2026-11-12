@@ -183,7 +183,7 @@ else
 
                 @if (_campaign.StateTransitions.Count == 0)
                 {
-                    <p class="small text-muted mb-2">No state changes recorded yet.</p>
+                    <EmptyState Compact="true" Class="small mb-2">No state changes recorded yet. Each move between states is listed here with who made it and why.</EmptyState>
                 }
                 else
                 {
@@ -207,7 +207,7 @@ else
 
                 @if (_campaign.Alternatives.Count == 0)
                 {
-                    <p class="small text-muted mb-2">No alternatives recorded yet.</p>
+                    <EmptyState Compact="true" Class="small mb-2">No alternatives recorded yet. Options considered for this campaign, chosen or not, are listed here.</EmptyState>
                 }
                 else
                 {
@@ -259,7 +259,7 @@ else
 
                 @if (_campaign.Approvals.Count == 0)
                 {
-                    <p class="small text-muted mb-2">No approval decisions recorded yet.</p>
+                    <EmptyState Compact="true" Class="small mb-2">No approval decisions recorded yet. Each approval or rejection is listed here with the approver and date.</EmptyState>
                 }
                 else
                 {

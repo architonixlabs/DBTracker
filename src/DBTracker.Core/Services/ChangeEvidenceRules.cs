@@ -29,6 +29,8 @@ public static class ChangeEvidenceRules
 
     /// <summary>Checks the backup or restore linked as post-change evidence. A Passed outcome needs at least one link; every link must belong
     /// to the same instance, be successful, and come from after the change started when that time is known.</summary>
+    /// <remarks>Success is the effective one: the newest correction wins, so a restore later corrected to Failed no longer proves
+    /// anything. Imported history is a copied claim and never counts as post-change evidence. Callers load <c>Corrections</c>.</remarks>
     public static IReadOnlyList<string> ValidateLinkedEvidence(
         EvidenceCheckOutcome outcome,
         int instanceId,
@@ -49,9 +51,13 @@ public static class ChangeEvidenceRules
             {
                 errors.Add("The linked backup belongs to a different instance.");
             }
-            else if (linkedBackup.Status != BackupStatus.Success)
+            else if (linkedBackup.Source == BackupSource.Imported)
             {
-                errors.Add($"The linked backup is {linkedBackup.Status}, not a successful backup.");
+                errors.Add("The linked backup was imported from history, so it can't show the state after the change.");
+            }
+            else if (EffectiveStatus(linkedBackup) is var status && status != BackupStatus.Success)
+            {
+                errors.Add($"The linked backup is {status}, not a successful backup.");
             }
             else if (changeStartedUtc is { } started && linkedBackup.TimestampUtc < started)
             {
@@ -65,9 +71,13 @@ public static class ChangeEvidenceRules
             {
                 errors.Add("The linked restore belongs to a different instance.");
             }
-            else if (linkedRestore.Outcome != RestoreOutcome.Success)
+            else if (linkedRestore.Source == BackupSource.Imported)
             {
-                errors.Add("The linked restore failed, so it can't prove recoverability.");
+                errors.Add("The linked restore was imported from history, so it can't prove recoverability after the change.");
+            }
+            else if (RestoreEvidence.EffectiveOutcome(linkedRestore) != RestoreOutcome.Success)
+            {
+                errors.Add("The linked restore failed (or was corrected to failed), so it can't prove recoverability.");
             }
             else if (changeStartedUtc is { } started && linkedRestore.TimestampUtc < started)
             {
@@ -77,6 +87,10 @@ public static class ChangeEvidenceRules
 
         return errors;
     }
+
+    /// <summary>A backup's status after its newest status correction.</summary>
+    public static BackupStatus EffectiveStatus(BackupRecord backup) =>
+        EvidenceCorrectionResolver.EffectiveStatus(backup, backup.Corrections.ToList());
 
     /// <summary>What the inventory said about the instance when the validation was recorded: the declared version and the stored identity.</summary>
     public static string BuildBeforeSnapshot(DatabaseInstance instance, VersionIdentity? identity, DateTime capturedAtUtc) =>
@@ -111,7 +125,7 @@ public static class ChangeEvidenceRules
             haReplicationState = validation.HaReplicationStateOutcome.ToString(),
             newBackupRestoreEvidence = validation.NewBackupRestoreEvidenceOutcome.ToString(),
             performanceComparison = validation.PerformanceComparisonNotes,
-            linkedBackup = linkedBackup is null ? null : new { linkedBackup.Id, linkedBackup.TimestampUtc, type = linkedBackup.Type.ToString(), status = linkedBackup.Status.ToString() },
-            linkedRestore = linkedRestore is null ? null : new { linkedRestore.Id, linkedRestore.TimestampUtc, outcome = linkedRestore.Outcome.ToString() }
+            linkedBackup = linkedBackup is null ? null : new { linkedBackup.Id, linkedBackup.TimestampUtc, type = linkedBackup.Type.ToString(), status = EffectiveStatus(linkedBackup).ToString() },
+            linkedRestore = linkedRestore is null ? null : new { linkedRestore.Id, linkedRestore.TimestampUtc, outcome = RestoreEvidence.EffectiveOutcome(linkedRestore).ToString() }
         }, SnapshotJson);
 }

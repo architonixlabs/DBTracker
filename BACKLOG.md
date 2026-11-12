@@ -173,9 +173,10 @@ authenticated role already, same as the rest of the app, so no separate "my apps
       text tokens meet WCAG AA; visible amber focus outline on every control. Motion: toast slide-in,
       loading indicators, the Failed pulse; all of it stops under `prefers-reduced-motion`.
 - [x] Toast notifications on create/update/log-backup/archive actions
-- [ ] Further polish: empty/zero-state illustrations, a light-theme toggle (dark is currently the
+- [x] Further polish: empty/zero-state illustrations, a light-theme toggle (dark is currently the
       only theme, by design — not a gap, but a toggle isn't built), responsive mobile pass beyond
-      the basic sidebar collapse
+      the basic sidebar collapse. Done 2026-11-12, see UPDATE-034: System / Dark / Light theme
+      (dark stays the default) and a shared plain empty state; illustrations were dropped on purpose.
 
 ## Progress log
 - 2026-11-09 — Repo initialized; solution scaffolded (Web/Core/Infrastructure/UnitTests/E2E); domain
@@ -1871,6 +1872,22 @@ tests were updated for the archive choice and the explicit checklist start.
       GoAccess, and DEPLOYMENT.md explains scheduling it.
     - README has a "Quality checks" section.
     - Still open: the first scan itself, because Docker Desktop was not running on this machine.
+    - **2026-11-12: first scans run.**
+      - `tools/scan.sh` (shared platform): SonarQube upload succeeded, but its generic scanner analyses only CSS, JS and
+        XML. Dependency-Track (API port 7002 not answering) and DefectDojo (HTTP 000) uploads failed on the platform side.
+        Trivy and Syft couldn't fetch their databases, because this machine's TLS inspection breaks their certificate check.
+        Gitleaks found 2 hits, both deliberate fake secrets in `SecretLeakGuardTests`, now listed in `.gitleaksignore`.
+      - C# analysis needs the SonarScanner for .NET (`begin`, build, `end`). Run that way: 26,702 lines (24,135 C#),
+        reliability C (1 bug), security C (1 vulnerability), maintainability A, 416 code smells, 0.7% duplication.
+        - Bug fixed: S1244 float equality in `WorkloadComparisonEvaluator`.
+        - Vulnerability accepted: S2068 "hard-coded password" in `IdentitySeedData`, the opt-in sample-data accounts.
+          The wizard warns that this password is published; already a known issue.
+      - Quality gate: ERROR. The first full analysis counts all 252 existing findings, mostly cognitive complexity, as
+        "new", and the 16 hotspots need review in the SonarQube UI. The scan token can't review hotspots.
+      - Still open:
+        - Add the .NET scanner steps to `tools/scan.sh` and CI.
+        - Review the hotspots and set the new-code baseline in SonarQube (owner).
+        - Repair the platform's Dependency-Track and DefectDojo endpoints.
   - **G22 (partial).**
     - Verified: `dotnet publish src/DBTracker.Web -p:PublishProfile=FolderProfile` succeeds and the
       output has `web.config` and no Development or Testing settings.
@@ -2028,6 +2045,27 @@ tests were updated for the archive choice and the explicit checklist start.
   - **Assurance:** the retirement gate counts hosted databases, and maintenance results can be backdated.
   - **CSV:** one CSV reader (`CsvRecordSplitter` removed).
   - **Checks:** no migration needed; 1053 unit tests pass. New findings are in G34.
+- 2026-11-12 | UPDATE-034 | Closes the Design "Further polish" item (see UPDATE-006, UPDATE-015 dated 2026-11-11, and
+  UPDATE-023), track I. No migration: the theme lives in the `dbt-theme` cookie.
+  - **Theme:** System / Dark / Light radio group (`ThemeSwitch.razor`) in the sidebar footer; 44px stacked icons in the
+    phone rail. App.razor writes `<html data-theme>` from the cookie, so the first paint is right with no inline script
+    (the CSP is unchanged); `dbtracker.js` applies a change at once. Missing or unknown values read as Dark. Logout's
+    Clear-Site-Data wipes the cookie, so the sign-in redirect carries `?theme=` and `ThemeCookie` re-issues it.
+  - **Tokens:** every colour in app.css is now a token, with a light block for `[data-theme=light]` and the same block
+    for `system` under `prefers-color-scheme: light`. Light ratios (contrast checker): text 12.57, strong 17.64,
+    label 8.89, muted 5.85, placeholder 4.89 (4.51 on alt), sidebar text 6.41, links 5.82, accent/Overdue 5.70
+    (focus ring 5.26 on alt), Healthy 5.39 (4.97 on alt), Failed 5.79, Unknown 5.85, field border 3.31 to 3.78,
+    white on accent 6.11, white on Failed badge 6.20, alert-danger text 6.52 on its tint. Status words stay beside
+    every light.
+  - **Empty states:** one `EmptyState.razor` (`data-testid="empty-state"`; older test ids kept on the sentence) in
+    72 places: inventory, dashboard, backup/restore/change history, reports, inbox, bell, subscriptions, audit,
+    campaigns, change windows, rehearsals, freezes, exceptions, certificates, tokens, passkeys, saved views, scan
+    paths, teams, policies, lifecycle catalogues, archive. Actions sit in AuthorizeView with the page's existing roles.
+  - **Personas:** Priya: dark by default, compact switch. Noor: light at 360px, no sideways scroll, 44px targets
+    (E2E). Alex: native radio group with legend, arrow keys tested, focus ring in both themes. Angela: wording states
+    what is missing, never that something is fine (restore, advisory and scan texts reworded). Sam: actions open
+    real pages or the form on the same page. Dev (Viewer): no action shown that a Viewer can't take.
+  - **Checks:** 1077 unit tests; E2E `ThemeAndEmptyStateTests` (5) plus 41 tests touching the changed pages pass.
 - 2026-11-11 | UPDATE-025 | Clarifies the Progress log's D22 entry (see UPDATE-022): after G01, "NotApplicable is not treated as passing" is replaced by "NotApplicable only when proven" and "no second archive path" holds for retirements. The D21 entry's "a DBA can record a contract" is true after G06. Earlier wording is kept as history.
 
 ### Epic 25 - Finish partly built features
@@ -2131,6 +2169,17 @@ remaining scope of each original item.*
     polls, and the first state is never shown.
   - Fix the I04 wording, DEPLOYMENT.md and the installer text to match the hash behavior; the
     CHANGELOG wording is already correct.
+  - **2026-11-12 progress: keep-data choice in Setup.exe.**
+    - Built: the bundle's Modify page (also what Settings > Apps > Uninstall shows) has an **Also
+      delete DBTracker's data in App_Data** checkbox, off by default, bound to the existing
+      `RemoveData` variable, so ticking it passes `REMOVE_DATA=1` to the MSI. The text says what goes
+      (saved configuration, setup key, encryption keys), that it can't be undone and the wizard runs
+      again, and that the SQL database and login are not deleted (checked against `RemoveAppData`:
+      it deletes only `<site folder>\App_Data` and the then-empty site folder).
+    - Kept: `/uninstall /quiet` without `RemoveData=1` still keeps the data (Sam). Deleting is only an
+      explicit tick or `RemoveData=1` (Angela, Priya).
+    - Still open: clicking through the page in the Hyper-V VM (G18). The MSI's own maintenance
+      dialogs still have no checkbox; `REMOVE_DATA=1` stays command-line only there.
 
 ### Epic 26 - Release hardening and engineering standards
 
@@ -2161,6 +2210,29 @@ verifiable downloads.*
   SETUP-GUIDE.md recommend adding an HTTPS binding and the app calls `UseHttpsRedirection`.
   **Acceptance:** optional certificate and HTTPS binding in the MSI. The tray reads the scheme and
   port the MSI records. `/healthz` answers the tray on loopback without a redirect. Document it.
+  - **2026-11-12 progress: HTTPS in the installer.**
+    - Built: optional `CERT_THUMBPRINT` and `HTTPS_PORT` (default 443) MSI properties, and
+      `CertThumbprint` / `HttpsPort` in Setup.exe, which also has the two fields on its Options page.
+      `ValidateSettingsExecute` checks, before anything changes, that the thumbprint names a
+      certificate in `LocalMachine\My` with a private key, valid dates and Server Authentication, and
+      that the port is free and not the HTTP port; otherwise it stops with a message saying which.
+      The new `ConfigureHttps` custom action adds the `https` binding with appcmd (the existing
+      pattern) and binds the certificate in http.sys with netsh. Uninstall, or `CERT_THUMBPRINT=none`,
+      removes both.
+    - Recorded: `SiteScheme`, `HttpsPort`, `CertThumbprint` and `CertHost` under
+      `HKLM\SOFTWARE\Architonix Labs\DBTracker`. Upgrades and repairs reuse them and check the
+      certificate again, so a missing certificate stops the upgrade instead of quietly going back
+      to HTTP (Angela).
+    - Tray: polls `https://localhost:<HttpsPort>` when `SiteScheme` is `https`, accepting the
+      certificate when it is in the machine's own `LocalMachine\My` (the name won't match
+      `localhost`), and opens browser links at the certificate's name. Nothing recorded means
+      `http://localhost:<SitePort>` as before (Sam).
+    - Tests: thumbprint normalisation and validation, port choice and the commands in a new
+      `tests/DBTracker.CustomActions.Tests` (32), and tray URL and TLS choice in the tray tests (62
+      in total). `installer/build.ps1` and CI run both.
+    - Docs: DEPLOYMENT.md has an HTTPS section; SETUP-GUIDE.md covers the Options fields.
+    - Still open: a Hyper-V run with a real certificate (install, upgrade with and without a new
+      thumbprint, `none`, uninstall), as part of G18.
 
 - [ ] **2026-11-11 | G21 | NEW | P2 | M - Org quality and log standards.**
   - Add SonarQube analysis against `:7001`; tokens come from `scan.env`, never the repo.
@@ -2300,12 +2372,23 @@ fallback.
   **Acceptance:** find the shifting element with the Layout Shift API or DevTools, reserve its space, and re-measure with
   `CoreWebVitalsBaseline` to below 0.1.
 
-- [ ] **2026-11-12 | G34 | NEW | P3 | S - Follow-ups found while closing G32.**
+- [x] **2026-11-12 | G34 | NEW | P3 | S - Follow-ups found while closing G32.**
   - Post-change evidence candidates (`ChangeValidationService`) and `ChangeEvidenceRules` still use the original restore
     outcome, ignoring corrections (Angela).
   - Capacity measurement times on the assurance page are entered and shown as plain UTC with no zone choice. The capacity
     table, saved capacity limit and forecast dates print UTC timestamps with no label (Priya, Noor).
   - Support-runway notice emails are not stored as delivery attempts (Sam).
+  **Delivered (2026-11-12):**
+  - Post-change evidence uses the effective outcome: the evidence pickers and `ChangeEvidenceRules` apply backup and restore
+    corrections, and imported history is refused as post-change evidence (Angela). Unit tested.
+  - Capacity measurements are entered in the viewer's zone or UTC with the zone named, like maintenance results, and future
+    times are refused. The measurement table, saved limit, comparisons and forecast range show the viewer's zone (Priya, Noor).
+    E2E: `CapacityMeasurement_CanBeBackdatedInUtc_AndAFutureTimeIsRejected`.
+  - Support-runway notice emails are stored as delivery attempts (kind "Support-runway notice") and shown on /setup (Sam).
+  - Also fixed, from the 1.1.0 known issues: changing your own password no longer signs you out. The change happens over the
+    circuit, which can't write cookies, so the page now opens a one-time, two-minute link that re-issues this browser's
+    cookie with the new security stamp. Other sessions still end. A link whose stamp is no longer current is refused (Dev, Noor,
+    Angela). E2E checks the cookie is re-issued and the user stays signed in.
 
 - [x] **2026-11-12 | G35 | NEW | P1 | S - An installed app must survive a database that starts after it.**
   Found by the first Hyper-V upgrade run (G18). After the VM restarted, IIS started DBTracker while SQL Server Express was
@@ -2323,6 +2406,15 @@ fallback.
     the install E2E tests caught it. The gate now applies only while an installed app is actually waiting for its database.
   - Full E2E: 145 of 147, with the 2 wizard failures fixed and rerun green.
   - Verified in the Hyper-V upgrade rerun (1.1.0 to 1.1.1): the site answered after the upgrade and reboot.
+
+- 2026-11-12 | Release 1.2.0 verification.
+  - Merged G16 and G20 (installer, track H), the light theme and empty states (track I), G34, the password sign-out fix
+    and the first full SonarQube scan (G21).
+  - Results:
+    - Unit tests 1087/1087, tray tests 62/62, custom-action tests 32/32.
+    - Full headed E2E 152/153. The 1 failure was a toast-order race in
+      `Campaign_CannotReachReadyWithoutRehearsal_NorScheduledWithoutApproval`; after fixing it, that class passed 4/4.
+  - No Hyper-V run this round, as the owner asked, so the installer changes in G16 and G20 still need G18.
 
 ### Audit corrections to existing text
 

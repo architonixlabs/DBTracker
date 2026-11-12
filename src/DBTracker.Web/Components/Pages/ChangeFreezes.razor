@@ -77,7 +77,14 @@ else
             </div>
             @if (_freezes.Count == 0)
             {
-                <div class="empty-state"><i aria-hidden="true" class="bi bi-snow"></i> No current or upcoming change freezes.</div>
+                <EmptyState Icon="snow">
+                    <ChildContent>No current or upcoming change freezes. A declared freeze is listed here and flagged on any change window it covers; past freezes are not shown.</ChildContent>
+                    <Action>
+                        <AuthorizeView Roles="@Roles.ChangeFreezePolicy" Context="emptyAuth">
+                            <a href="#freeze-name">Declare a freeze</a>
+                        </AuthorizeView>
+                    </Action>
+                </EmptyState>
             }
             else
             {

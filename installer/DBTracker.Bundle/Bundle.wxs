@@ -36,8 +36,13 @@
     <Variable Name="SqlLoginServer" Type="string" Value="" bal:Overridable="yes" />
     <Variable Name="LaunchWizard" Type="numeric" Value="1" bal:Overridable="yes" />
     <Variable Name="LaunchTray" Type="numeric" Value="1" bal:Overridable="yes" />
-    <!-- /uninstall RemoveData=1 also deletes App_Data (config, keys, setup key); the MSI ignores it otherwise. -->
+    <!-- /uninstall RemoveData=1 also deletes App_Data (config, keys, setup key); the MSI ignores it otherwise.
+         The Modify page's "Also delete" checkbox sets the same variable, so it stays 0 (keep) unless ticked. -->
     <Variable Name="RemoveData" Type="numeric" Value="0" bal:Overridable="yes" />
+    <!-- Optional HTTPS: a thumbprint from LocalMachine\My adds an https binding on HttpsPort (blank: 443, or the
+         previous install's port). A blank thumbprint on an upgrade keeps the previous choice; none turns HTTPS off. -->
+    <Variable Name="CertThumbprint" Type="string" Value="" bal:Overridable="yes" />
+    <Variable Name="HttpsPort" Type="string" Value="" bal:Overridable="yes" />
     <Variable Name="DotNetChannel" Type="string" Value="$(var.DotNetChannel)" />
 
     <!-- IIS: each feature DBTracker relies on records 1 under InetStp\Components once enabled. -->
@@ -142,6 +147,9 @@
         <MsiProperty Name="LAUNCH_WIZARD" Value="[LaunchWizard]" />
         <MsiProperty Name="LAUNCH_TRAY" Value="[LaunchTray]" />
         <MsiProperty Name="REMOVE_DATA" Value="[RemoveData]" />
+        <!-- Only when given, so an upgrade without them keeps what the MSI recorded last time. -->
+        <MsiProperty Name="CERT_THUMBPRINT" Value="[CertThumbprint]" Condition="CertThumbprint" />
+        <MsiProperty Name="HTTPS_PORT" Value="[HttpsPort]" Condition="HttpsPort" />
         <!-- Grant only on a server that exists after this run: an existing local instance the user named,
              or the Express instance this run installed. -->
         <MsiProperty Name="SQL_SERVER" Value="[SqlLoginServer]" Condition="SqlLoginServer AND (SqlInstancesExist OR InstallSqlExpress = 1)" />

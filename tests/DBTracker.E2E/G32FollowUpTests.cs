@@ -72,6 +72,38 @@ public class G32FollowUpTests
         await Assertions.Expect(row).ToContainTextAsync(pastNoonUtc.ToString("MMM d, yyyy", System.Globalization.CultureInfo.InvariantCulture));
     }
 
+    /// <summary>G34: capacity measurements take a time in a stated zone, like maintenance results, instead of an unlabelled UTC field.</summary>
+    [Test]
+    public async Task CapacityMeasurement_CanBeBackdatedInUtc_AndAFutureTimeIsRejected()
+    {
+        await LoginAsync("priya.nair@architonixlabs.com");
+        await OpenFirstInstanceAsync("CONTOSO-HR-MYSQL");
+        await _page.Locator("a[href$='/assurance']").ClickAsync();
+        await _page.WaitForURLAsync(url => url.Contains("/assurance"));
+        await WaitForCircuitAsync();
+
+        var card = _page.Locator(".dbt-card", new PageLocatorOptions { HasText = "Capacity and performance planning evidence" });
+        var source = $"g34-cap-{Guid.NewGuid():N}"[..16];
+        await card.Locator("#cap-value").FillAsync("123.4");
+        await card.Locator("#cap-source").FillAsync(source);
+        await card.Locator("[data-testid=capacity-measured-at-zone]").SelectOptionAsync("UTC");
+        await Assertions.Expect(card.Locator("label[for=cap-measured-at]")).ToContainTextAsync("UTC");
+
+        var tomorrowNoonUtc = DateTime.UtcNow.Date.AddDays(1).AddHours(12);
+        await card.Locator("[data-testid=capacity-measured-at]").FillAsync(tomorrowNoonUtc.ToString("yyyy-MM-ddTHH:mm"));
+        await card.Locator("[data-testid=add-capacity-measurement]").ClickAsync();
+        await Assertions.Expect(card.Locator("[role=alert]")).ToContainTextAsync("future");
+        await Assertions.Expect(card.Locator("[data-testid=capacity-measurement-row]", new LocatorLocatorOptions { HasText = source })).ToHaveCountAsync(0);
+
+        var pastNoonUtc = DateTime.UtcNow.Date.AddDays(-3).AddHours(12);
+        await card.Locator("[data-testid=capacity-measured-at]").FillAsync(pastNoonUtc.ToString("yyyy-MM-ddTHH:mm"));
+        await card.Locator("[data-testid=add-capacity-measurement]").ClickAsync();
+        await Assertions.Expect(_page.Locator(".dbt-toast").First).ToContainTextAsync("Capacity measurement recorded", new LocatorAssertionsToContainTextOptions { Timeout = 10000 });
+
+        var row = card.Locator("[data-testid=capacity-measurement-row]", new LocatorLocatorOptions { HasText = source });
+        await Assertions.Expect(row).ToContainTextAsync(pastNoonUtc.ToString("MMM d, yyyy", System.Globalization.CultureInfo.InvariantCulture));
+    }
+
     private async Task<string> OpenFirstInstanceAsync(string search)
     {
         await GotoAsync($"/instances?s={search}");

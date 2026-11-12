@@ -53,7 +53,10 @@ else
         }
         else if (_paths.Count == 0)
         {
-            <div class="text-muted small">No instances have a backup file location configured.</div>
+            <EmptyState Compact="true" Class="small">
+                <ChildContent>No instances have a backup file location configured, so the scanner has no paths to check.</ChildContent>
+                <Action><a href="/instances">Open Instances to set one on an instance's Edit page</a></Action>
+            </EmptyState>
         }
         else
         {
@@ -112,7 +115,7 @@ else
         <p class="text-muted small mb-3">The last @_attempts.Count send attempts: reports, alerts, recovery notices and test emails by email, and alerts by webhook. For email, "Accepted" means the provider took the message, not that it reached the inbox; for a webhook, it means the endpoint answered with a success status. Addresses and the webhook URL aren't stored, only counts.</p>
         @if (_attempts.Count == 0)
         {
-            <div class="empty-state py-3" data-testid="delivery-history-empty"><i aria-hidden="true" class="bi bi-envelope"></i>No send attempts recorded yet. Send a test email above to check delivery.</div>
+            <EmptyState Icon="envelope" Compact="true" TestId="delivery-history-empty">No send attempts recorded yet. Send a test email above to check delivery.</EmptyState>
         }
         else
         {
