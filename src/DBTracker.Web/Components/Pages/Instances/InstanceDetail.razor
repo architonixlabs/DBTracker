@@ -629,13 +629,14 @@ else
                 </div>
                 @if (!instance.BackupRecords.Any())
                 {
-                    <div class="empty-state py-3">
-                        <i class="bi bi-clock-history" aria-hidden="true"></i>
-                        No backup history recorded yet.
-                        <AuthorizeView Roles="@Roles.CanEditPolicy">
-                            <span>Log a backup result@(string.IsNullOrWhiteSpace(instance.BackupFileLocation) ? "" : " or run Scan now") to start one.</span>
-                        </AuthorizeView>
-                    </div>
+                    <EmptyState Icon="clock-history" Compact="true">
+                        <ChildContent>No backup history recorded yet. Backups appear here once one is logged by hand@(string.IsNullOrWhiteSpace(instance.BackupFileLocation) ? "" : " or found by a scan of the backup folder").</ChildContent>
+                        <Action>
+                            <AuthorizeView Roles="@Roles.CanEditPolicy">
+                                <a href="#backup-occurred">Log a backup result</a>
+                            </AuthorizeView>
+                        </Action>
+                    </EmptyState>
                 }
                 else
                 {
@@ -684,7 +685,7 @@ else
                     </div>
                     @if (!BackupHistoryFiltered().Any())
                     {
-                        <div class="text-muted small py-2">No backup records match this filter.</div>
+                        <EmptyState Compact="true" Role="status">No backup records have this status. Choose All in the status filter to see the full history.</EmptyState>
                     }
                     else
                     {
@@ -838,10 +839,14 @@ else
                 </div>
                 @if (!instance.RestoreEvents.Any())
                 {
-                    <div class="empty-state py-3">
-                        <i class="bi bi-arrow-counterclockwise" aria-hidden="true"></i>
-                        No restore ever logged, so these backups have never been proven recoverable.
-                    </div>
+                    <EmptyState Icon="arrow-counterclockwise" Compact="true">
+                        <ChildContent>No restore ever logged, so DBTracker holds no evidence that these backups can be restored. Restore tests appear here once one is logged.</ChildContent>
+                        <Action>
+                            <AuthorizeView Roles="@Roles.CanEditPolicy">
+                                <a href="#restore-occurred">Log a restore</a>
+                            </AuthorizeView>
+                        </Action>
+                    </EmptyState>
                 }
                 else
                 {
@@ -883,7 +888,7 @@ else
                     </div>
                     @if (!RestoreHistoryFiltered().Any())
                     {
-                        <div class="text-muted small py-2">No restore events match this filter.</div>
+                        <EmptyState Compact="true" Role="status">No restore events have this outcome. Choose All outcomes in the filter to see the full history.</EmptyState>
                     }
                     else
                     {
@@ -913,10 +918,14 @@ else
                 </div>
                 @if (_changeLog.Count == 0)
                 {
-                    <div class="empty-state py-3">
-                        <i class="bi bi-journal-text" aria-hidden="true"></i>
-                        No changes recorded yet. Edits made through the instance form appear here.
-                    </div>
+                    <EmptyState Icon="journal-text" Compact="true">
+                        <ChildContent>No changes recorded yet. Edits made through the instance form appear here, with who made them.</ChildContent>
+                        <Action>
+                            <AuthorizeView Roles="@Roles.CanEditPolicy">
+                                <a href="/instances/@Id/edit">Edit this instance</a>
+                            </AuthorizeView>
+                        </Action>
+                    </EmptyState>
                 }
                 else
                 {
@@ -941,7 +950,7 @@ else
                     </div>
                     @if (!ChangeLogFiltered().Any())
                     {
-                        <div class="text-muted small py-2">No changes match this filter.</div>
+                        <EmptyState Compact="true" Role="status">No changes to a field matching this filter. Clear the field filter to see every change.</EmptyState>
                     }
                     else
                     {

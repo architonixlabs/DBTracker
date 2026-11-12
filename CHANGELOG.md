@@ -12,6 +12,11 @@ All notable changes to DBTracker are recorded here. Versions follow [Semantic Ve
   and is valid, and the tray then uses the recorded HTTPS port. The Setup.exe uninstall page has an
   **Also delete DBTracker's data in App_Data** checkbox, off by default. Quiet uninstalls still keep
   the data unless `RemoveData=1` is passed, and the SQL database is never dropped.
+- **Light theme.** A System / Dark / Light switch in the sidebar footer. Dark stays the default; the choice is kept
+  in a cookie, applies before the first paint on every page including sign-in, and survives sign-out. Every light-theme
+  text and status colour meets WCAG AA.
+- **Empty states.** Lists and pages with nothing to show now say what would appear there and why it's empty, and offer
+  the next step only when your role allows it.
 
 ### Fixed
 

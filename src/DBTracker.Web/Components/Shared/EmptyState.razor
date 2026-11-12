@@ -1,0 +1,37 @@
+@* The one empty state. ChildContent is a sentence saying what would be listed here and why the list is empty;
+   Action is the next step that fills it, given only when the viewer's role allows it (wrap it in an
+   AuthorizeView, or leave it out). No illustration: one Bootstrap Icons glyph at most, and it is decorative.
+   Wording rule (Angela): say what is missing, never what that implies ("No restores logged", not "All clear"). *@
+<div class="@CssClass" data-testid="empty-state" role="@Role">
+    @if (!string.IsNullOrEmpty(Icon))
+    {
+        <i class="bi bi-@Icon" aria-hidden="true"></i>
+    }
+    <p class="empty-state-message" data-testid="@TestId">@ChildContent</p>
+    @if (Action is not null)
+    {
+        <div class="empty-state-action">@Action</div>
+    }
+</div>
+
+@code {
+    /// <summary>A Bootstrap Icons name without the "bi-" prefix, for example "inbox".</summary>
+    [Parameter] public string? Icon { get; set; }
+
+    [Parameter, EditorRequired] public RenderFragment ChildContent { get; set; } = default!;
+
+    [Parameter] public RenderFragment? Action { get; set; }
+
+    /// <summary>Left-aligned and tight, for an empty section inside a card rather than an empty page.</summary>
+    [Parameter] public bool Compact { get; set; }
+
+    /// <summary>A page's existing test id for this message (kept on the sentence; the wrapper is always "empty-state").</summary>
+    [Parameter] public string? TestId { get; set; }
+
+    /// <summary>"status" when the empty result follows the user's own filter or action and should be announced.</summary>
+    [Parameter] public string? Role { get; set; }
+
+    [Parameter] public string? Class { get; set; }
+
+    private string CssClass => string.Join(' ', new[] { "empty-state", Compact ? "is-compact" : null, Class }.Where(c => !string.IsNullOrEmpty(c)));
+}

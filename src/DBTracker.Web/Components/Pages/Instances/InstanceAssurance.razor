@@ -58,7 +58,7 @@ else
                 <p class="small text-muted">Checks this instance is expected to have on record. A required check with no result shows as Missing, so a check nobody recorded can't look fine.</p>
                 @if (_requirements.Count == 0)
                 {
-                    <div class="empty-state py-2" data-testid="no-required-checks"><i class="bi bi-list-check" aria-hidden="true"></i> No required checks set. Until some are, a missing check can't be flagged.</div>
+                    <EmptyState Icon="list-check" Compact="true" TestId="no-required-checks">No required checks set. Until some are, a missing check can't be flagged.</EmptyState>
                 }
                 else
                 {
@@ -137,7 +137,7 @@ else
                 }
                 else
                 {
-                    <div class="empty-state py-2"><i class="bi bi-shield-check" aria-hidden="true"></i> No integrity, HA or maintenance results recorded yet. These are never inferred from backup health.</div>
+                    <EmptyState Icon="shield-check" Compact="true">No integrity, HA or maintenance results recorded yet. These are never inferred from backup health.</EmptyState>
                 }
 
                 <AuthorizeView Roles="@Roles.CanEditPolicy">
@@ -238,7 +238,7 @@ else
                 }
                 else
                 {
-                    <div class="empty-state py-2"><i class="bi bi-speedometer2" aria-hidden="true"></i> No capacity or performance measurements recorded yet.</div>
+                    <EmptyState Icon="speedometer2" Compact="true">No capacity or performance measurements recorded yet.</EmptyState>
                 }
 
                 <AuthorizeView Roles="@Roles.CanEditPolicy">
@@ -311,7 +311,7 @@ else
                 }
                 @if (_forecast is null || !_forecast.HasSufficientData)
                 {
-                    <div class="empty-state py-2" data-testid="forecast-missing-data"><i class="bi bi-graph-up" aria-hidden="true"></i> Not enough data for a projection yet.</div>
+                    <EmptyState Icon="graph-up" Compact="true" TestId="forecast-missing-data">Not enough data for a projection yet.</EmptyState>
                 }
                 else
                 {
@@ -376,7 +376,7 @@ else
                 <p class="small text-muted">Compares two of the measurements above, for example the same workload before and after a migration. It shows the change and anything that makes the comparison unreliable; whether higher is better depends on the metric.</p>
                 @if (_comparisons.Count == 0)
                 {
-                    <div class="empty-state py-2"><i class="bi bi-arrow-left-right" aria-hidden="true"></i> No comparisons recorded yet.</div>
+                    <EmptyState Icon="arrow-left-right" Compact="true">No comparisons recorded yet.</EmptyState>
                 }
                 else
                 {

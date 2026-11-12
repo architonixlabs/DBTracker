@@ -135,7 +135,10 @@ else
         <div class="col-lg-7">
             @if (_windows.Count == 0)
             {
-                <div class="empty-state"><i aria-hidden="true" class="bi bi-calendar-event"></i> No change windows planned yet.</div>
+                <EmptyState Icon="calendar-event">
+                    <ChildContent>No change windows planned for this campaign yet. Each window you plan is listed here with its conflicts and status.</ChildContent>
+                    <Action><a href="#campaignchangewindows-title">Plan a change window</a></Action>
+                </EmptyState>
             }
             else
             {

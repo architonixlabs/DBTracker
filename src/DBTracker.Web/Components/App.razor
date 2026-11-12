@@ -1,5 +1,7 @@
 ﻿<!DOCTYPE html>
-<html lang="en">
+@* data-theme comes from the dbt-theme cookie, so the first paint (the sign-in page too) is already in the chosen theme
+   with no script. *@
+<html lang="en" data-theme="@Theme">
 
 <head>
     <meta charset="utf-8" />
@@ -19,7 +21,7 @@
 </head>
 
 <body>
-    <Routes @rendermode="RenderModeForRequest" />
+    <Routes @rendermode="RenderModeForRequest" Theme="@Theme" />
     <ReconnectModal />
     <script nonce="@CspNonce" src="js/dbtracker.js"></script>
     <script nonce="@CspNonce" src="@Assets["_framework/blazor.web.js"]"></script>
@@ -37,6 +39,8 @@
 
     // Set per request by SecurityHeadersMiddleware; the CSP only runs scripts that carry it.
     private string CspNonce => HttpContext.Items[DBTracker.Web.Services.SecurityHeadersMiddleware.NonceKey] as string ?? "";
+
+    private string Theme => DBTracker.Web.Services.ThemeCookie.For(HttpContext);
 
     private IComponentRenderMode? RenderModeForRequest =>
         HttpContext.Request.Path.StartsWithSegments("/Account/Login", StringComparison.OrdinalIgnoreCase)

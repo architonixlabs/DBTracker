@@ -145,7 +145,7 @@ else
                 <p class="small text-muted">Ticking a step records that someone says it was done. It runs nothing.</p>
                 @if (_window.RunbookSteps.Count == 0)
                 {
-                    <p class="small text-muted mb-2">No steps yet.</p>
+                    <EmptyState Compact="true" Class="small mb-2">No runbook steps yet. Steps added to this window are listed here in order.</EmptyState>
                 }
                 else
                 {
@@ -192,7 +192,7 @@ else
 
                 @if (_window.JournalEntries.Count == 0)
                 {
-                    <p class="small text-muted mb-2">No journal entries yet.</p>
+                    <EmptyState Compact="true" Class="small mb-2">No journal entries yet. Actions, decisions and outcomes recorded during the cutover are listed here in time order.</EmptyState>
                 }
                 else
                 {

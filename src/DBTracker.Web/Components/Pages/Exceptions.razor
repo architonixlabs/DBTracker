@@ -163,7 +163,14 @@ else
 
             @if (_exceptions.Count == 0)
             {
-                <div class="empty-state"><i aria-hidden="true" class="bi bi-shield-exclamation"></i> No exceptions recorded.</div>
+                <EmptyState Icon="shield-exclamation">
+                    <ChildContent>No exceptions recorded. An exception is a time-limited, approved acceptance of a missed check; each one recorded is listed here until it expires or is revoked.</ChildContent>
+                    <Action>
+                        <AuthorizeView Roles="@Roles.CanEditPolicy" Context="emptyAuth">
+                            <a href="#exception-target-type">Record an exception</a>
+                        </AuthorizeView>
+                    </Action>
+                </EmptyState>
             }
             else
             {

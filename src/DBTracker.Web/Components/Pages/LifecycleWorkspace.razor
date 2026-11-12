@@ -99,7 +99,7 @@ else
 
     @if (_view.MatchingRows.Count == 0)
     {
-        <div class="empty-state"><i aria-hidden="true" class="bi bi-filter"></i> No instances match this filter.</div>
+        <EmptyState Icon="funnel" Role="status">No instances match this filter. Change or clear the filter above to see the rest of the estate.</EmptyState>
     }
     else
     {

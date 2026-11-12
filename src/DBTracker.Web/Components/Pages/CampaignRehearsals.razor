@@ -144,7 +144,10 @@ else
         <div class="col-lg-7">
             @if (_rehearsals.Count == 0)
             {
-                <div class="empty-state"><i aria-hidden="true" class="bi bi-arrow-repeat"></i> No rehearsals recorded for this campaign yet. Until one is, every linked instance shows readiness as Missing.</div>
+                <EmptyState Icon="arrow-repeat">
+                    <ChildContent>No rehearsals recorded for this campaign yet. Until one is, every linked instance shows readiness as Missing.</ChildContent>
+                    <Action><a href="#rehearsal-instance-select">Record a rehearsal</a></Action>
+                </EmptyState>
             }
             else
             {

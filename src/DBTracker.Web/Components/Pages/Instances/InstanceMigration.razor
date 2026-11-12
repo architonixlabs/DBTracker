@@ -65,7 +65,7 @@ else
 
                 @if (_dependencies.Count == 0)
                 {
-                    <div class="empty-state py-3"><i class="bi bi-diagram-3" aria-hidden="true"></i> No dependencies recorded yet.</div>
+                    <EmptyState Icon="diagram-3" Compact="true">No dependencies recorded yet.</EmptyState>
                 }
                 else
                 {
@@ -248,7 +248,7 @@ else
                 }
                 else
                 {
-                    <div class="empty-state py-2 mb-2"><i class="bi bi-signpost-split" aria-hidden="true"></i> No migration path assessed yet.</div>
+                    <EmptyState Icon="signpost-split" Compact="true" Class="mb-2">No migration path assessed yet.</EmptyState>
                 }
 
                 <AuthorizeView Roles="@Roles.CanEditPolicy">
@@ -308,7 +308,7 @@ else
 
                 @if (_checklist is null)
                 {
-                    <div class="empty-state py-3"><i class="bi bi-list-check" aria-hidden="true"></i> No checklist started yet.</div>
+                    <EmptyState Icon="list-check" Compact="true">No checklist started yet.</EmptyState>
                     <AuthorizeView Roles="@Roles.CanEditPolicy">
                         <div class="d-flex gap-2 mt-2">
                             <label class="visually-hidden" for="checklist-source">Source label</label>

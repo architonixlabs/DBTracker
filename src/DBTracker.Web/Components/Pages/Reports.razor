@@ -92,7 +92,7 @@ else
 
             @if (rowsInRange.Count == 0)
             {
-                <div class="empty-state"><i aria-hidden="true" class="bi bi-inbox"></i>No backup runs in this window.</div>
+                <EmptyState Icon="calendar-range" Role="status">No backup runs in this window. Runs logged by hand or found by a scan between these dates appear here; widen the date range above to look further back.</EmptyState>
             }
             else
             {
@@ -164,7 +164,11 @@ else
                 </button>
             </div>
 
-            <div class="dbt-table">
+            @if (rows.Count == 0)
+            {
+                <EmptyState Icon="hdd-stack">No instances are tracked yet, so there is no restore testing to report. Each tracked instance gets a row here, tested or not.</EmptyState>
+            }
+            <div class="dbt-table" hidden="@(rows.Count == 0)">
                 <table aria-label="Restore testing by instance" class="table">
                     <thead><tr><th>Instance</th><th>Company / Dept</th><th>Role</th><th>Env</th><th>Restore tested</th><th>Last successful restore</th><th>Total attempts</th><th>Coverage</th><th>Next test due</th></tr></thead>
                     <tbody>
@@ -202,7 +206,11 @@ else
                 </button>
             </div>
 
-            <div class="dbt-table">
+            @if (rows.Count == 0)
+            {
+                <EmptyState Icon="hdd-stack">No instances are tracked yet, so there is nothing to roll up. Each company and department with an instance gets a row here.</EmptyState>
+            }
+            <div class="dbt-table" hidden="@(rows.Count == 0)">
                 <table aria-label="Ownership roll-up" class="table">
                     <thead><tr><th>Company</th><th>Department</th><th>Instances</th><th>On track</th><th>Overdue</th><th>Failed</th><th>Never backed up</th><th>Primary contact(s)</th></tr></thead>
                     <tbody>
@@ -254,11 +262,21 @@ else
 
             @if (rows.Count == 0 && _scanAttentionOnly && allScanRows.Count > 0)
             {
-                <div class="empty-state" role="status"><i aria-hidden="true" class="bi bi-check-circle"></i>No scans need attention right now.</div>
+                <EmptyState Icon="funnel" Role="status">
+                    <ChildContent>No configured scan is in error, stale or never run right now. This covers the scanner only, not whether the backups themselves are on time.</ChildContent>
+                    <Action><button type="button" class="btn btn-outline-secondary btn-sm" @onclick="() => SetScanFilter(false)">Show all configured (@allScanRows.Count)</button></Action>
+                </EmptyState>
             }
             else if (rows.Count == 0)
             {
-                <div class="empty-state"><i aria-hidden="true" class="bi bi-inbox"></i>No instance has a backup file location configured yet. Set one on an instance's Edit page so the scanner can find its backup files.</div>
+                <EmptyState Icon="folder2-open">
+                    <ChildContent>No instance has a backup file location configured yet, so there are no scans to report. The scanner reads backup files from the location set on an instance's Edit page.</ChildContent>
+                    <Action>
+                        <AuthorizeView Roles="@Roles.CanEditPolicy">
+                            <a href="/instances">Open Instances to pick one to edit</a>
+                        </AuthorizeView>
+                    </Action>
+                </EmptyState>
             }
             else
             {
@@ -900,7 +918,7 @@ else
         <h3 class="h6 text-muted mb-2 mt-3">Period @label: backup policy changes</h3>
         @if (period.PolicyChanges.Count == 0)
         {
-            <div class="text-muted small mb-3">No policy was created or edited in this period.</div>
+            <EmptyState Compact="true" Class="small mb-3">No policy was created or edited in this period.</EmptyState>
         }
         else
         {

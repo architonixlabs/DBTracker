@@ -161,10 +161,25 @@ else
 
     @if (!Sorted().Any())
     {
-        <div class="empty-state">
-            <i aria-hidden="true" class="bi bi-inbox"></i>
-            No instances match this filter.
-        </div>
+        @if (_rows.Count == 0)
+        {
+            <EmptyState Icon="hdd-stack">
+                <ChildContent>No instances are tracked yet, so there is no backup health to show. The dashboard lists them here, most at risk first, once they are added.</ChildContent>
+                <Action>
+                    <AuthorizeView Roles="@Roles.CanEditPolicy">
+                        <a class="btn btn-primary btn-sm" href="/instances/new">Add instance</a>
+                        <a class="btn btn-outline-secondary btn-sm" href="/instances/import">Import CSV</a>
+                    </AuthorizeView>
+                </Action>
+            </EmptyState>
+        }
+        else
+        {
+            <EmptyState Icon="funnel" Role="status">
+                <ChildContent>No instances have this health status right now.</ChildContent>
+                <Action><button type="button" class="btn btn-outline-secondary btn-sm" @onclick="() => SetFilter(null)">Show all instances</button></Action>
+            </EmptyState>
+        }
     }
 }
 
